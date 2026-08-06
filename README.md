@@ -171,13 +171,57 @@ npx @vscode/vsce package --out dist/code-trail.vsix
 `.vscodeignore` 가 `src/`, `test/`, `node_modules/`, 소스맵을 제외하므로
 패키지에는 `out/`, `media/`, `package.json`, 문서만 들어간다.
 
-### 디버깅
+## 개발 중 동작 확인
 
-VS Code로 이 폴더를 열고 `F5` 를 누르면 확장 개발 호스트 창이 뜬다.
-`media/` 의 파일만 고쳤을 때는 그 창에서 `개발자: 창 다시 로드` 만 하면 되고,
-`src/` 를 고쳤으면 `npm run watch` 를 켜두거나 다시 `F5` 한다.
+고칠 때마다 `.vsix` 를 만들어 설치할 필요는 없다. 그건 배포 직전 최종 확인용이다.
+개발 중에는 훨씬 짧은 루프가 두 단계 있다.
+
+### 1. 웹뷰만 고칠 때 — VS Code를 띄우지 않는다
+
+`media/main.js`, `media/tokenizer.js`, `media/style.css` 는 컴파일하지 않는 평문 JS/CSS다.
+`test/preview.html` 이 `acquireVsCodeApi` 를 스텁으로 갈아끼워 두었으므로,
+이 파일을 브라우저에서 그냥 열면 확장 없이도 트리 렌더링·클릭·툴바가 그대로 돈다.
+
+```
+start test/preview.html       # 저장 → 브라우저 새로고침이 전부다
+node test/tokenizer.test.js   # 토크나이저 단위 테스트
+node test/ui.test.js          # 같은 하네스를 playwright로 자동 검증
+```
+
+편집에서 확인까지 1~2초다. 단 두 가지를 기억한다.
+
+- `panel.ts` 의 툴바 HTML을 바꾸면 `test/preview.html` 도 같이 고쳐야 한다.
+  안 그러면 `main.js` 가 `getElementById` 에서 null을 잡고 죽는다.
+- 심볼 해석은 언어 서버가 하므로 여기서는 검증되지 않는다. 렌더링과 상호작용만 본다.
+
+### 2. 확장 전체를 볼 때 — `F5`
+
+VS Code로 이 폴더를 열고 `F5` 를 누르면 **확장 개발 호스트** 창이 새로 뜨고
+그 창에 이 프로젝트가 확장으로 로드된다. 설치 과정이 없다.
+`.vscode/launch.json` 의 `확장 실행` 구성이 `.vscode/tasks.json` 의 `npm: compile` 을
+먼저 돌리므로 컴파일도 자동이다.
+
+| 고친 곳 | 반영 방법 |
+| --- | --- |
+| `src/*.ts` | 터미널에 `npm run watch` 를 띄워두고, 개발 호스트 창에서 `Ctrl+R` (`개발자: 창 다시 로드`) |
+| `media/*` | 컴파일 불필요. 패널을 닫았다 다시 열면 된다 (`Code Trail: 패널 열기`). 옛 파일이 계속 잡히면 창 다시 로드 |
+| `package.json` 의 명령·설정 기여 | 개발 호스트 창을 닫고 `F5` 를 다시 누른다 |
 
 웹뷰 쪽 오류는 개발 호스트 창에서 `개발자: 웹뷰 개발자 도구 열기` 로 본다.
+전용 DevTools가 열려 `main.js` 에 브레이크포인트를 걸 수 있다.
+`src/*.ts` 쪽 브레이크포인트는 원래 창에서 그대로 걸린다.
+
+CLI로도 같은 창을 띄울 수 있다:
+
+```
+code --extensionDevelopmentPath=<이 폴더의 절대경로> <탐색할_프로젝트_폴더>
+```
+
+### 어느 쪽을 쓰나
+
+**웹뷰 렌더링·클릭 로직은 `preview.html`, 언어 서버 연동·명령·메시지 왕복은 `F5`.**
+이 확장의 핵심은 C++·C#·Go 심볼 해석이므로, `F5` 로 확인할 때는
+해당 언어 확장이 설치된 실제 프로젝트 폴더를 개발 호스트 창에서 열어야 의미가 있다.
 
 ## 테스트
 
