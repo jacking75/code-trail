@@ -1,0 +1,418 @@
+:root {
+    --ct-font-size: var(--vscode-editor-font-size, 13px);
+    --ct-indent: 10px;
+    --ct-guide: rgba(122,162,247,.40);
+    --ct-guide-strong: rgba(122,162,247,.85);
+}
+body.vscode-light {
+    --ct-guide: rgba(0,90,200,.32);
+    --ct-guide-strong: rgba(0,90,200,.75);
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    color: var(--vscode-foreground);
+    background: var(--vscode-editor-background);
+}
+
+/* ---------------------------------------------------------------- 툴바 */
+
+#toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+    border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,.3));
+}
+
+#toolbar button {
+    font-family: inherit;
+    font-size: 12px;
+    padding: 3px 9px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+    background: var(--vscode-button-secondaryBackground, rgba(128,128,128,.15));
+    cursor: pointer;
+}
+#toolbar button:hover {
+    background: var(--vscode-button-secondaryHoverBackground, rgba(128,128,128,.28));
+}
+#toolbar button.danger:hover {
+    background: var(--vscode-inputValidation-errorBackground, #5a1d1d);
+}
+#toolbar .sep { width: 1px; height: 16px; background: rgba(128,128,128,.35); margin: 0 4px; }
+#toolbar input[type="search"] {
+    flex: 0 1 220px;
+    font-family: inherit;
+    font-size: 12px;
+    padding: 3px 7px;
+    color: var(--vscode-input-foreground);
+    background: var(--vscode-input-background);
+    border: 1px solid var(--vscode-input-border, rgba(128,128,128,.35));
+    border-radius: 3px;
+}
+
+/* ---------------------------------------------------------------- 경로 */
+
+#breadcrumb {
+    position: sticky;
+    top: 33px;
+    z-index: 19;
+    display: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    font-size: 11px;
+    background: var(--vscode-breadcrumb-background, var(--vscode-editor-background));
+    border-bottom: 1px solid rgba(128,128,128,.18);
+    color: var(--vscode-breadcrumb-foreground, var(--vscode-descriptionForeground));
+    min-height: 22px;
+}
+#breadcrumb .crumb { cursor: pointer; padding: 1px 3px; border-radius: 2px; }
+#breadcrumb .crumb:hover {
+    color: var(--vscode-breadcrumb-focusForeground, var(--vscode-foreground));
+    background: rgba(128,128,128,.18);
+}
+#breadcrumb .sepc { opacity: .5; }
+
+/* ---------------------------------------------------------------- 노드 */
+
+#root { padding: 8px 10px 60vh 10px; }
+
+.node {
+    position: relative;
+    margin: 4px 0;
+    padding-left: 2px;
+}
+
+/* 자식 묶음 — 세로 가이드선 하나로 형제 전체를 묶어 보여준다 */
+.node > .kids {
+    position: relative;
+    margin-left: var(--ct-indent);
+    padding-left: 16px;
+    border-left: 2px solid var(--ct-guide);
+}
+/* 각 형제 헤더로 뻗는 가로 연결선 */
+.node > .kids > .node > .hd::before {
+    content: '';
+    position: absolute;
+    left: -16px;
+    top: 50%;
+    width: 13px;
+    height: 2px;
+    background: var(--ct-guide);
+}
+
+.node.collapsed > .body,
+.node.collapsed > .kids,
+.node.collapsed > .origin { display: none; }
+
+/* 자식이 있는데 접혀 있으면 표시 */
+.node.collapsed > .hd .cnt { background: var(--ct-guide-strong); color: var(--vscode-editor-background); }
+
+.node.active > .hd { box-shadow: inset 2px 0 0 var(--vscode-focusBorder, #007fd4); }
+.node.dim { opacity: .32; }
+.node.flash > .hd { animation: ct-flash 900ms ease-out; }
+@keyframes ct-flash {
+    0%   { background: var(--vscode-editor-findMatchHighlightBackground, rgba(255,200,0,.45)); }
+    100% { background: transparent; }
+}
+
+.hd {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* 형제 순번 */
+.idx {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 3px;
+    font-size: 10px;
+    font-weight: 700;
+    border-radius: 8px;
+    background: var(--ct-guide);
+    color: var(--vscode-editor-background);
+}
+.idx:empty { display: none; }
+
+/* 이 노드에서 갈라진 자식 수 */
+.cnt {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: rgba(128,128,128,.22);
+    color: var(--vscode-descriptionForeground);
+    white-space: nowrap;
+}
+.cnt:empty { display: none; }
+.hd:hover { background: var(--vscode-list-hoverBackground, rgba(128,128,128,.12)); }
+
+.chev { width: 12px; font-size: 10px; opacity: .7; transition: transform .12s; }
+.node.collapsed > .hd .chev { transform: rotate(-90deg); }
+
+.kind {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    padding: 1px 5px;
+    border-radius: 8px;
+    background: rgba(128,128,128,.2);
+    color: var(--vscode-descriptionForeground);
+    white-space: nowrap;
+}
+.k-function, .k-method, .k-constructor { background: rgba(122,162,247,.22); color: #7aa2f7; }
+.k-class, .k-struct, .k-interface     { background: rgba(158,206,106,.22); color: #9ece6a; }
+.k-variable, .k-field, .k-property, .k-constant { background: rgba(224,175,104,.22); color: #e0af68; }
+.k-enum, .k-enum-member               { background: rgba(187,154,247,.22); color: #bb9af7; }
+
+.hd { flex-wrap: nowrap; overflow: hidden; }
+
+/* 줄어들 때 우선순위: 시그니처 → 경로 → 이름 순으로 깎인다.
+   이름은 마지막까지 최대한 살린다. */
+.name {
+    flex: 0 1 auto;
+    min-width: 10ch;
+    font-family: var(--vscode-editor-font-family);
+    font-weight: 600;
+    font-size: var(--ct-font-size);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.sig {
+    flex: 0 200 auto;
+    min-width: 0;
+    font-family: var(--vscode-editor-font-family);
+    font-size: 11px;
+    opacity: .55;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.loc {
+    flex: 0 40 auto;
+    min-width: 0;
+    font-size: 11px;
+    opacity: .55;
+    font-family: var(--vscode-editor-font-family);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    direction: rtl;      /* 경로가 잘릴 때 파일명 쪽이 남게 */
+    text-align: left;
+}
+.spacer { flex: 1 1 auto; min-width: 8px; }
+
+.badge {
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 8px;
+    white-space: nowrap;
+}
+.badge { flex: 0 0 auto; }
+.badge.rec    { background: rgba(247,118,142,.22); color: #f7768e; }
+.badge.approx { background: rgba(128,128,128,.22); color: var(--vscode-descriptionForeground); }
+.badge.decl   { background: rgba(224,175,104,.25); color: #e0af68; }
+
+.act {
+    flex: 0 0 auto;
+    font-family: inherit;
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 6px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--vscode-foreground);
+    opacity: 0;
+    cursor: pointer;
+}
+.hd:hover .act { opacity: .7; }
+.act:hover { opacity: 1 !important; background: rgba(128,128,128,.25); }
+
+/* 선언만 있는 노드의 "구현 보기"는 항상 보이게 — 여기서 막히기 쉽다 */
+.act.impl.hot {
+    opacity: 1;
+    background: rgba(224,175,104,.22);
+    color: #e0af68;
+    font-weight: 700;
+}
+.act.impl.hot:hover { background: rgba(224,175,104,.4); }
+body.vscode-light .act.impl.hot { color: #8a5a00; }
+
+.origin {
+    margin: 0 0 3px 26px;
+    font-size: 11px;
+}
+.origin-link {
+    display: inline-block;
+    padding: 1px 4px;
+    border-radius: 3px;
+    opacity: .65;
+    cursor: pointer;
+}
+.origin-link:hover {
+    opacity: 1;
+    background: rgba(128,128,128,.18);
+}
+.origin code {
+    font-family: var(--vscode-editor-font-family);
+    background: rgba(128,128,128,.18);
+    padding: 0 3px;
+    border-radius: 2px;
+}
+
+/* ---------------------------------------------------------------- 코드 */
+
+.body { margin: 2px 0 6px 20px; }
+
+.code {
+    font-family: var(--vscode-editor-font-family);
+    font-size: var(--ct-font-size);
+    line-height: 1.5;
+    background: var(--vscode-textCodeBlock-background, rgba(128,128,128,.08));
+    border: 1px solid rgba(128,128,128,.22);
+    border-radius: 4px;
+    padding: 6px 0;
+    overflow-x: auto;
+    tab-size: 4;
+}
+.node.busy .code { opacity: .55; }
+
+.cl { display: flex; white-space: pre; }
+.cl:hover { background: rgba(128,128,128,.08); }
+.cl .no {
+    flex: 0 0 auto;
+    padding: 0 10px 0 8px;
+    text-align: right;
+    opacity: .35;
+    user-select: none;
+}
+.cl .tx { flex: 1 1 auto; padding-right: 12px; }
+
+.more {
+    display: block;
+    width: calc(100% - 16px);
+    margin: 6px 8px 2px 8px;
+    padding: 4px;
+    font-family: inherit;
+    font-size: 11px;
+    border: 1px dashed rgba(128,128,128,.4);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--vscode-textLink-foreground);
+    cursor: pointer;
+}
+.more:hover { background: rgba(128,128,128,.12); }
+
+/* 토큰 색 — 에디터 테마 변수를 쓰되 없으면 폴백 */
+.tok.cm { color: var(--vscode-editorLineNumber-foreground, #6a9955); opacity: .8; font-style: italic; }
+.tok.st { color: #ce9178; }
+.tok.nu { color: #b5cea8; }
+.tok.kw { color: #569cd6; }
+.tok.pp { color: #c586c0; }
+.tok.lt { color: #d7ba7d; }
+.tok.pu { opacity: .75; }
+.tok.ty { color: #4ec9b0; }
+.tok.fn { color: #dcdcaa; }
+.tok.id { color: var(--vscode-editor-foreground); }
+
+body.vscode-light .tok.st { color: #a31515; }
+body.vscode-light .tok.nu { color: #098658; }
+body.vscode-light .tok.kw { color: #0000ff; }
+body.vscode-light .tok.pp { color: #af00db; }
+body.vscode-light .tok.ty { color: #267f99; }
+body.vscode-light .tok.fn { color: #795e26; }
+body.vscode-light .tok.cm { color: #008000; }
+
+.clickable { cursor: pointer; border-radius: 2px; }
+.clickable:hover {
+    background: var(--vscode-editor-hoverHighlightBackground, rgba(80,140,255,.28));
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+/* 이미 펼쳐본 호출 지점 — 아래 자식 노드의 순번과 짝을 이룬다 */
+.clickable.visited {
+    background: var(--ct-guide);
+    color: var(--vscode-editor-background) !important;
+    padding: 0 1px;
+}
+.clickable.visited::after {
+    content: attr(data-idx);
+    margin-left: 1px;
+    font-weight: 700;
+}
+.clickable.flash-tok {
+    animation: ct-flash-tok 1.2s ease-out;
+}
+@keyframes ct-flash-tok {
+    0%, 40% { outline: 2px solid var(--ct-guide-strong); outline-offset: 1px; }
+    100%    { outline: 2px solid transparent; outline-offset: 1px; }
+}
+
+/* ---------------------------------------------------------------- 빈 상태 */
+
+#empty {
+    padding: 32px 28px;
+    max-width: 640px;
+    color: var(--vscode-descriptionForeground);
+    line-height: 1.7;
+}
+#empty h2 { color: var(--vscode-foreground); margin-top: 0; }
+#empty ul { padding-left: 20px; }
+kbd {
+    font-family: var(--vscode-editor-font-family);
+    font-size: 11px;
+    padding: 1px 5px;
+    border: 1px solid rgba(128,128,128,.45);
+    border-bottom-width: 2px;
+    border-radius: 3px;
+    background: rgba(128,128,128,.12);
+}
+
+/* ---------------------------------------------------------------- 토스트 */
+
+#toast {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    max-width: 460px;
+    padding: 9px 13px;
+    border-radius: 4px;
+    font-size: 12px;
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    transition: opacity .18s, transform .18s;
+    background: var(--vscode-notifications-background, #333);
+    color: var(--vscode-notifications-foreground, #eee);
+    border: 1px solid var(--vscode-notificationCenter-border, rgba(128,128,128,.4));
+    z-index: 50;
+}
+#toast.show { opacity: 1; transform: translateY(0); }
+#toast.warn  { border-left: 3px solid #e0af68; }
+#toast.error { border-left: 3px solid #f7768e; }
+#toast.info  { border-left: 3px solid #7aa2f7; }

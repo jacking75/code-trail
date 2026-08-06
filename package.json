@@ -1,0 +1,162 @@
+{
+  "name": "code-trail",
+  "displayName": "Code Trail",
+  "description": "함수를 클릭하면 코드를 인라인으로 펼쳐 보여주고, 그 안에서 또 클릭하면 계속 이어붙는 코드 탐색 트리",
+  "version": "0.3.0",
+  "publisher": "local",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Visualization",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "call hierarchy",
+    "call graph",
+    "code navigation",
+    "code reading",
+    "trail"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codeTrail.startFromCursor",
+        "title": "Code Trail: 커서 위치에서 탐색 시작",
+        "category": "Code Trail"
+      },
+      {
+        "command": "codeTrail.addRootFromCursor",
+        "title": "Code Trail: 커서 위치를 새 루트로 추가",
+        "category": "Code Trail"
+      },
+      {
+        "command": "codeTrail.openPanel",
+        "title": "Code Trail: 패널 열기",
+        "category": "Code Trail"
+      },
+      {
+        "command": "codeTrail.clear",
+        "title": "Code Trail: 전체 지우기",
+        "category": "Code Trail"
+      },
+      {
+        "command": "codeTrail.diagnose",
+        "title": "Code Trail: 언어 서버 지원 확인",
+        "category": "Code Trail"
+      },
+      {
+        "command": "codeTrail.exportMarkdown",
+        "title": "Code Trail: Markdown으로 내보내기",
+        "category": "Code Trail"
+      },
+      {
+        "command": "codeTrail.exportJson",
+        "title": "Code Trail: JSON으로 저장",
+        "category": "Code Trail"
+      },
+      {
+        "command": "codeTrail.importJson",
+        "title": "Code Trail: JSON에서 불러오기",
+        "category": "Code Trail"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "codeTrail.startFromCursor",
+          "group": "navigation@100",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "codeTrail.addRootFromCursor",
+          "group": "navigation@101",
+          "when": "editorTextFocus"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "codeTrail.startFromCursor",
+        "key": "ctrl+alt+t",
+        "mac": "cmd+alt+t",
+        "when": "editorTextFocus"
+      }
+    ],
+    "configuration": {
+      "title": "Code Trail",
+      "properties": {
+        "codeTrail.contextLines": {
+          "type": "number",
+          "default": 40,
+          "markdownDescription": "언어 서버가 심볼의 전체 본문 범위를 알려주지 못할 때, 정의 위치를 기준으로 보여줄 최대 줄 수."
+        },
+        "codeTrail.maxCodeLines": {
+          "type": "number",
+          "default": 250,
+          "markdownDescription": "노드 하나에 표시할 코드의 최대 줄 수. 초과분은 `…더 보기`로 접힌다."
+        },
+        "codeTrail.clickTarget": {
+          "type": "string",
+          "enum": [
+            "allSymbols",
+            "callsOnly"
+          ],
+          "enumDescriptions": [
+            "함수·클래스·타입·변수 등 모든 식별자를 클릭 가능하게 한다",
+            "호출 지점(뒤에 여는 괄호가 오는 식별자)만 클릭 가능하게 한다"
+          ],
+          "default": "allSymbols",
+          "description": "코드 본문에서 클릭 가능한 대상."
+        },
+        "codeTrail.childOrder": {
+          "type": "string",
+          "enum": [
+            "source",
+            "click"
+          ],
+          "enumDescriptions": [
+            "같은 부모 아래 형제 노드를 부모 코드에 나온 순서(= 호출 순서)로 정렬한다",
+            "같은 부모 아래 형제 노드를 내가 클릭한 순서로 정렬한다"
+          ],
+          "default": "source",
+          "description": "형제 노드 정렬 순서. 패널 툴바에서도 즉시 바꿀 수 있다."
+        },
+        "codeTrail.revealInEditorOnAdd": {
+          "type": "boolean",
+          "default": false,
+          "description": "노드를 추가할 때 실제 에디터에서도 해당 위치를 함께 연다."
+        },
+        "codeTrail.autoCollapseSiblings": {
+          "type": "boolean",
+          "default": false,
+          "description": "새 자식 노드를 추가할 때 같은 레벨의 다른 노드를 자동으로 접는다."
+        },
+        "codeTrail.showAbsolutePath": {
+          "type": "boolean",
+          "default": false,
+          "description": "노드 헤더에 워크스페이스 상대경로 대신 절대경로를 표시한다."
+        },
+        "codeTrail.fontSize": {
+          "type": "number",
+          "default": 0,
+          "description": "코드 폰트 크기(px). 0이면 에디터 설정을 따른다."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "20.x",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.4.0"
+  }
+}
