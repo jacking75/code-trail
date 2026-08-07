@@ -10,8 +10,8 @@ const sample = {
             id: 'n1', parentId: null, origin: null, collapsed: false, recursive: false,
             symbol: {
                 name: 'HandlePacket', detail: '(Session*, Packet*) -> void', kind: 11,
-                kindName: 'function', uri: 'file:///w/src/net/dispatch.cpp',
-                relPath: 'src/net/dispatch.cpp', fsPath: '/w/src/net/dispatch.cpp',
+                container: '', kindName: 'function', uri: 'file:///w/src/net/dispatch.cpp',
+                relPath: 'gameserver/src/net/dispatch.cpp', fsPath: '/w/src/net/dispatch.cpp',
                 languageId: 'cpp', startLine: 118, anchorLine: 120, anchorChar: 5,
                 approximate: false, callable: true, declarationOnly: false,
                 code: [
@@ -39,8 +39,10 @@ const sample = {
                     collapsed: false, recursive: false,
                     symbol: {
                         name: 'Find', detail: '(uint16_t) -> IHandler*', kind: 5,
+                        // 메서드에도 클래스 정보는 실려 오지만 헤더에 표시하지 않는다
+                        container: 'HandlerRegistry',
                         kindName: 'method', uri: 'file:///w/src/net/registry.cpp',
-                        relPath: 'src/net/registry.cpp', fsPath: '/w/src/net/registry.cpp',
+                        relPath: 'gameserver/src/net/registry.cpp', fsPath: '/w/src/net/registry.cpp',
                         languageId: 'cpp', startLine: 40, anchorLine: 41, anchorChar: 20,
                         approximate: false, callable: true, declarationOnly: false,
                         code: [
@@ -57,8 +59,9 @@ const sample = {
                             origin: { line: 42, char: 19, text: 'find' },
                             collapsed: false, recursive: true,
                             symbol: {
-                                name: 'find', detail: '', kind: 5, kindName: 'method',
-                                uri: 'file:///w/src/base/map.h', relPath: 'src/base/map.h',
+                                name: 'find', detail: '', container: '', kind: 5, kindName: 'method',
+                                uri: 'file:///w/src/base/map.h',
+                                relPath: 'gameserver/src/base/map.h',
                                 fsPath: '/w/src/base/map.h', languageId: 'cpp',
                                 startLine: 88, anchorLine: 88, anchorChar: 12,
                                 approximate: true, callable: true, declarationOnly: false,
@@ -73,8 +76,10 @@ const sample = {
                     origin: { line: 131, char: 13, text: 'Invoke' },
                     collapsed: false, recursive: false,
                     symbol: {
-                        name: 'Invoke', detail: '', kind: 5, kindName: 'method',
-                        uri: 'file:///w/src/handlers/login.go', relPath: 'src/handlers/login.go',
+                        name: 'Invoke', detail: '', container: 'LoginHandler',
+                        kind: 5, kindName: 'method',
+                        uri: 'file:///w/src/handlers/login.go',
+                        relPath: 'gameserver/src/handlers/login.go',
                         fsPath: '/w/src/handlers/login.go', languageId: 'go',
                         startLine: 12, anchorLine: 12, anchorChar: 17,
                         approximate: false, callable: true, declarationOnly: false,
@@ -146,6 +151,41 @@ const sample = {
     const crumbs = await page.locator('#breadcrumb .crumb').count();
     check('브레드크럼 생성', crumbs >= 1, String(crumbs));
 
+    // ---- 경로: 저장소 루트부터 끝까지, 생략 없이 ----
+    console.log('\n  [파일 경로 표시]');
+    const locText = (await page.locator('.node[data-id="n2"] > .hd > .loc').innerText()).trim();
+    check('경로가 저장소 루트부터 시작',
+        locText === 'gameserver/src/net/registry.cpp:42', locText);
+    const locClipped = await page.locator('.node[data-id="n2"] > .hd > .loc').evaluate(
+        (e) => e.scrollWidth > e.clientWidth + 1 || getComputedStyle(e).textOverflow === 'ellipsis');
+    check('경로가 잘리지 않음', locClipped === false);
+
+    // ---- 클래스 정보는 클래스류 노드에서만 ----
+    console.log('\n  [클래스 정보 표시]');
+    check('메서드 노드에는 클래스 정보 없음',
+        await page.locator('.node[data-id="n2"] > .hd > .container').count() === 0);
+    check('함수 노드에도 없음',
+        await page.locator('.node[data-id="n1"] > .hd > .container').count() === 0);
+
+    await page.evaluate(() => window.postMessage({
+        type: 'addRoot',
+        node: {
+            id: 'n30', parentId: null, origin: null, collapsed: false, recursive: false,
+            symbol: {
+                name: 'HandlerRegistry', detail: '', container: 'net', kind: 4,
+                kindName: 'class', uri: 'file:///w/src/net/registry.h',
+                relPath: 'gameserver/src/net/registry.h', fsPath: '/w/src/net/registry.h',
+                languageId: 'cpp', startLine: 10, anchorLine: 10, anchorChar: 6,
+                approximate: false, callable: true, declarationOnly: false,
+                code: ['class HandlerRegistry {', 'public:', '    IHandler* Find(uint16_t) const;', '};'].join('\n'),
+            },
+            children: [],
+        },
+    }, '*'));
+    await page.waitForTimeout(250);
+    const containerText = (await page.locator('.node[data-id="n30"] > .hd > .container').innerText()).trim();
+    check('클래스 노드에는 감싸는 이름 표시', containerText.indexOf('net') === 0, containerText);
+
     // ---- 형제 관계: A 안의 B, C 는 나란히 ----
     console.log('\n  [형제 관계]');
     const siblingIds = await page.evaluate(() =>
@@ -178,8 +218,9 @@ const sample = {
             origin: { line: 122, char: 14, text: 'Close' },
             collapsed: false, recursive: false,
             symbol: {
-                name: 'Close', detail: '', kind: 5, kindName: 'method',
-                uri: 'file:///w/src/net/session.cpp', relPath: 'src/net/session.cpp',
+                name: 'Close', detail: '', container: 'Session', kind: 5, kindName: 'method',
+                uri: 'file:///w/src/net/session.cpp',
+                relPath: 'gameserver/src/net/session.cpp',
                 fsPath: '/w/src/net/session.cpp', languageId: 'cpp',
                 startLine: 200, anchorLine: 200, anchorChar: 14, approximate: false,
                 callable: true, declarationOnly: false,
@@ -264,9 +305,10 @@ const sample = {
         node: {
             id: 'n20', parentId: null, origin: null, collapsed: false, recursive: false,
             symbol: {
-                name: nm, detail: '', kind: 5, kindName: 'method',
+                name: nm, detail: '', container: 'IChallengeQueryService',
+                kind: 5, kindName: 'method',
                 uri: 'file:///w/Features/Challenges/ChallengeQueryService.cs',
-                relPath: 'Features/Challenges/ChallengeQueryService.cs',
+                relPath: 'WorkWay/Features/Challenges/ChallengeQueryService.cs',
                 fsPath: '/w/Features/Challenges/ChallengeQueryService.cs',
                 languageId: 'csharp', startLine: 11, anchorLine: 11, anchorChar: 30,
                 approximate: false, callable: true, declarationOnly: true,
@@ -290,7 +332,7 @@ const sample = {
     check('시그니처는 별도 표시', sigText.startsWith('(string, string'), sigText);
 
     const hdBox = await page.locator('.node[data-id="n20"] > .hd').boundingBox();
-    check('헤더가 한 줄로 유지 (높이 < 34px)', hdBox.height < 34, String(hdBox.height));
+    check('긴 이름에도 헤더가 부풀지 않음 (높이 < 34px)', hdBox.height < 34, String(hdBox.height));
 
     check('선언만 배지 표시', await page.locator('.node[data-id="n20"] .badge.decl').count() === 1);
     const implBtn = page.locator('.node[data-id="n20"] > .hd .act.impl');
@@ -316,9 +358,9 @@ const sample = {
             collapsed: false, recursive: false,
             symbol: {
                 name: 'GetPublishedDetailAsync(string, string, CancellationToken, bool) : Task<ChallengeDetailDto?>',
-                detail: '', kind: 5, kindName: 'method',
+                detail: '', container: 'ChallengeQueryService', kind: 5, kindName: 'method',
                 uri: 'file:///w/Features/Challenges/ChallengeQueryService.cs',
-                relPath: 'Features/Challenges/ChallengeQueryService.cs',
+                relPath: 'WorkWay/Features/Challenges/ChallengeQueryService.cs',
                 fsPath: '/w/Features/Challenges/ChallengeQueryService.cs',
                 languageId: 'csharp', startLine: 47, anchorLine: 47, anchorChar: 40,
                 approximate: false, callable: true, declarationOnly: false,

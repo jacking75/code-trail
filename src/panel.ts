@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { Trail, TrailNode } from './trail';
-import { ResolveMode, resolveAt, resolveImplementationsAt, kindName } from './symbols';
+import { ResolveMode, resolveAt, resolveImplementationsAt, kindName, shortName } from './symbols';
 
 interface ClientConfig {
     clickTarget: string;
@@ -19,12 +19,6 @@ function readConfig(): ClientConfig {
         fontSize: c.get<number>('fontSize', 0),
         childOrder: c.get<string>('childOrder', 'source'),
     };
-}
-
-/** Roslyn 등이 "Foo(int) : Task<T>" 형태로 주는 이름에서 식별자만 뽑는다. */
-function shortName(name: string): string {
-    const cut = name.indexOf('(');
-    return cut > 0 ? name.slice(0, cut).trim() : name;
 }
 
 function nonce(): string {

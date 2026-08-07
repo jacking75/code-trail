@@ -6,11 +6,16 @@ export interface ResolvedSymbol {
     name: string;
     /** 언어 서버가 준 부가 설명 (시그니처 등). 없을 수 있다. */
     detail: string;
+    /**
+     * 이 심볼을 감싸는 클래스/네임스페이스 이름. 없으면 빈 문자열.
+     * 함수 노드에서는 표시하지 않는다 — 클래스를 직접 펼쳤을 때만 보여준다.
+     */
+    container: string;
     /** vscode.SymbolKind 숫자값 */
     kind: number;
     /** 대상 파일 URI 문자열 */
     uri: string;
-    /** 워크스페이스 상대경로 */
+    /** 저장소 루트 디렉터리 이름부터 시작하는 경로 */
     relPath: string;
     /** 절대경로(표시용) */
     fsPath: string;
@@ -38,13 +43,27 @@ export interface ResolvedSymbol {
 
 const MAX_TOTAL_LINES_HARD_CAP = 4000;
 
+/** Roslyn 등이 "Foo(int) : Task<T>" 형태로 주는 이름에서 식별자만 뽑는다. */
+export function shortName(name: string): string {
+    const cut = name.indexOf('(');
+    return cut > 0 ? name.slice(0, cut).trim() : name;
+}
+
+/**
+ * 표시용 경로. 저장소 루트 디렉터리 이름부터 시작해 끝까지 전부 담는다.
+ * 멀티 루트 워크스페이스에서 어느 저장소의 파일인지도 이걸로 구분된다.
+ */
 function relPathOf(uri: vscode.Uri): string {
     const ws = vscode.workspace.getWorkspaceFolder(uri);
     if (!ws) {
-        return vscode.workspace.asRelativePath(uri, false);
+        // 워크스페이스 밖의 파일(시스템 헤더, 외부 패키지 등)은 절대경로를 그대로 둔다.
+        return uri.fsPath.replace(/\\/g, '/');
     }
-    const rel = uri.fsPath.slice(ws.uri.fsPath.length).replace(/^[\\/]/, '');
-    return rel.replace(/\\/g, '/');
+    const rel = uri.fsPath
+        .slice(ws.uri.fsPath.length)
+        .replace(/^[\\/]/, '')
+        .replace(/\\/g, '/');
+    return rel ? `${ws.name}/${rel}` : ws.name;
 }
 
 type AnySymbol = vscode.DocumentSymbol | vscode.SymbolInformation;
@@ -57,13 +76,20 @@ function isDocumentSymbol(s: AnySymbol): s is vscode.DocumentSymbol {
 interface FlatSymbol {
     name: string;
     detail: string;
+    /** 감싸는 클래스/네임스페이스 이름 */
+    container: string;
     kind: vscode.SymbolKind;
     range: vscode.Range;
     selectionRange: vscode.Range;
     depth: number;
 }
 
-function flatten(symbols: AnySymbol[] | undefined, depth = 0, out: FlatSymbol[] = []): FlatSymbol[] {
+function flatten(
+    symbols: AnySymbol[] | undefined,
+    depth = 0,
+    out: FlatSymbol[] = [],
+    parentName = '',
+): FlatSymbol[] {
     if (!symbols) {
         return out;
     }
@@ -71,18 +97,23 @@ function flatten(symbols: AnySymbol[] | undefined, depth = 0, out: FlatSymbol[] 
         if (isDocumentSymbol(s)) {
             out.push({
                 name: s.name,
+                // DocumentSymbol.detail 은 LSP 정의상 시그니처 같은 부가 설명이다.
                 detail: s.detail ?? '',
+                container: parentName,
                 kind: s.kind,
                 range: s.range,
                 selectionRange: s.selectionRange ?? s.range,
                 depth,
             });
-            flatten(s.children, depth + 1, out);
+            flatten(s.children, depth + 1, out, shortName(s.name));
         } else {
             const si = s as vscode.SymbolInformation;
+            // SymbolInformation 의 containerName 은 감싸는 클래스 이름이다.
+            // 예전에는 이걸 detail 에 넣어서 함수 헤더에 클래스명이 딸려 나왔다.
             out.push({
                 name: si.name,
-                detail: si.containerName ?? '',
+                detail: '',
+                container: si.containerName ?? '',
                 kind: si.kind,
                 range: si.location.range,
                 selectionRange: si.location.range,
@@ -106,20 +137,56 @@ async function documentSymbols(uri: vscode.Uri): Promise<FlatSymbol[]> {
 }
 
 /**
+ * 범위가 좁은 것을 앞으로. 같으면 더 깊은 것을 앞으로.
+ *
+ * depth 만으로 정렬하면 안 된다. 언어 서버가 계층 없는 SymbolInformation 을 주면
+ * 클래스도 메서드도 전부 depth 0 이고 selectionRange 가 심볼 전체 범위라서,
+ * 메서드를 클릭했는데 그 메서드를 감싸는 클래스가 먼저 걸려 나온다.
+ * (클래스 코드가 통째로 펼쳐지고, 정작 함수 본문은 잘려 보이던 원인이다.)
+ */
+function narrower(a: FlatSymbol, b: FlatSymbol): number {
+    const la = a.range.end.line - a.range.start.line;
+    const lb = b.range.end.line - b.range.start.line;
+    if (la !== lb) {
+        return la - lb;
+    }
+    if (a.depth !== b.depth) {
+        return b.depth - a.depth;
+    }
+    return 0;
+}
+
+/**
  * position을 감싸는 심볼 중 "본문을 보여주기에 적절한" 것을 고른다.
  *
  * 가장 깊은 심볼이 항상 정답은 아니다. 예를 들어 클래스 안의 메서드를 클릭하면
  * 메서드를 보여줘야 하지만, 필드 변수를 클릭하면 그 필드 한 줄만 보여주는 게 맞다.
- * 그래서 "position을 포함하는 심볼 중 가장 깊은 것"을 그대로 쓰되,
- * 그 심볼이 이름만 있고 범위가 0줄인 경우에만 부모로 올라간다.
+ * 그래서 position을 감싸는 것 중 가장 좁은 심볼을 쓴다.
  */
 function pickEnclosing(symbols: FlatSymbol[], position: vscode.Position): FlatSymbol | undefined {
     const containing = symbols.filter((s) => s.range.contains(position));
     if (containing.length === 0) {
         return undefined;
     }
-    containing.sort((a, b) => b.depth - a.depth);
+    containing.sort(narrower);
     return containing[0];
+}
+
+/**
+ * 커서를 감싸는 심볼 중 "몸통이 있는" 가장 안쪽 것.
+ *
+ * 함수 안에 커서를 두고 탐색을 시작했는데 언어 서버가 지역 변수까지 심볼로
+ * 보고하는 경우, 가장 좁은 심볼은 그 변수 한 줄이 된다. 그때는 함수를 보여줘야 한다.
+ */
+function pickEnclosingBody(symbols: FlatSymbol[], position: vscode.Position): FlatSymbol | undefined {
+    const containing = symbols.filter((s) => s.range.contains(position));
+    if (containing.length === 0) {
+        return undefined;
+    }
+    const bodies = containing.filter((s) => isBodyKind(s.kind));
+    const pool = bodies.length > 0 ? bodies : containing;
+    pool.sort(narrower);
+    return pool[0];
 }
 
 /** 정의 위치(선언 이름 위치)와 정확히 맞아떨어지는 심볼을 찾는다. */
@@ -127,11 +194,43 @@ function pickByDeclaration(symbols: FlatSymbol[], position: vscode.Position): Fl
     // 1) selectionRange(이름 부분)가 position을 포함하는 것 우선
     const byName = symbols.filter((s) => s.selectionRange.contains(position));
     if (byName.length > 0) {
-        byName.sort((a, b) => b.depth - a.depth);
+        byName.sort(narrower);
         return byName[0];
     }
     // 2) 없으면 범위로
     return pickEnclosing(symbols, position);
+}
+
+/**
+ * 언어 서버가 심볼의 range 를 한 줄만 준 경우(일부 C++ 서버) 본문 끝을 추정한다.
+ *
+ * 자체 파서를 두지 않는다는 원칙을 지키려고, 중괄호를 세는 대신 언어 서버가 준
+ * 문서 심볼 목록만 쓴다. "이 심볼보다 뒤에서 시작하는, 이 심볼의 자식이 아닌
+ * 가장 가까운 심볼" 바로 앞 줄을 본문의 끝으로 본다.
+ * 그 경계조차 없으면(파일 마지막 심볼 등) contextLines 만큼만 보여준다.
+ */
+function guessBodyEnd(
+    all: FlatSymbol[],
+    sym: FlatSymbol,
+    lineCount: number,
+    contextLines: number,
+): number {
+    const startLine = sym.range.start.line;
+    let boundary = -1;
+    for (const s of all) {
+        if (s === sym || s.range.start.line <= startLine) {
+            continue;
+        }
+        // 이 심볼 안쪽(지역 변수 등)은 경계가 아니다.
+        if (s.depth > sym.depth) {
+            continue;
+        }
+        if (boundary === -1 || s.range.start.line < boundary) {
+            boundary = s.range.start.line;
+        }
+    }
+    const end = boundary > startLine ? boundary - 1 : startLine + contextLines;
+    return Math.max(startLine, Math.min(lineCount - 1, end));
 }
 
 function sliceCode(doc: vscode.TextDocument, range: vscode.Range): { code: string; startLine: number } {
@@ -153,15 +252,24 @@ async function buildResolved(
     sym: FlatSymbol | undefined,
     fallbackPosition: vscode.Position,
     fallbackName: string,
+    allSymbols: FlatSymbol[] = [],
+    /** 언어 서버가 LocationLink 로 알려준 전체 범위. 있으면 가장 정확하다. */
+    hintRange?: vscode.Range,
 ): Promise<ResolvedSymbol> {
     const contextLines = vscode.workspace
         .getConfiguration('codeTrail')
         .get<number>('contextLines', 40);
 
+    const hintSpansBody = (from: number): boolean =>
+        hintRange !== undefined
+        && hintRange.start.line <= from
+        && hintRange.end.line > from;
+
     let range: vscode.Range;
     let approximate = false;
     let name = fallbackName;
     let detail = '';
+    let container = '';
     let kind: vscode.SymbolKind = vscode.SymbolKind.Null;
     let anchor = fallbackPosition;
 
@@ -169,17 +277,22 @@ async function buildResolved(
         range = sym.range;
         name = sym.name || fallbackName;
         detail = sym.detail;
+        container = sym.container;
         kind = sym.kind;
         anchor = sym.selectionRange.start;
         // 언어 서버가 한 줄짜리 range만 준 경우(일부 C++ 서버)에는 보정한다.
         if (range.start.line === range.end.line && isBodyKind(kind)) {
-            const end = Math.min(doc.lineCount - 1, range.start.line + contextLines);
+            const end = hintSpansBody(range.start.line)
+                ? Math.min(doc.lineCount - 1, (hintRange as vscode.Range).end.line)
+                : guessBodyEnd(allSymbols, sym, doc.lineCount, contextLines);
             range = new vscode.Range(range.start.line, 0, end, doc.lineAt(end).text.length);
             approximate = true;
         }
     } else {
         const start = Math.max(0, fallbackPosition.line);
-        const end = Math.min(doc.lineCount - 1, start + contextLines);
+        const end = hintSpansBody(start)
+            ? Math.min(doc.lineCount - 1, (hintRange as vscode.Range).end.line)
+            : Math.min(doc.lineCount - 1, start + contextLines);
         range = new vscode.Range(start, 0, end, doc.lineAt(end).text.length);
         approximate = true;
     }
@@ -190,6 +303,7 @@ async function buildResolved(
     return {
         name,
         detail,
+        container,
         kind,
         uri: doc.uri.toString(),
         relPath: relPathOf(doc.uri),
@@ -311,6 +425,7 @@ export async function resolveAt(
         sym = {
             name: wordRange ? doc.getText(wordRange) : '(unknown)',
             detail: '',
+            container: '',
             kind: vscode.SymbolKind.Null,
             range: chosen.fullRange,
             selectionRange: new vscode.Range(chosen.selection, chosen.selection),
@@ -320,7 +435,7 @@ export async function resolveAt(
 
     const wordRange = doc.getWordRangeAtPosition(chosen.selection);
     const fallbackName = wordRange ? doc.getText(wordRange) : '(unknown)';
-    return buildResolved(doc, sym, chosen.selection, fallbackName);
+    return buildResolved(doc, sym, chosen.selection, fallbackName, symbols, chosen.fullRange);
 }
 
 /**
@@ -373,6 +488,7 @@ export async function resolveImplementationsAt(
             const wr = doc.getWordRangeAtPosition(loc.selection);
             const resolved = await buildResolved(
                 doc, sym, loc.selection, wr ? doc.getText(wr) : '(unknown)',
+                symbols, loc.fullRange,
             );
             // 또 다른 선언(다른 인터페이스에서 상속 등)은 구현이 아니므로 뒤로 민다
             out.push(resolved);
@@ -422,10 +538,11 @@ export async function resolveEnclosing(
     }
 
     // 2) 아니면 커서를 감싸는 심볼 자체를 보여준다.
+    //    지역 변수 한 줄이 아니라 그걸 담고 있는 함수가 나와야 한다.
     const symbols = await documentSymbols(doc.uri);
-    const sym = pickEnclosing(symbols, position);
+    const sym = pickEnclosingBody(symbols, position);
     const fallbackName = wordRange ? doc.getText(wordRange) : `${relPathOf(doc.uri)}:${position.line + 1}`;
-    return buildResolved(doc, sym, position, fallbackName);
+    return buildResolved(doc, sym, position, fallbackName, symbols);
 }
 
 /**

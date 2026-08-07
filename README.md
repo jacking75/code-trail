@@ -106,8 +106,21 @@ Roslyn이 솔루션을 다 못 읽은 것이다. `dotnet.defaultSolution` 에
 
 - **재귀** — 조상 노드 중에 같은 심볼이 이미 있다. 순환 호출이다.
 - **선언만** — 몸통이 없는 선언이다. `⚑` 로 구현을 펼친다.
-- **근사** — 언어 서버가 그 심볼의 전체 본문 범위를 알려주지 않아
-  `codeTrail.contextLines` 만큼만 잘라서 보여준 경우다.
+- **근사** — 언어 서버가 그 심볼의 전체 본문 범위를 알려주지 않아 끝을 추정한 경우다.
+  추정 순서는 ① 정의 결과가 함께 준 전체 범위 → ② 바로 뒤에 시작하는 다음 심볼의
+  앞 줄까지 → ③ 그마저 없으면 `codeTrail.contextLines` 만큼 이다.
+
+### 헤더에 표시되는 것
+
+`종류 · 이름 · 시그니처 · 경로:줄` 순이다.
+
+**감싸는 클래스·네임스페이스 이름은 클래스류 노드(class/struct/interface/enum/namespace)에만
+붙는다.** 함수·메서드 노드에는 붙이지 않는다 — 어느 클래스 소속인지는 대개 코드 본문에
+이미 보이고, 헤더에서는 경로가 밀려나기 때문이다.
+
+**경로는 저장소 루트 디렉터리 이름부터 끝까지 전부 나온다** (`gameserver/src/net/registry.cpp:42`).
+말줄임으로 자르지 않고, 자리가 모자라면 시그니처 쪽이 먼저 줄어든다.
+멀티 루트 워크스페이스에서는 이 앞부분이 어느 저장소인지도 알려준다.
 
 ## 설정
 
@@ -116,9 +129,9 @@ Roslyn이 솔루션을 다 못 읽은 것이다. `dotnet.defaultSolution` 에
 | `codeTrail.clickTarget` | `allSymbols` | 클릭 대상. `callsOnly` 로 바꾸면 호출 지점만 링크가 된다 |
 | `codeTrail.childOrder` | `source` | 형제 정렬. `source`=코드 순서, `click`=클릭 순서 |
 | `codeTrail.maxCodeLines` | `250` | 노드 하나에 처음 표시할 최대 줄 수. 초과분은 "더 보기" |
-| `codeTrail.contextLines` | `40` | 본문 범위를 못 구할 때 보여줄 줄 수 |
+| `codeTrail.contextLines` | `40` | 본문 범위도 다음 심볼 경계도 못 구할 때 보여줄 줄 수 |
 | `codeTrail.revealInEditorOnAdd` | `false` | 노드 추가 시 실제 에디터도 같이 이동 |
-| `codeTrail.showAbsolutePath` | `false` | 헤더에 절대경로 표시 |
+| `codeTrail.showAbsolutePath` | `false` | 저장소 루트 기준 경로 대신 절대경로 표시 |
 | `codeTrail.fontSize` | `0` | 코드 폰트 크기(px). 0이면 에디터 설정을 따름 |
 
 ## 설치
@@ -126,7 +139,7 @@ Roslyn이 솔루션을 다 못 읽은 것이다. `dotnet.defaultSolution` 에
 받은 `.vsix` 를 바로 설치하려면:
 
 ```
-code --install-extension code-trail-0.3.0.vsix
+code --install-extension code-trail-0.4.0.vsix
 ```
 
 또는 VS Code에서 `확장` 패널 → 우측 상단 `⋯` → `VSIX에서 설치…` → 파일 선택.
@@ -157,7 +170,7 @@ npx @vscode/vsce package --out dist/code-trail.vsix
 ```
 
 버전을 올리려면 `package.json` 의 `version` 을 고치거나
-`npx @vscode/vsce package patch` (자동으로 0.3.0 → 0.3.1).
+`npx @vscode/vsce package patch` (자동으로 0.4.0 → 0.4.1).
 
 ### 빌드가 막힐 때
 

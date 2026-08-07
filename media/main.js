@@ -32,6 +32,18 @@
     }
 
     /**
+     * 클래스 정보(감싸는 클래스·네임스페이스 이름)를 헤더에 띄울 노드인지.
+     * 함수 노드에는 붙이지 않는다 — 클래스를 직접 펼쳤을 때만 보여준다.
+     */
+    var CLASS_LIKE = {
+        'class': 1, 'struct': 1, 'interface': 1, 'enum': 1,
+        'namespace': 1, 'module': 1, 'package': 1,
+    };
+    function showsContainer(sym) {
+        return CLASS_LIKE[sym.kindName] === 1 && !!sym.container;
+    }
+
+    /**
      * 언어 서버마다 심볼 이름 형식이 다르다.
      * Roslyn(C#)은 "Foo(string, int) : Task<T>" 처럼 시그니처를 통째로 넣어 준다.
      * 헤더가 네 줄로 깨지지 않게 이름과 시그니처를 분리한다.
@@ -102,6 +114,12 @@
         hd.appendChild(el('span', 'chev', '▾'));
         hd.appendChild(el('span', 'idx', ''));   // 형제 중 몇 번째인지
         hd.appendChild(el('span', 'kind k-' + (node.symbol.kindName || 'symbol'), node.symbol.kindName || 'symbol'));
+
+        if (showsContainer(node.symbol)) {
+            var ctEl = el('span', 'container', node.symbol.container + ' ·');
+            ctEl.title = '이 ' + node.symbol.kindName + ' 를 감싸는 ' + node.symbol.container;
+            hd.appendChild(ctEl);
+        }
 
         var parts = splitName(node.symbol);
         var nameEl = el('span', 'name', parts.name);
