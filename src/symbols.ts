@@ -443,15 +443,25 @@ export async function resolveAt(
  *
  * 인터페이스 메서드나 순수 가상 함수를 클릭하면 선언만 나오는데,
  * 정작 보고 싶은 건 그걸 구현한 클래스의 몸통이다. 그 간극을 메우는 용도다.
+ *
+ * `allowReferenceFallback` 은 implementation provider가 빈손일 때 참조 검색까지
+ * 동원할지다. 참조에는 호출부도 섞여 들어오므로 결과가 "구현"이라는 보장이 없다.
+ * 사용자가 ⚑ 를 눌러 목록을 눈으로 확인하는 경우에만 켜고,
+ * 자동으로 따라가는 경로에서는 끈다.
  */
 export async function resolveImplementationsAt(
     uri: vscode.Uri,
     position: vscode.Position,
+    allowReferenceFallback = true,
 ): Promise<ResolvedSymbol[]> {
     const seen = new Set<string>();
     const collected: NormalizedLocation[] = [];
 
-    for (const cmd of ['vscode.executeImplementationProvider', 'vscode.executeReferenceProvider']) {
+    const commands = allowReferenceFallback
+        ? ['vscode.executeImplementationProvider', 'vscode.executeReferenceProvider']
+        : ['vscode.executeImplementationProvider'];
+
+    for (const cmd of commands) {
         let locs: NormalizedLocation[] = [];
         try {
             const raw = await vscode.commands.executeCommand<

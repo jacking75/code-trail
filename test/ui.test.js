@@ -4,7 +4,11 @@ const { chromium } = require('playwright');
 
 const sample = {
     type: 'setState',
-    config: { clickTarget: 'allSymbols', maxCodeLines: 250, showAbsolutePath: false, fontSize: 0 },
+    // panel.ts 의 readConfig() 가 보내는 것과 같은 모양으로 둔다
+    config: {
+        clickTarget: 'allSymbols', maxCodeLines: 250, showAbsolutePath: false,
+        fontSize: 0, childOrder: 'source', fitToWidth: true, minFontSize: 8,
+    },
     roots: [
         {
             id: 'n1', parentId: null, origin: null, collapsed: false, recursive: false,
@@ -382,6 +386,97 @@ const sample = {
         await page.locator('.node[data-id="n20"] > .kids > .node[data-id="n21"]').count() === 1);
     check('구현 노드는 선언만 배지 없음',
         await page.locator('.node[data-id="n21"] .badge.decl').count() === 0);
+
+    // ---- 폭에 맞춰 코드 폰트 자동 축소 ----
+    console.log('\n  [폭 맞춤]');
+    const codeFont = () => page.evaluate(
+        () => parseFloat(getComputedStyle(document.querySelector('.code')).fontSize));
+    const overflowing = () => page.evaluate(() => Array.prototype.filter.call(
+        document.querySelectorAll('.code'),
+        (e) => e.clientWidth > 0 && e.scrollWidth > e.clientWidth + 1).length);
+    const headerFont = () => page.evaluate(
+        () => parseFloat(getComputedStyle(document.querySelector('.hd .name')).fontSize));
+
+    await page.setViewportSize({ width: 1100, height: 1000 });
+    await page.waitForTimeout(250);
+    const wideFont = await codeFont();
+    const wideHeader = await headerFont();
+    check('넓을 때는 가로로 넘치지 않음', await overflowing() === 0);
+
+    await page.setViewportSize({ width: 430, height: 1000 });
+    await page.waitForTimeout(250);
+    const narrowFont = await codeFont();
+    check('창을 좁히면 코드 글자가 작아진다', narrowFont < wideFont, `${wideFont} → ${narrowFont}`);
+    check('좁혀도 코드가 가로로 넘치지 않는다 (하한에 걸린 경우는 예외)',
+        await overflowing() === 0 || narrowFont <= 8.01, `font=${narrowFont}`);
+    check('헤더 이름 글자는 그대로', Math.abs(await headerFont() - wideHeader) < 0.01,
+        `${wideHeader} → ${await headerFont()}`);
+
+    await page.setViewportSize({ width: 1100, height: 1000 });
+    await page.waitForTimeout(250);
+    const backFont = await codeFont();
+    check('다시 넓히면 원래 크기로 돌아온다', Math.abs(backFont - wideFont) < 0.2,
+        `${wideFont} → ${backFont}`);
+
+    // 수동 지정이 자동 맞춤보다 우선인지 (설정 일부만 보내도 나머지는 기본값으로 채워진다)
+    await page.setViewportSize({ width: 430, height: 1000 });
+    await page.evaluate(() => window.postMessage(
+        { type: 'config', config: { fontSize: 20 } }, '*'));
+    await page.waitForTimeout(250);
+    check('codeTrail.fontSize 가 폭 맞춤보다 우선', Math.abs(await codeFont() - 20) < 0.01,
+        String(await codeFont()));
+    await page.evaluate(() => window.postMessage(
+        { type: 'config', config: { fontSize: 0 } }, '*'));
+    await page.setViewportSize({ width: 1100, height: 1000 });
+    await page.waitForTimeout(250);
+    check('수동 지정을 풀면 자동 맞춤으로 돌아온다', Math.abs(await codeFont() - wideFont) < 0.2,
+        String(await codeFont()));
+
+    // ---- 보드 모드: 자유 배치 ----
+    console.log('\n  [보드 모드]');
+    await page.setViewportSize({ width: 1400, height: 1000 });
+    await page.waitForTimeout(150);
+    await page.click('#btn-board');
+    await page.waitForTimeout(300);
+
+    check('보드 모드로 전환', await page.locator('#root.board').count() === 1);
+    const allNodes = await page.locator('.node').count();
+    const flatNodes = await page.locator('#root > .node').count();
+    check('모든 노드가 캔버스 직속으로 펼쳐짐', allNodes === flatNodes, `${flatNodes}/${allNodes}`);
+    check('부모-자식 연결선이 그려짐', await page.locator('.board-lines path').count() >= 1);
+
+    const childId = await page.evaluate(() => {
+        const el = Array.prototype.find.call(
+            document.querySelectorAll('.node'), (n) => n.dataset.parent);
+        return el ? el.dataset.id : null;
+    });
+    check('자식 노드를 찾음', !!childId, String(childId));
+
+    const posOf = () => page.locator(`.node[data-id="${childId}"]`)
+        .evaluate((e) => [e.offsetLeft, e.offsetTop]);
+    const before = await posOf();
+    const bb = await page.locator(`.node[data-id="${childId}"] > .hd`).boundingBox();
+    await page.mouse.move(bb.x + 60, bb.y + bb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(bb.x + 60 + 180, bb.y + bb.height / 2 + 140, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+    const after = await posOf();
+    check('헤더를 끌면 노드가 따라온다',
+        after[0] - before[0] > 120 && after[1] - before[1] > 90,
+        `${before} → ${after}`);
+    check('끌어 옮긴 뒤 접히지 않는다',
+        await page.locator(`.node[data-id="${childId}"].collapsed`).count() === 0);
+    check('옮긴 뒤에도 연결선 유지', await page.locator('.board-lines path').count() >= 1);
+
+    await page.click('#btn-board');
+    await page.waitForTimeout(300);
+    check('트리 모드로 복귀', await page.locator('#root.board').count() === 0);
+    check('중첩 구조가 되돌아옴', await page.locator('.node .kids .node').count() >= 1);
+    check('보드에서 돌아와도 노드 수 그대로', await page.locator('.node').count() === allNodes);
+
+    await page.setViewportSize({ width: 1100, height: 1000 });
+    await page.waitForTimeout(250);
 
     await page.screenshot({ path: path.join(__dirname, '..', 'preview-dark.png'), fullPage: true });
 

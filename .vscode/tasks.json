@@ -37,6 +37,15 @@
     },
     {
       "type": "shell",
+      "label": "test: shell",
+      "command": "node",
+      "args": ["test/shell.test.js"],
+      "problemMatcher": [],
+      "group": "test",
+      "detail": "panel.ts 셸 ↔ test/preview.html 동기화 검사 (브라우저 불필요)"
+    },
+    {
+      "type": "shell",
       "label": "test: ui",
       "command": "node",
       "args": ["test/ui.test.js"],

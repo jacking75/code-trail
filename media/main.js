@@ -9,13 +9,44 @@
     var toastEl = document.getElementById('toast');
     var filterEl = document.getElementById('filter');
 
-    var config = {
+    var DEFAULTS = {
         clickTarget: 'allSymbols', maxCodeLines: 250, showAbsolutePath: false,
-        fontSize: 0, childOrder: 'source',
+        fontSize: 0, childOrder: 'source', fitToWidth: true, minFontSize: 8,
     };
+
+    /**
+     * 확장이 보낸 설정에서 빠진 키를 기본값으로 채운다.
+     * 통째로 갈아끼우면 확장에 새 설정이 생겼는데 옛 메시지가 오는 경우
+     * (또는 test/preview.html 처럼 일부만 보내는 하네스)에서 undefined 가 된다.
+     */
+    function mergeConfig(next) {
+        var out = {}, k;
+        for (k in DEFAULTS) {
+            if (Object.prototype.hasOwnProperty.call(DEFAULTS, k)) { out[k] = DEFAULTS[k]; }
+        }
+        if (next) {
+            for (k in next) {
+                if (Object.prototype.hasOwnProperty.call(next, k) && next[k] !== undefined) {
+                    out[k] = next[k];
+                }
+            }
+        }
+        return out;
+    }
+
+    var config = mergeConfig(null);
     var nodes = Object.create(null); // id -> node data
+    /**
+     * 노드별로 사용자가 마우스로 맞춰 둔 것. `{ h: 본문 높이 px, fs: 코드 글자 px }`.
+     * 노드 id 는 확장이 매기므로 setState 로 트리를 다시 그려도 같은 노드에 다시 붙는다.
+     * 다만 JSON 으로 저장·복원하면 id 가 새로 매겨지므로 따라가지 않는다.
+     */
+    var uiState = Object.create(null);
     var activeId = null;
     var orderMode = 'source'; // 'source' = 코드에 나온 순서, 'click' = 내가 클릭한 순서
+    var rootNodes = [];       // 루트 노드 데이터. 모드를 바꿔도 이걸로 다시 그린다
+    var boardMode = false;    // true = 캔버스에 자유 배치, false = 중첩 트리
+    var boardLines = null;    // 보드 모드의 부모-자식 연결선 <svg>
 
     // ---------------------------------------------------------------- 렌더링
 
@@ -89,6 +120,8 @@
                 appendRange(shown, lines.length);
                 // 나중에 그려진 줄에도 방문 표시를 다시 입힌다
                 refreshChildren(wrap.closest('.node'));
+                // 더 긴 줄이 나왔을 수 있다
+                scheduleFit();
             });
             wrap.appendChild(more);
         }
@@ -106,6 +139,7 @@
 
         var box = el('div', 'node');
         box.dataset.id = node.id;
+        box.dataset.parent = node.parentId || '';
         box.dataset.depth = String(depth);
         if (node.collapsed) { box.classList.add('collapsed'); }
 
@@ -156,6 +190,13 @@
             hd.appendChild(implBtn);
         }
 
+        if (node.parentId) {
+            var rootBtn = el('button', 'act', '⇱');
+            rootBtn.title = '새 루트로 떼어내기 — 이 노드를 트리 맨 위로 올린다 (하위 노드도 함께)';
+            rootBtn.dataset.act = 'root';
+            hd.appendChild(rootBtn);
+        }
+
         var openBtn = el('button', 'act', '↗');
         openBtn.title = '에디터에서 열기';
         openBtn.dataset.act = 'open';
@@ -188,25 +229,49 @@
 
         // 본문
         var body = el('div', 'body');
-        body.appendChild(renderCode(node.symbol));
+        var codeEl = renderCode(node.symbol);
+        applyNodeUi(node.id, codeEl);
+        if (codeObserver) { codeObserver.observe(codeEl); }
+        body.appendChild(codeEl);
         box.appendChild(body);
 
-        // 자식
+        // 자식. 보드 모드에서는 노드를 캔버스에 하나씩 늘어놓으므로 여기서 중첩하지 않는다.
         var kids = el('div', 'kids');
-        (node.children || []).forEach(function (c) {
-            kids.appendChild(renderNode(c, depth + 1));
-        });
+        if (!boardMode) {
+            (node.children || []).forEach(function (c) {
+                kids.appendChild(renderNode(c, depth + 1));
+            });
+        }
         box.appendChild(kids);
 
         return box;
     }
 
+    /** 확장이 준 트리를 웹뷰 쪽 모델(nodes/rootNodes)에 등록한다. */
+    function registerTree(node, parentId) {
+        node.parentId = parentId;
+        node.children = node.children || [];
+        nodes[node.id] = node;
+        node.children.forEach(function (c) { registerTree(c, node.id); });
+    }
+
     function rebuild(roots) {
         nodes = Object.create(null);
+        rootNodes = roots || [];
+        rootNodes.forEach(function (r) { registerTree(r, null); });
+        render();
+    }
+
+    /** 지금 모드에 맞게 트리 전체를 다시 그린다. 모델은 건드리지 않는다. */
+    function render() {
         rootEl.textContent = '';
-        roots.forEach(function (r) {
-            rootEl.appendChild(renderNode(r, 0));
-        });
+        boardLines = null;
+        if (boardMode) {
+            renderBoard();
+        } else {
+            rootEl.removeAttribute('style');
+            rootNodes.forEach(function (r) { rootEl.appendChild(renderNode(r, 0)); });
+        }
         refreshAll();
         updateEmpty();
         applyFilter();
@@ -223,12 +288,19 @@
         return n >= 1 && n <= 20 ? String.fromCharCode(0x2460 + n - 1) : '(' + n + ')';
     }
 
+    /**
+     * 그 노드의 자식 상자들. DOM 이 아니라 모델에서 찾는다 —
+     * 보드 모드에서는 자식이 부모 안에 중첩돼 있지 않고 캔버스에 따로 놓이기 때문이다.
+     */
     function childBoxes(parentBox) {
-        var kids = parentBox.querySelector(':scope > .kids');
-        if (!kids) { return []; }
-        return Array.prototype.filter.call(kids.children, function (c) {
-            return c.classList && c.classList.contains('node');
+        var d = nodes[parentBox.dataset.id];
+        if (!d || !d.children) { return []; }
+        var out = [];
+        d.children.forEach(function (c) {
+            var b = boxOf(c.id);
+            if (b) { out.push(b); }
         });
+        return out;
     }
 
     /**
@@ -244,6 +316,11 @@
         if (!kids) { return; }
 
         var list = childBoxes(parentBox);
+        if (list.length === 0 && boardMode) {
+            var cnt0 = parentBox.querySelector(':scope > .hd > .cnt');
+            if (cnt0) { cnt0.textContent = ''; }
+            return;
+        }
 
         list.sort(function (a, b) {
             var da = nodes[a.dataset.id];
@@ -257,7 +334,10 @@
             }
             return seqOf(da.id) - seqOf(db.id);
         });
-        list.forEach(function (c) { kids.appendChild(c); });
+        // 보드 모드에서는 자식이 캔버스에 따로 놓여 있으므로 DOM 순서를 건드리지 않는다.
+        if (!boardMode) {
+            list.forEach(function (c) { kids.appendChild(c); });
+        }
 
         // 부모 코드의 기존 방문 표시 제거
         var body = parentBox.querySelector(':scope > .body');
@@ -303,7 +383,29 @@
     }
 
     function boxOf(id) {
-        return rootEl.querySelector('.node[data-id="' + id + '"]');
+        return id ? rootEl.querySelector('.node[data-id="' + id + '"]') : null;
+    }
+
+    /**
+     * 노드와 그 하위 노드를 모델·DOM 양쪽에서 지운다.
+     *
+     * 트리 모드에서는 부모 상자를 지우면 자식도 딸려 가지만, 보드 모드에서는
+     * 자식이 캔버스에 따로 놓여 있어 하나씩 지워야 한다. 확장 쪽 모델은
+     * `remove` 메시지가 같은 일을 한다.
+     */
+    function removeSubtree(id) {
+        var data = nodes[id];
+        if (data) {
+            (data.children || []).slice().forEach(function (c) { removeSubtree(c.id); });
+            var parent = data.parentId ? nodes[data.parentId] : null;
+            var list = parent ? parent.children : rootNodes;
+            var i = list.indexOf(data);
+            if (i >= 0) { list.splice(i, 1); }
+        }
+        var box = boxOf(id);
+        if (box) { box.remove(); }
+        delete nodes[id];
+        delete uiState[id];
     }
 
     // ---------------------------------------------------------------- 상호작용
@@ -352,20 +454,22 @@
             } else if (t.dataset.act === 'impl') {
                 setActive(id);
                 vscode.postMessage({ type: 'resolveImplementations', nodeId: id });
+            } else if (t.dataset.act === 'root') {
+                vscode.postMessage({ type: 'promoteToRoot', nodeId: id });
             } else if (t.dataset.act === 'del') {
                 vscode.postMessage({ type: 'remove', nodeId: id });
-                var owner = nbox.parentElement && nbox.parentElement.closest('.node');
-                nbox.remove();
-                delete nodes[id];
-                if (owner) { refreshChildren(owner); }
+                var ownerId = nbox.dataset.parent;
+                removeSubtree(id);
+                if (ownerId) { refreshChildren(boxOf(ownerId)); }
                 updateEmpty();
+                drawBoardLines();
             }
             ev.stopPropagation();
             return;
         }
 
-        // 헤더 클릭 → 접기/펼치기
-        var hd = t.closest('.hd');
+        // 헤더 클릭 → 접기/펼치기 (보드에서 끌어 옮긴 직후의 click 은 무시)
+        var hd = justDragged ? null : t.closest('.hd');
         if (hd) {
             var hbox = hd.closest('.node');
             if (!hbox) { return; }
@@ -376,6 +480,8 @@
                 collapsed: hbox.classList.contains('collapsed'),
             });
             setActive(hbox.dataset.id);
+            scheduleFit();   // 펼쳐진 본문이 달라졌다
+            drawBoardLines();
             return;
         }
 
@@ -447,11 +553,13 @@
 
     document.getElementById('btn-expand').addEventListener('click', function () {
         rootEl.querySelectorAll('.node').forEach(function (n) { n.classList.remove('collapsed'); });
+        scheduleFit();
     });
     document.getElementById('btn-collapse').addEventListener('click', function () {
         rootEl.querySelectorAll('.node').forEach(function (n) {
             if (n.parentElement !== rootEl) { n.classList.add('collapsed'); }
         });
+        scheduleFit();
     });
     var orderBtn = document.getElementById('btn-order');
     function syncOrderBtn() {
@@ -467,6 +575,19 @@
     });
     syncOrderBtn();
 
+    var boardBtn = document.getElementById('btn-board');
+    function syncBoardBtn() {
+        boardBtn.textContent = boardMode ? '▤ 트리' : '⬚ 보드';
+        boardBtn.title = boardMode
+            ? '트리로 돌아간다. 보드에서 옮긴 자리는 그대로 기억한다.'
+            : '보드 — 노드를 캔버스에 자유롭게 늘어놓는다. 헤더를 끌어 옮기고, 부모-자식은 선으로 잇는다.';
+    }
+    boardBtn.addEventListener('click', function () { setBoardMode(!boardMode); });
+    syncBoardBtn();
+
+    document.getElementById('btn-window').addEventListener('click', function () {
+        vscode.postMessage({ type: 'moveToNewWindow' });
+    });
     document.getElementById('btn-clear').addEventListener('click', function () {
         vscode.postMessage({ type: 'clear' });
     });
@@ -523,40 +644,62 @@
         var m = ev.data;
         switch (m.type) {
             case 'setState':
-                config = m.config || config;
+                config = mergeConfig(m.config);
                 orderMode = config.childOrder || orderMode;
                 syncOrderBtn();
-                applyFontSize();
                 rebuild(m.roots || []);
+                scheduleFit();
                 break;
 
             case 'config':
-                config = m.config || config;
+                config = mergeConfig(m.config);
                 if (config.childOrder && config.childOrder !== orderMode) {
                     orderMode = config.childOrder;
                     syncOrderBtn();
                     refreshAll();
                 }
-                applyFontSize();
+                scheduleFit();
                 break;
 
             case 'addRoot': {
+                registerTree(m.node, null);
+                rootNodes.push(m.node);
                 var box = renderNode(m.node, 0);
                 rootEl.appendChild(box);
+                if (boardMode) {
+                    var st = uiOf(m.node.id);
+                    if (st.x === undefined) {
+                        st.x = BOARD_EDGE;
+                        st.y = boardBottom();
+                    }
+                    placeNode(box, st.x, st.y);
+                    drawBoardLines();
+                }
                 updateEmpty();
                 focusNode(m.node.id);
+                scheduleFit();
                 break;
             }
 
             case 'addChild': {
                 var parentBox = boxOf(m.parentId);
-                if (!parentBox) { break; }
-                var kids = parentBox.querySelector(':scope > .kids');
+                var parentData = nodes[m.parentId];
+                if (!parentBox || !parentData) { break; }
+                registerTree(m.node, m.parentId);
+                parentData.children.push(m.node);
                 var depth = parseInt(parentBox.dataset.depth, 10) + 1;
-                kids.appendChild(renderNode(m.node, depth));
+                var childBox = renderNode(m.node, depth);
+                if (boardMode) {
+                    rootEl.appendChild(childBox);
+                    placeNear(parentBox, childBox);
+                } else {
+                    parentBox.querySelector(':scope > .kids').appendChild(childBox);
+                }
                 parentBox.classList.remove('collapsed');
                 refreshChildren(parentBox);
                 focusNode(m.node.id);
+                scheduleFit();
+                drawBoardLines();
                 break;
             }
 
@@ -577,12 +720,336 @@
         }
     });
 
+    // ---------------------------------------------------------------- 폰트 · 폭 맞춤
+
+    function setCodeFontSize(px) {
+        document.body.style.setProperty('--ct-code-font-size', px + 'px');
+    }
+
+    function baseFontSize() {
+        var v = parseFloat(
+            getComputedStyle(document.body).getPropertyValue('--vscode-editor-font-size')
+        );
+        return v > 0 ? v : 13;
+    }
+
+    /**
+     * 한 줄에서 글자 크기를 따라 줄지 않는 부분(줄 번호 칸 좌우 여백 + 본문 오른쪽 여백)의 px 합.
+     * 폰트만 줄여서는 이 부분이 남으므로, 배율을 구할 때 빼고 계산해야 실제로 들어간다.
+     */
+    function fixedRowPx(codeEl) {
+        var row = codeEl.querySelector('.cl');
+        if (!row) { return 0; }
+        var px = 0;
+        ['.no', '.tx'].forEach(function (sel) {
+            var e = row.querySelector(sel);
+            if (!e) { return; }
+            var cs = getComputedStyle(e);
+            px += (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+        });
+        return px;
+    }
+
+    /**
+     * 코드 본문의 글자 크기를 정한다.
+     *
+     * 1) `codeTrail.fontSize` 가 0보다 크면 그 값을 그대로 쓴다. 수동 지정이 우선이다.
+     * 2) `fitToWidth` 가 켜져 있으면 지금 보이는 노드 중 **가장 빠듯한 것**에 맞춰 줄인다.
+     *    `minFontSize` 아래로는 줄이지 않고, 거기서도 안 들어가면 그 노드만 가로 스크롤이 생긴다.
+     *
+     * 노드마다 다른 크기를 쓰지 않는다. 트리 안에서 글자 크기가 들쭉날쭉하면 읽기 나쁘다.
+     * 헤더 글자는 건드리지 않는다 — 헤더까지 작아지면 트리 구조가 눈에 안 들어온다.
+     */
     function applyFontSize() {
         if (config.fontSize && config.fontSize > 0) {
+            // 수동 지정은 예전처럼 헤더 이름까지 함께 키운다.
             document.body.style.setProperty('--ct-font-size', config.fontSize + 'px');
-        } else {
-            document.body.style.removeProperty('--ct-font-size');
+            document.body.style.removeProperty('--ct-code-font-size');
+            return;
         }
+        document.body.style.removeProperty('--ct-font-size');
+        var base = baseFontSize();
+        // 언제나 기준 크기로 되돌린 뒤 잰다. 그래야 패널을 다시 넓혔을 때 원래 크기로 돌아온다.
+        setCodeFontSize(base);
+        if (!config.fitToWidth) { return; }
+
+        var boxes = rootEl.querySelectorAll('.code');
+        var ratio = 1;
+        for (var i = 0; i < boxes.length; i++) {
+            var b = boxes[i];
+            if (b.dataset.fs) { continue; }       // 사용자가 직접 맞춘 노드는 건드리지 않는다
+            var c = b.clientWidth;
+            var s = b.scrollWidth;
+            if (c <= 0 || s <= c) { continue; }   // 접혀 있거나 이미 들어간다
+            var fixed = fixedRowPx(b);
+            if (c - fixed <= 0 || s - fixed <= 0) { continue; }
+            var r = (c - fixed) / (s - fixed);
+            if (r < ratio) { ratio = r; }
+        }
+        if (ratio >= 1) { return; }
+
+        var min = config.minFontSize > 0 ? config.minFontSize : 8;
+        setCodeFontSize(Math.max(min, Math.floor(base * ratio * 10) / 10));
+    }
+
+    var fitPending = false;
+    var lastFitWidth = -1;
+    /** 레이아웃이 끝난 뒤 한 번만 다시 맞춘다. 연달아 불러도 프레임당 한 번이다. */
+    function scheduleFit() {
+        if (fitPending) { return; }
+        fitPending = true;
+        requestAnimationFrame(function () {
+            fitPending = false;
+            applyFontSize();
+            lastFitWidth = rootEl.clientWidth;
+        });
+    }
+
+    // ---------------------------------------------------------------- 보드 모드
+
+    /*
+     * 노드를 캔버스 위에 자유롭게 늘어놓는 모드.
+     *
+     * 트리 모드에서는 자식이 부모 DOM 안에 중첩돼 있지만, 보드 모드에서는 모든 노드를
+     * `#root` 바로 아래에 두고 `left/top` 으로 배치한다. 중첩된 채로 절대 배치를 하면
+     * 자식 좌표가 부모 기준이 되어 계산이 엉킨다.
+     * 부모-자식 관계는 없어지지 않는다 — 모델은 그대로고, 화면에는 곡선으로 잇는다.
+     */
+    var BOARD_GAP_X = 90;
+    var BOARD_GAP_Y = 26;
+    var BOARD_EDGE = 14;
+
+    function ensureBoardLines() {
+        if (boardLines && boardLines.parentNode === rootEl) { return boardLines; }
+        boardLines = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        boardLines.setAttribute('class', 'board-lines');
+        rootEl.insertBefore(boardLines, rootEl.firstChild);
+        return boardLines;
+    }
+
+    function renderBoard() {
+        ensureBoardLines();
+        var walk = function (node, depth) {
+            var box = renderNode(node, depth);
+            rootEl.appendChild(box);
+            (node.children || []).forEach(function (c) { walk(c, depth + 1); });
+        };
+        rootNodes.forEach(function (r) { walk(r, 0); });
+        boardLayout();
+        drawBoardLines();
+    }
+
+    function placeNode(box, x, y) {
+        box.style.left = Math.round(x) + 'px';
+        box.style.top = Math.round(y) + 'px';
+    }
+
+    /** 아직 자리를 안 정한 노드에 자동으로 자리를 준다. 깊이 = 열, 형제 = 아래로. */
+    function boardLayout() {
+        var columnBottom = [];
+        var walk = function (node, depth) {
+            var box = boxOf(node.id);
+            if (!box) { return; }
+            var st = uiOf(node.id);
+            if (columnBottom[depth] === undefined) { columnBottom[depth] = BOARD_EDGE; }
+            if (st.x === undefined || st.y === undefined) {
+                st.x = BOARD_EDGE + depth * (boardWidth() + BOARD_GAP_X);
+                st.y = columnBottom[depth];
+            }
+            placeNode(box, st.x, st.y);
+            columnBottom[depth] = Math.max(columnBottom[depth], st.y + box.offsetHeight + BOARD_GAP_Y);
+            (node.children || []).forEach(function (c) { walk(c, depth + 1); });
+        };
+        rootNodes.forEach(function (r) { walk(r, 0); });
+    }
+
+    /** 지금 놓인 노드들 아래의 빈 자리 y */
+    function boardBottom() {
+        var y = BOARD_EDGE;
+        rootEl.querySelectorAll('.node').forEach(function (b) {
+            y = Math.max(y, b.offsetTop + b.offsetHeight + BOARD_GAP_Y);
+        });
+        return y;
+    }
+
+    function boardWidth() {
+        var v = parseFloat(getComputedStyle(rootEl).getPropertyValue('--ct-board-width'));
+        return v > 0 ? v : 520;
+    }
+
+    /** 부모 오른쪽에서 자식 왼쪽으로 곡선을 긋고, 캔버스 크기를 내용에 맞춘다. */
+    function drawBoardLines() {
+        if (!boardMode) { return; }
+        ensureBoardLines();
+        var d = [];
+        var maxX = 0;
+        var maxY = 0;
+        rootEl.querySelectorAll('.node').forEach(function (box) {
+            maxX = Math.max(maxX, box.offsetLeft + box.offsetWidth);
+            maxY = Math.max(maxY, box.offsetTop + box.offsetHeight);
+            var p = box.dataset.parent ? boxOf(box.dataset.parent) : null;
+            if (!p) { return; }
+            var x1 = p.offsetLeft + p.offsetWidth;
+            var y1 = p.offsetTop + 16;
+            var x2 = box.offsetLeft;
+            var y2 = box.offsetTop + 16;
+            var bend = Math.max(30, Math.abs(x2 - x1) / 2);
+            d.push('M' + x1 + ' ' + y1
+                + ' C' + (x1 + bend) + ' ' + y1 + ',' + (x2 - bend) + ' ' + y2
+                + ',' + x2 + ' ' + y2);
+        });
+        boardLines.setAttribute('width', String(maxX + BOARD_EDGE * 2));
+        boardLines.setAttribute('height', String(maxY + BOARD_EDGE * 2));
+        boardLines.innerHTML = d.map(function (p) { return '<path d="' + p + '"/>'; }).join('');
+        // 캔버스가 내용을 담도록 늘려야 스크롤이 생긴다.
+        rootEl.style.width = (maxX + BOARD_EDGE * 2) + 'px';
+        rootEl.style.height = (maxY + BOARD_EDGE * 2) + 'px';
+    }
+
+    /** 새로 붙은 자식을 부모 오른쪽 빈자리에 놓는다. */
+    function placeNear(parentBox, box) {
+        var st = uiOf(box.dataset.id);
+        if (st.x === undefined) {
+            st.x = parentBox.offsetLeft + parentBox.offsetWidth + BOARD_GAP_X;
+            st.y = parentBox.offsetTop;
+            // 그 자리에 이미 뭔가 있으면 아래로 민다
+            var mine = box.dataset.id;
+            rootEl.querySelectorAll('.node').forEach(function (other) {
+                if (other.dataset.id === mine) { return; }
+                if (Math.abs(other.offsetLeft - st.x) < 40
+                    && Math.abs(other.offsetTop - st.y) < 40) {
+                    st.y = other.offsetTop + other.offsetHeight + BOARD_GAP_Y;
+                }
+            });
+        }
+        placeNode(box, st.x, st.y);
+    }
+
+    // 노드 끌어 옮기기 (헤더를 잡는다)
+    var drag = null;
+    var justDragged = false;
+
+    rootEl.addEventListener('pointerdown', function (ev) {
+        if (!boardMode || ev.button !== 0) { return; }
+        var t = ev.target;
+        if (!t || !t.closest || t.closest('.act') || t.closest('.clickable')) { return; }
+        var hd = t.closest('.hd');
+        if (!hd) { return; }
+        var box = hd.closest('.node');
+        if (!box) { return; }
+        drag = {
+            box: box, hd: hd, pointerId: ev.pointerId, moved: false,
+            dx: ev.clientX - box.offsetLeft, dy: ev.clientY - box.offsetTop,
+        };
+        box.classList.add('dragging');
+        hd.setPointerCapture(ev.pointerId);
+    });
+
+    rootEl.addEventListener('pointermove', function (ev) {
+        if (!drag) { return; }
+        drag.moved = true;
+        var st = uiOf(drag.box.dataset.id);
+        st.x = Math.max(0, ev.clientX - drag.dx);
+        st.y = Math.max(0, ev.clientY - drag.dy);
+        placeNode(drag.box, st.x, st.y);
+        drawBoardLines();
+    });
+
+    function endDrag() {
+        if (!drag) { return; }
+        drag.box.classList.remove('dragging');
+        try { drag.hd.releasePointerCapture(drag.pointerId); } catch (e) { /* 이미 놓였다 */ }
+        // 끌고 나서 올라오는 click 이 헤더 접기로 이어지지 않게 한 번 막는다.
+        justDragged = drag.moved;
+        drag = null;
+        setTimeout(function () { justDragged = false; }, 0);
+        drawBoardLines();
+    }
+    rootEl.addEventListener('pointerup', endDrag);
+    rootEl.addEventListener('pointercancel', endDrag);
+
+    function setBoardMode(on) {
+        if (boardMode === on) { return; }
+        boardMode = on;
+        rootEl.classList.toggle('board', on);
+        syncBoardBtn();
+        render();
+        scheduleFit();
+    }
+
+    // ---------------------------------------------------------------- 노드별 손조절
+
+    function uiOf(id) {
+        if (!uiState[id]) { uiState[id] = {}; }
+        return uiState[id];
+    }
+
+    /** 저장해 둔 높이·글자 크기를 다시 입힌다. 트리를 다시 그릴 때마다 불린다. */
+    function applyNodeUi(id, codeEl) {
+        var st = uiState[id];
+        if (!st) { return; }
+        if (st.h) { codeEl.style.height = st.h + 'px'; }
+        if (st.fs) {
+            codeEl.style.fontSize = st.fs + 'px';
+            codeEl.dataset.fs = '1';   // 폭 맞춤이 이 노드는 건너뛴다
+        }
+    }
+
+    /**
+     * 본문 상자 모서리를 끌어 높이를 바꾸면(CSS `resize`) 그 값을 기억한다.
+     *
+     * resize 에는 이벤트가 없어서 관찰자로 잡는다. 사용자가 끌었을 때만 브라우저가
+     * `style.height` 를 직접 박으므로, 그게 있을 때만 기억한다.
+     * 폭 맞춤이 글자 크기를 바꿔 높이가 달라진 경우와 이렇게 구분된다.
+     */
+    var codeObserver = window.ResizeObserver ? new ResizeObserver(function (entries) {
+        for (var i = 0; i < entries.length; i++) {
+            var t = entries[i].target;
+            if (!t.style.height) { continue; }
+            var box = t.closest('.node');
+            if (box) { uiOf(box.dataset.id).h = parseFloat(t.style.height); }
+        }
+    }) : null;
+
+    /** Ctrl+휠 = 그 노드의 코드 글자 크기만 조절. 다른 노드는 그대로 둔다. */
+    rootEl.addEventListener('wheel', function (ev) {
+        if (!ev.ctrlKey) { return; }
+        var codeEl = ev.target && ev.target.closest ? ev.target.closest('.code') : null;
+        if (!codeEl) { return; }
+        var box = codeEl.closest('.node');
+        if (!box) { return; }
+        ev.preventDefault();
+        var cur = parseFloat(codeEl.style.fontSize)
+            || parseFloat(getComputedStyle(codeEl).fontSize) || 13;
+        var next = Math.max(6, Math.min(40, cur + (ev.deltaY < 0 ? 1 : -1)));
+        codeEl.style.fontSize = next + 'px';
+        codeEl.dataset.fs = '1';
+        uiOf(box.dataset.id).fs = next;
+    }, { passive: false });
+
+    /** 줄 번호 칸 더블클릭 = 그 노드에 손댄 높이·글자 크기를 원래대로. */
+    rootEl.addEventListener('dblclick', function (ev) {
+        var no = ev.target && ev.target.closest ? ev.target.closest('.cl > .no') : null;
+        if (!no) { return; }
+        var codeEl = no.closest('.code');
+        var box = no.closest('.node');
+        if (!codeEl || !box) { return; }
+        codeEl.style.removeProperty('height');
+        codeEl.style.removeProperty('font-size');
+        delete codeEl.dataset.fs;
+        delete uiState[box.dataset.id];
+        scheduleFit();
+    });
+
+    // 관찰자를 변수에 붙들어 둔다. 참조가 없으면 수거될 수 있다.
+    var widthObserver = null;
+    if (window.ResizeObserver) {
+        widthObserver = new ResizeObserver(function () {
+            // 노드가 늘어 세로만 길어진 경우까지 다시 재지는 않는다.
+            if (rootEl.clientWidth === lastFitWidth) { return; }
+            scheduleFit();
+        });
+        widthObserver.observe(rootEl);
     }
 
     vscode.postMessage({ type: 'ready' });

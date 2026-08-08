@@ -22,6 +22,15 @@ export function activate(context: vscode.ExtensionContext): void {
         TrailPanel.current?.clear();
     });
 
+    reg('codeTrail.moveToNewWindow', async () => {
+        const panel = TrailPanel.current;
+        if (!panel) {
+            void vscode.window.showWarningMessage('Code Trail: 열린 패널이 없다.');
+            return;
+        }
+        await panel.moveToNewWindow();
+    });
+
     reg('codeTrail.diagnose', async () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {

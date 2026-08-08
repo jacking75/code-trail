@@ -8,6 +8,8 @@ interface ClientConfig {
     showAbsolutePath: boolean;
     fontSize: number;
     childOrder: string;
+    fitToWidth: boolean;
+    minFontSize: number;
 }
 
 function readConfig(): ClientConfig {
@@ -18,6 +20,8 @@ function readConfig(): ClientConfig {
         showAbsolutePath: c.get<boolean>('showAbsolutePath', false),
         fontSize: c.get<number>('fontSize', 0),
         childOrder: c.get<string>('childOrder', 'source'),
+        fitToWidth: c.get<boolean>('fitToWidth', true),
+        minFontSize: c.get<number>('minFontSize', 8),
     };
 }
 
@@ -115,6 +119,29 @@ export class TrailPanel {
         this.panel.reveal(undefined, true);
     }
 
+    /**
+     * 패널 탭을 별도 창으로 빼낸다.
+     *
+     * 확장이 임의 크기·위치의 창을 만드는 API는 없다. 대신 VS Code 1.85+ 의
+     * "편집기를 새 창으로 이동"을 부르면 패널이 독립된 OS 창이 되고,
+     * 그때부터는 창 모서리를 끌어 마우스로 크기를 조절할 수 있다.
+     * 탭 드래그가 안 되는 환경에서도 이 명령은 동작한다.
+     */
+    async moveToNewWindow(): Promise<void> {
+        const CMD = 'workbench.action.moveEditorToNewWindow';
+        const commands = await vscode.commands.getCommands(true);
+        if (commands.indexOf(CMD) === -1) {
+            void vscode.window.showWarningMessage(
+                'Code Trail: 이 VS Code 에는 "편집기를 새 창으로 이동"이 없다. 1.85 이상이 필요하다.',
+            );
+            return;
+        }
+        // 이 명령은 활성 편집기를 대상으로 한다. 포커스를 패널로 가져와야 한다.
+        this.panel.reveal(undefined, false);
+        await new Promise((r) => setTimeout(r, 60));
+        await vscode.commands.executeCommand(CMD);
+    }
+
     pushRoot(symbol: import('./symbols').ResolvedSymbol): void {
         const node = this.trail.addRoot(symbol);
         this.post({ type: 'addRoot', node: serialize(node) });
@@ -183,6 +210,25 @@ export class TrailPanel {
                 await vscode.commands.executeCommand('codeTrail.importJson');
                 break;
 
+            case 'moveToNewWindow':
+                await this.moveToNewWindow();
+                break;
+
+            case 'promoteToRoot': {
+                const promoted = this.trail.promoteToRoot(msg.nodeId);
+                if (!promoted) {
+                    break;
+                }
+                // 트리 모양이 바뀌었다. 부분 갱신 대신 통째로 다시 그린다.
+                this.post({
+                    type: 'setState',
+                    roots: this.trail.roots.map(serialize),
+                    config: readConfig(),
+                });
+                this.post({ type: 'focus', nodeId: promoted.id, quiet: true });
+                break;
+            }
+
             case 'error':
                 void vscode.window.showErrorMessage(`Code Trail: ${msg.message}`);
                 break;
@@ -227,16 +273,22 @@ export class TrailPanel {
             }
             this.post({ type: 'addChild', parentId: nodeId, node: serialize(node) });
 
+            let followed: TrailNode | undefined;
             if (resolved.declarationOnly) {
-                this.post({
-                    type: 'toast',
-                    level: 'info',
-                    message: `'${shortName(resolved.name)}' 은 몸통 없는 선언이다. 헤더의 ⚑ 를 눌러 실제 구현을 펼친다.`,
-                });
+                followed = await this.autoFollowSingleImplementation(node);
+                if (!followed) {
+                    this.post({
+                        type: 'toast',
+                        level: 'info',
+                        message: `'${shortName(resolved.name)}' 은 몸통 없는 선언이다. 헤더의 ⚑ 를 눌러 실제 구현을 펼친다.`,
+                    });
+                }
             }
 
             if (vscode.workspace.getConfiguration('codeTrail').get<boolean>('revealInEditorOnAdd', false)) {
-                await this.openInEditor(resolved.uri, resolved.anchorLine, resolved.anchorChar);
+                // 구현까지 따라갔으면 에디터도 선언이 아니라 그 구현을 연다.
+                const target = followed ? followed.symbol : resolved;
+                await this.openInEditor(target.uri, target.anchorLine, target.anchorChar);
             }
         } catch (err) {
             this.post({
@@ -246,6 +298,68 @@ export class TrailPanel {
             });
         } finally {
             this.post({ type: 'busy', nodeId, on: false });
+        }
+    }
+
+    /**
+     * 선언만 열렸는데 구현이 딱 하나면 그 구현까지 바로 붙인다.
+     *
+     * 인터페이스 타입 변수의 메서드를 클릭하면 정의는 인터페이스의 선언으로 간다.
+     * 언어 서버가 맞게 답한 것이지만, 구현이 하나뿐이라면 사용자가 고를 것이 없으므로
+     * ⚑ 를 한 번 더 누르게 할 이유도 없다. 구현이 둘 이상이면(= 갈림길이 있으면)
+     * 어느 것이 실제로 도는지 정적으로 알 수 없으니 손대지 않고 ⚑ 안내로 넘긴다.
+     *
+     * 선언 노드는 지우지 않고 그대로 남긴다. "인터페이스를 거쳐 갔다"도 탐색 경로의 일부다.
+     *
+     * @returns 붙인 구현 노드. 자동으로 따라가지 않았으면 undefined
+     */
+    private async autoFollowSingleImplementation(node: TrailNode): Promise<TrailNode | undefined> {
+        const on = vscode.workspace
+            .getConfiguration('codeTrail')
+            .get<boolean>('autoFollowSingleImplementation', true);
+        if (!on) {
+            return undefined;
+        }
+
+        this.post({ type: 'busy', nodeId: node.id, on: true });
+        try {
+            const impls = await resolveImplementationsAt(
+                vscode.Uri.parse(node.symbol.uri),
+                new vscode.Position(node.symbol.anchorLine, node.symbol.anchorChar),
+                // 참조 검색 폴백은 쓰지 않는다. 호출부가 섞여 들어오면
+                // 구현이 아니라 "이 메서드를 부르는 함수"로 끌려갈 수 있다.
+                false,
+            );
+            // 또 다른 선언(상속한 인터페이스, 헤더의 선언 등)은 구현이 아니다. 몸통 있는 것만 센다.
+            const bodies = impls.filter(
+                (i) =>
+                    !i.declarationOnly
+                    // 언어 서버가 선언 자신을 되돌려준 경우
+                    && !(i.uri === node.symbol.uri && i.anchorLine === node.symbol.anchorLine),
+            );
+            if (bodies.length !== 1) {
+                return undefined;
+            }
+            const child = this.trail.addChild(node.id, bodies[0], {
+                line: node.symbol.anchorLine,
+                char: node.symbol.anchorChar,
+                text: shortName(node.symbol.name),
+            });
+            if (!child) {
+                return undefined;
+            }
+            this.post({ type: 'addChild', parentId: node.id, node: serialize(child) });
+            this.post({
+                type: 'toast',
+                level: 'info',
+                message: `'${shortName(node.symbol.name)}' 은 선언뿐이라 하나뿐인 구현까지 바로 펼쳤다.`,
+            });
+            return child;
+        } catch {
+            // 구현 찾기가 실패해도 선언 노드는 이미 붙어 있다. ⚑ 안내로 넘긴다.
+            return undefined;
+        } finally {
+            this.post({ type: 'busy', nodeId: node.id, on: false });
         }
     }
 
@@ -379,6 +493,8 @@ export class TrailPanel {
   <button id="btn-expand" title="전체 펼치기">⤢ 전체 펼치기</button>
   <button id="btn-collapse" title="전체 접기">⤡ 전체 접기</button>
   <button id="btn-order" title="형제 노드 정렬 순서">⇅ 코드 순서</button>
+  <button id="btn-board" title="보드 — 노드를 캔버스에 자유롭게 늘어놓는다">⬚ 보드</button>
+  <button id="btn-window" title="이 패널을 독립된 창으로 빼낸다. 그 창은 모서리를 끌어 크기를 조절할 수 있다.">⧉ 새 창</button>
   <span class="sep"></span>
   <input id="filter" type="search" placeholder="이름/경로 필터…" />
   <span class="sep"></span>

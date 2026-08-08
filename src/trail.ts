@@ -93,6 +93,43 @@ export class Trail {
         return false;
     }
 
+    /**
+     * 자식 노드를 트리 맨 위로 떼어내 독립된 루트로 만든다. 하위 노드는 함께 따라간다.
+     *
+     * 깊이 들어간 노드를 기준점으로 삼고 싶을 때 쓴다. 부모에서 왔다는 사실은
+     * 더 이상 유효하지 않으므로 진입 정보(origin)를 지우고, 조상이 달라졌으니
+     * 하위 노드의 재귀 표시도 새 사슬 기준으로 다시 계산한다.
+     */
+    promoteToRoot(id: string): TrailNode | undefined {
+        const node = this.index.get(id);
+        if (!node || node.parentId === null) {
+            return undefined;
+        }
+        const parent = this.index.get(node.parentId);
+        if (parent) {
+            const i = parent.children.indexOf(node);
+            if (i >= 0) {
+                parent.children.splice(i, 1);
+            }
+        }
+        node.parentId = null;
+        node.origin = null;
+        node.recursive = false;
+        this.roots.push(node);
+        this.recomputeRecursive(node);
+        return node;
+    }
+
+    private recomputeRecursive(from: TrailNode): void {
+        const walk = (n: TrailNode) => {
+            for (const c of n.children) {
+                c.recursive = this.isAncestorSymbol(n, c.symbol);
+                walk(c);
+            }
+        };
+        walk(from);
+    }
+
     remove(id: string): void {
         const node = this.index.get(id);
         if (!node) {

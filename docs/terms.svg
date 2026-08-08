@@ -1,0 +1,191 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="560" viewBox="0 0 1000 560" role="img" aria-labelledby="t d">
+<title id="t">Code Trail 용어 지도</title>
+<desc id="d">트레일 패널 한 장에 툴바·브레드크럼·노드·헤더·본문·진입 링크·호출부·순번·배지가 어디에 있는지 표시한 그림</desc>
+
+<style>
+  .u    { font-family: "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+  .c    { font-family: Consolas, "Cascadia Mono", "DejaVu Sans Mono", "Courier New", monospace;
+          font-size: 11.5px; fill: #cdd3dc; }
+  .ln   { fill: #5a6068; }
+  .kw   { fill: #569cd6; }
+  .ty   { fill: #4ec9b0; }
+  .fn   { fill: #dcdcaa; }
+  .pu   { fill: #9aa3b2; }
+  .hit  { fill: #ffb454; text-decoration: underline; }
+  .nm   { font-size: 12px; fill: #e4e7ec; font-weight: 600; }
+  .dim  { font-size: 10px; fill: #7f8794; }
+  .chip { font-size: 9.5px; }
+  .btn  { font-size: 12px; fill: #7f8794; }
+  .lbl  { font-size: 12px; fill: #ffb454; font-weight: 600; }
+  .sub  { font-size: 10.5px; fill: #a8b0bd; }
+  .leg  { font-size: 11px; fill: #98a0ad; }
+  .lead { stroke: #ffb454; stroke-width: 1; fill: none; opacity: .75; }
+  .dot  { fill: #ffb454; }
+</style>
+
+<rect width="1000" height="560" fill="#12151a"/>
+
+<!-- ─────────────────────────────── 트레일 패널 -->
+<rect x="40" y="56" width="560" height="414" rx="4" fill="#1e1e1e" stroke="#383d47"/>
+
+<!-- 툴바 -->
+<rect x="40" y="56" width="560" height="30" rx="4" fill="#232830"/>
+<rect x="40" y="80" width="560" height="6" fill="#232830"/>
+<g class="u" style="font-size:9.5px" fill="#c8ccd4">
+  <rect x="50"  y="64" width="66" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="56"  y="75">⤢ 전체 펼치기</text>
+  <rect x="122" y="64" width="60" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="128" y="75">⤡ 전체 접기</text>
+  <rect x="188" y="64" width="62" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="194" y="75">⇅ 코드 순서</text>
+  <rect x="256" y="64" width="40" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="261" y="75">⬚ 보드</text>
+  <rect x="302" y="64" width="46" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="308" y="75">⧉ 새 창</text>
+  <rect x="354" y="64" width="92" height="16" rx="3" fill="#26292f" stroke="#3d424c"/><text x="360" y="75" fill="#7f8794">이름/경로 필터…</text>
+  <rect x="452" y="64" width="40" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="459" y="75">저장</text>
+  <rect x="498" y="64" width="48" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="505" y="75">불러오기</text>
+  <rect x="552" y="64" width="38" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="559" y="75">지우기</text>
+</g>
+
+<!-- 브레드크럼 -->
+<text class="u" x="48" y="110" style="font-size:11px" fill="#8b93a1">Dispatch <tspan fill="#4c525c">›</tspan> Find</text>
+<line x1="40" y1="120" x2="600" y2="120" stroke="#2a2e36"/>
+
+<!-- ─────────────────────────────── 노드 A (루트) -->
+<rect x="44" y="132" width="552" height="136" rx="3" fill="none" stroke="#8b93a1" stroke-width="1" stroke-dasharray="4 3" opacity=".55"/>
+
+<!-- 노드 A 헤더 -->
+<text class="c pu" x="48" y="150">▾</text>
+<rect x="60" y="139" width="46" height="14" rx="3" fill="#23304d"/>
+<text class="u chip" x="65" y="150" fill="#7aa2f7">method</text>
+<text class="u nm" x="113" y="150">Dispatch</text>
+<rect x="175" y="139" width="24" height="14" rx="3" fill="#2b2f37"/>
+<text class="u chip" x="180" y="150" fill="#9aa3b2">↳2</text>
+<text class="c" x="207" y="150" fill="#7f8794" style="font-size:10.5px">(Op op, Packet&amp; p)</text>
+<text class="c" x="330" y="150" fill="#7f8794" style="font-size:10px">srv/net/registry.cpp:118</text>
+<text class="u btn" x="516" y="150">⚑</text>
+<text class="u btn" x="538" y="150">↗</text>
+<text class="u btn" x="560" y="150">✕</text>
+
+<!-- 노드 A 본문 -->
+<rect x="48" y="160" width="544" height="102" rx="3" fill="#181818" stroke="#2b2b2b"/>
+<text class="c" x="56" y="178" xml:space="preserve"><tspan class="ln">118  </tspan><tspan class="kw">void</tspan> <tspan class="fn">Dispatch</tspan><tspan class="pu">(</tspan><tspan class="ty">Op</tspan> op<tspan class="pu">,</tspan> <tspan class="ty">Packet</tspan><tspan class="pu">&amp;</tspan> p<tspan class="pu">) {</tspan></text>
+<text class="c" x="56" y="195" xml:space="preserve"><tspan class="ln">119      </tspan><tspan class="kw">auto</tspan> h <tspan class="pu">=</tspan> reg<tspan class="pu">.</tspan><tspan class="hit">Find</tspan><tspan class="hit">①</tspan><tspan class="pu">(</tspan>op<tspan class="pu">);</tspan></text>
+<text class="c" x="56" y="212" xml:space="preserve"><tspan class="ln">120      </tspan><tspan class="kw">if</tspan> <tspan class="pu">(!</tspan>h<tspan class="pu">) {</tspan> <tspan class="kw">return</tspan><tspan class="pu">; }</tspan></text>
+<text class="c" x="56" y="229" xml:space="preserve"><tspan class="ln">121      </tspan>h<tspan class="pu">-&gt;</tspan><tspan class="hit">Invoke</tspan><tspan class="hit">②</tspan><tspan class="pu">(</tspan>s<tspan class="pu">,</tspan> p<tspan class="pu">);</tspan></text>
+<text class="c" x="56" y="246" xml:space="preserve"><tspan class="ln">122  </tspan><tspan class="pu">}</tspan></text>
+
+<!-- 자식 묶음 가이드선 -->
+<line x1="56" y1="272" x2="56" y2="441" stroke="#3a3f4a"/>
+<line x1="56" y1="297" x2="64" y2="297" stroke="#3a3f4a"/>
+<line x1="56" y1="441" x2="64" y2="441" stroke="#3a3f4a"/>
+
+<!-- 호출부 ① 과 자식 노드 ① 이 한 짝이라는 연결 (코드 글자를 피해 오른쪽 여백으로 돈다) -->
+<path class="lead" d="M230 200 H 246 V 276 H 90 V 282" stroke-dasharray="3 3" opacity=".8"/>
+<circle class="dot" cx="90" cy="284" r="2.5" opacity=".8"/>
+
+<!-- ─────────────────────────────── 노드 B (자식 · 형제 ①) -->
+<text class="c pu" x="70" y="297">▾</text>
+<rect x="82" y="286" width="14" height="14" rx="3" fill="#3a2f1c"/>
+<text class="u chip" x="85" y="297" fill="#ffb454">1</text>
+<rect x="102" y="286" width="46" height="14" rx="3" fill="#23304d"/>
+<text class="u chip" x="107" y="297" fill="#7aa2f7">method</text>
+<text class="u nm" x="155" y="297">Find</text>
+<rect x="190" y="286" width="24" height="14" rx="3" fill="#2b2f37"/>
+<text class="u chip" x="195" y="297" fill="#9aa3b2">↳1</text>
+<text class="c" x="222" y="297" fill="#7f8794" style="font-size:10.5px">(Op op)</text>
+<text class="c" x="300" y="297" fill="#7f8794" style="font-size:10px">srv/net/registry.cpp:126</text>
+<text class="u btn" x="494" y="297">⇱</text>
+<text class="u btn" x="516" y="297">⚑</text>
+<text class="u btn" x="538" y="297">↗</text>
+<text class="u btn" x="560" y="297">✕</text>
+
+<!-- 진입 링크 -->
+<text class="u" x="80" y="322" style="font-size:10.5px" fill="#4daafc">↑ Dispatch 의 119번째 줄 Find</text>
+
+<!-- 노드 B 본문 -->
+<rect x="72" y="332" width="520" height="82" rx="3" fill="#181818" stroke="#2b2b2b"/>
+<text class="c" x="80" y="350" xml:space="preserve"><tspan class="ln">126  </tspan><tspan class="ty">Handler</tspan><tspan class="pu">*</tspan> <tspan class="ty">Registry</tspan><tspan class="pu">::</tspan><tspan class="fn">Find</tspan><tspan class="pu">(</tspan><tspan class="ty">Op</tspan> op<tspan class="pu">) {</tspan></text>
+<text class="c" x="80" y="367" xml:space="preserve"><tspan class="ln">127      </tspan><tspan class="kw">auto</tspan> it <tspan class="pu">=</tspan> map_<tspan class="pu">.</tspan>find<tspan class="pu">(</tspan>op<tspan class="pu">);</tspan></text>
+<text class="c" x="80" y="384" xml:space="preserve"><tspan class="ln">128      </tspan><tspan class="kw">return</tspan> it <tspan class="pu">==</tspan> map_<tspan class="pu">.</tspan>end<tspan class="pu">() ?</tspan> <tspan class="kw">nullptr</tspan> <tspan class="pu">:</tspan> it<tspan class="pu">-&gt;</tspan>second<tspan class="pu">;</tspan></text>
+<text class="c" x="80" y="401" xml:space="preserve"><tspan class="ln">129  </tspan><tspan class="pu">}</tspan></text>
+
+<!-- ─────────────────────────────── 노드 C (형제 ② · 접힘 · 선언만) -->
+<text class="c pu" x="70" y="441">▸</text>
+<rect x="82" y="430" width="14" height="14" rx="3" fill="#3a2f1c"/>
+<text class="u chip" x="85" y="441" fill="#ffb454">2</text>
+<rect x="102" y="430" width="46" height="14" rx="3" fill="#23304d"/>
+<text class="u chip" x="107" y="441" fill="#7aa2f7">method</text>
+<text class="u nm" x="155" y="441">Invoke</text>
+<text class="c" x="205" y="441" fill="#7f8794" style="font-size:10.5px">(Session&amp;, Packet&amp;)</text>
+<text class="c" x="330" y="441" fill="#7f8794" style="font-size:10px">srv/net/handler.h:31</text>
+<rect x="444" y="430" width="42" height="14" rx="3" fill="#4a3a1e"/>
+<text class="u chip" x="449" y="441" fill="#e0af68">선언만</text>
+<text class="u btn" x="494" y="441">⇱</text>
+<text class="u btn" x="516" y="441" fill="#e0af68">⚑</text>
+<text class="u btn" x="538" y="441">↗</text>
+<text class="u btn" x="560" y="441">✕</text>
+
+<!-- ─────────────────────────────── 트레일 묶음 브래킷 -->
+<path d="M36 132 L30 138 L30 446 L36 452" stroke="#ffb454" fill="none" opacity=".5"/>
+<text class="u lbl" x="20" y="292" transform="rotate(-90 20 292)" text-anchor="middle" opacity=".85">트레일</text>
+
+<!-- ─────────────────────────────── 콜아웃 -->
+<g>
+  <!-- 트레일 패널 -->
+  <path class="lead" d="M612 48 L600 58"/><circle class="dot" cx="600" cy="58" r="2.5"/>
+  <text class="u lbl" x="620" y="44">트레일 패널</text>
+  <text class="u sub" x="620" y="58">함수 본문이 펼쳐지는 웹뷰 창 전체. 줄여서 “패널”</text>
+
+  <!-- 툴바 -->
+  <path class="lead" d="M612 82 L594 78"/><circle class="dot" cx="594" cy="78" r="2.5"/>
+  <text class="u lbl" x="620" y="80">툴바</text>
+  <text class="u sub" x="660" y="80">펼치기·접기 / 정렬 / 보드 / 새 창 / 필터 / 내보내기 / 지우기</text>
+
+  <!-- 브레드크럼 -->
+  <path class="lead" d="M612 112 L594 110"/><circle class="dot" cx="594" cy="110" r="2.5"/>
+  <text class="u lbl" x="620" y="110">브레드크럼</text>
+  <text class="u sub" x="702" y="110">지금 보고 있는 노드까지의 경로</text>
+
+  <!-- 헤더 -->
+  <path class="lead" d="M612 146 L584 148"/><circle class="dot" cx="584" cy="148" r="2.5"/>
+  <text class="u lbl" x="620" y="144">헤더</text>
+  <text class="u sub" x="620" y="158">종류 · 이름 · 시그니처 · 경로:줄 · 배지 · 버튼. 누르면 접힌다</text>
+
+  <!-- 호출부 · 순번 -->
+  <path class="lead" d="M612 191 L268 191"/><circle class="dot" cx="268" cy="191" r="2.5"/>
+  <text class="u lbl" x="620" y="188">호출부 · 순번</text>
+  <text class="u sub" x="620" y="202">펼쳐본 지점. 여기 ① 과 아래 자식 노드의 ① 이 한 짝이다</text>
+
+  <!-- 본문 -->
+  <path class="lead" d="M612 228 L594 228"/><circle class="dot" cx="594" cy="228" r="2.5"/>
+  <text class="u lbl" x="620" y="226">본문</text>
+  <text class="u sub" x="620" y="240">그 심볼의 원본 코드. 들여쓰기·탭을 손대지 않고 그대로 둔다</text>
+
+  <!-- 노드 -->
+  <path class="lead" d="M612 264 L598 264"/><circle class="dot" cx="598" cy="264" r="2.5"/>
+  <text class="u lbl" x="620" y="262">노드</text>
+  <text class="u sub" x="620" y="276">헤더 + 진입 링크 + 본문 + 자식 한 덩어리. 최상위 노드가 루트</text>
+
+  <!-- 진입 링크 -->
+  <path class="lead" d="M612 320 L296 320"/><circle class="dot" cx="296" cy="320" r="2.5"/>
+  <text class="u lbl" x="620" y="318">진입 링크</text>
+  <text class="u sub" x="620" y="332">부모의 어느 호출부에서 들어왔는지. 누르면 거기로 돌아간다</text>
+
+  <!-- 클릭 후보 -->
+  <path class="lead" d="M612 364 L300 364"/><circle class="dot" cx="300" cy="364" r="2.5"/>
+  <text class="u lbl" x="620" y="362">클릭 후보</text>
+  <text class="u sub" x="620" y="376">토크나이저가 좌표를 심어둔 식별자. 주석·문자열 안은 제외</text>
+
+  <!-- 배지 -->
+  <path class="lead" d="M612 441 L490 441"/><circle class="dot" cx="490" cy="441" r="2.5"/>
+  <text class="u lbl" x="620" y="439">배지</text>
+  <text class="u sub" x="620" y="453">재귀 · 선언만 · 근사 세 가지</text>
+
+  <!-- ⚑ -->
+  <path class="lead" d="M612 470 L520 450"/><circle class="dot" cx="520" cy="450" r="2.5"/>
+  <text class="u lbl" x="620" y="474">⚑ 구현 보기</text>
+  <text class="u sub" x="700" y="474">구현이 둘 이상일 때 여기서 고른다</text>
+</g>
+
+<!-- ─────────────────────────────── 아래 설명 -->
+<text class="u leg" x="40" y="500">형제 — B(Find)와 C(Invoke)는 둘 다 A 안에서 클릭해 나온 자식이라 나란히 붙는다. C 가 B 밑으로 들어가지 않는다.</text>
+<text class="u leg" x="40" y="518">트레일 — 이 패널에 담긴 트리 전체. 저장·불러오기·Markdown 내보내기의 단위다. 최상위 노드 A 가 루트.</text>
+<text class="u leg" x="40" y="536">심볼(ResolvedSymbol) — 노드가 감싸고 있는 알맹이. 언어 서버가 준 정의 + 본문 코드 + 좌표.</text>
+</svg>

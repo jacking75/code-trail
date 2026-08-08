@@ -22,11 +22,13 @@ body {
 
 /* ---------------------------------------------------------------- 툴바 */
 
+/* 패널을 좁히면 버튼 글자가 세로로 접히는 대신 툴바가 다음 줄로 넘어간다. */
 #toolbar {
     position: sticky;
     top: 0;
     z-index: 20;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
     padding: 6px 10px;
@@ -35,6 +37,8 @@ body {
 }
 
 #toolbar button {
+    flex: 0 0 auto;
+    white-space: nowrap;
     font-family: inherit;
     font-size: 12px;
     padding: 3px 9px;
@@ -85,6 +89,12 @@ body {
     background: rgba(128,128,128,.18);
 }
 #breadcrumb .sepc { opacity: .5; }
+
+/* 툴바가 두 줄로 접히면 위 top:33px 가 어긋나 브레드크럼이 툴바에 겹친다.
+   좁을 때는 따라다니지 않고 그냥 흘러가게 둔다. */
+@media (max-width: 620px) {
+    #breadcrumb { position: static; }
+}
 
 /* ---------------------------------------------------------------- 노드 */
 
@@ -299,19 +309,67 @@ body.vscode-light .act.impl.hot { color: #8a5a00; }
     border-radius: 2px;
 }
 
+/* ---------------------------------------------------------------- 보드 모드 */
+
+/* 노드를 캔버스에 자유롭게 늘어놓는 모드. DOM 중첩은 트리 모드와 같지만
+   main.js 가 보드에서는 모든 노드를 #root 바로 아래에 두고 left/top 으로 배치한다.
+   부모-자식은 .board-lines 의 곡선으로 잇는다. */
+#root.board {
+    position: relative;
+    padding: 0;
+}
+#root.board .node {
+    position: absolute;
+    margin: 0;
+    width: var(--ct-board-width, 520px);
+    padding: 2px 8px 8px 8px;
+    background: var(--vscode-editor-background);
+    border: 1px solid rgba(128,128,128,.35);
+    border-radius: 6px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.28);
+}
+#root.board .node > .hd { cursor: move; }
+#root.board .node.dragging {
+    z-index: 5;
+    box-shadow: 0 8px 24px rgba(0,0,0,.45);
+    opacity: .95;
+}
+/* 트리 모드의 들여쓰기·가이드선은 보드에서 의미가 없다 */
+#root.board .kids { margin: 0; padding: 0; border-left: none; }
+#root.board .node > .kids > .node > .hd::before { display: none; }
+#root.board .body { margin-left: 0; }
+
+.board-lines {
+    position: absolute;
+    left: 0;
+    top: 0;
+    overflow: visible;
+    pointer-events: none;
+}
+.board-lines path {
+    fill: none;
+    stroke: var(--ct-guide-strong);
+    stroke-width: 1.5;
+}
+
 /* ---------------------------------------------------------------- 코드 */
 
 .body { margin: 2px 0 6px 20px; }
 
 .code {
     font-family: var(--vscode-editor-font-family);
-    font-size: var(--ct-font-size);
+    /* 폭 맞춤(codeTrail.fitToWidth)이 --ct-code-font-size 를 덮어쓴다.
+       헤더의 .name 은 --ct-font-size 를 그대로 쓰므로 같이 작아지지 않는다. */
+    font-size: var(--ct-code-font-size, var(--ct-font-size));
     line-height: 1.5;
     background: var(--vscode-textCodeBlock-background, rgba(128,128,128,.08));
     border: 1px solid rgba(128,128,128,.22);
     border-radius: 4px;
     padding: 6px 0;
-    overflow-x: auto;
+    overflow: auto;
+    /* 오른쪽 아래 모서리를 끌어 본문 높이를 조절한다. main.js 가 그 값을 기억한다.
+       줄 번호 칸을 더블클릭하면 원래대로 돌아간다. */
+    resize: vertical;
     tab-size: 4;
 }
 .node.busy .code { opacity: .55; }
