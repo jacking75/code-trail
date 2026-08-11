@@ -45,8 +45,9 @@
     var activeId = null;
     var orderMode = 'source'; // 'source' = 코드에 나온 순서, 'click' = 내가 클릭한 순서
     var rootNodes = [];       // 루트 노드 데이터. 모드를 바꿔도 이걸로 다시 그린다
-    var boardMode = false;    // true = 캔버스에 자유 배치, false = 중첩 트리
+    var boardMode = false;    // true = 캔버스에 자유 배치, false = 부모 위·자식 아래 트리
     var boardLines = null;    // 보드 모드의 부모-자식 연결선 <svg>
+    var treeLines = null;     // 트리 모드의 부모-자식 가이드선 <svg>
 
     // ---------------------------------------------------------------- 렌더링
 
@@ -266,10 +267,12 @@
     function render() {
         rootEl.textContent = '';
         boardLines = null;
+        treeLines = null;
         if (boardMode) {
             renderBoard();
         } else {
             rootEl.removeAttribute('style');
+            ensureTreeLines();
             rootNodes.forEach(function (r) { rootEl.appendChild(renderNode(r, 0)); });
         }
         refreshAll();
@@ -374,10 +377,11 @@
 
     function refreshAll() {
         rootEl.querySelectorAll('.node').forEach(refreshChildren);
+        drawLines();
     }
 
     function updateEmpty() {
-        var has = rootEl.children.length > 0;
+        var has = rootNodes.length > 0;
         emptyEl.style.display = has ? 'none' : 'block';
         crumbEl.style.display = has ? 'flex' : 'none';
     }
@@ -462,7 +466,7 @@
                 removeSubtree(id);
                 if (ownerId) { refreshChildren(boxOf(ownerId)); }
                 updateEmpty();
-                drawBoardLines();
+                drawLines();
             }
             ev.stopPropagation();
             return;
@@ -481,7 +485,7 @@
             });
             setActive(hbox.dataset.id);
             scheduleFit();   // 펼쳐진 본문이 달라졌다
-            drawBoardLines();
+            drawLines();
             return;
         }
 
@@ -673,7 +677,7 @@
                         st.y = boardBottom();
                     }
                     placeNode(box, st.x, st.y);
-                    drawBoardLines();
+                    drawLines();
                 }
                 updateEmpty();
                 focusNode(m.node.id);
@@ -699,7 +703,7 @@
                 refreshChildren(parentBox);
                 focusNode(m.node.id);
                 scheduleFit();
-                drawBoardLines();
+                drawLines();
                 break;
             }
 
@@ -801,8 +805,61 @@
         requestAnimationFrame(function () {
             fitPending = false;
             applyFontSize();
+            drawLines();
             lastFitWidth = rootEl.clientWidth;
         });
+    }
+
+    // ---------------------------------------------------------------- 트리 모드
+
+    function ensureTreeLines() {
+        if (treeLines && treeLines.parentNode === rootEl) { return treeLines; }
+        treeLines = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        treeLines.setAttribute('class', 'tree-lines');
+        rootEl.insertBefore(treeLines, rootEl.firstChild);
+        return treeLines;
+    }
+
+    /** 부모 본문 아래에서 각 자식 헤더 위까지 직각 가이드선을 긋는다. */
+    function drawTreeLines() {
+        if (boardMode) { return; }
+        var svg = ensureTreeLines();
+        var rootRect = rootEl.getBoundingClientRect();
+        var scrollX = rootEl.scrollLeft;
+        var scrollY = rootEl.scrollTop;
+        var paths = [];
+
+        rootEl.querySelectorAll('.node').forEach(function (parent) {
+            if (parent.classList.contains('collapsed')) { return; }
+            var body = parent.querySelector(':scope > .body');
+            if (!body || body.offsetParent === null) { return; }
+            var children = childBoxes(parent).filter(function (child) {
+                return child.offsetParent !== null;
+            });
+            if (children.length === 0) { return; }
+
+            var pr = body.getBoundingClientRect();
+            var x1 = pr.left - rootRect.left + scrollX + pr.width / 2;
+            var y1 = pr.bottom - rootRect.top + scrollY;
+            children.forEach(function (child) {
+                var hd = child.querySelector(':scope > .hd');
+                if (!hd) { return; }
+                var cr = hd.getBoundingClientRect();
+                var x2 = cr.left - rootRect.left + scrollX + cr.width / 2;
+                var y2 = cr.top - rootRect.top + scrollY;
+                var midY = y1 + Math.max(12, (y2 - y1) / 2);
+                paths.push('M' + x1 + ' ' + y1
+                    + ' V' + midY + ' H' + x2 + ' V' + y2);
+            });
+        });
+
+        svg.setAttribute('width', String(Math.max(rootEl.scrollWidth, rootEl.clientWidth)));
+        svg.setAttribute('height', String(Math.max(rootEl.scrollHeight, rootEl.clientHeight)));
+        svg.innerHTML = paths.map(function (p) { return '<path d="' + p + '"/>'; }).join('');
+    }
+
+    function drawLines() {
+        if (boardMode) { drawBoardLines(); } else { drawTreeLines(); }
     }
 
     // ---------------------------------------------------------------- 보드 모드
@@ -1009,6 +1066,7 @@
             var box = t.closest('.node');
             if (box) { uiOf(box.dataset.id).h = parseFloat(t.style.height); }
         }
+        drawLines();
     }) : null;
 
     /** Ctrl+휠 = 그 노드의 코드 글자 크기만 조절. 다른 노드는 그대로 둔다. */

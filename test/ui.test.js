@@ -200,6 +200,26 @@ const sample = {
     check('C가 B의 자식이 아님',
         await page.locator('.node[data-id="n2"] .node[data-id="n4"]').count() === 0);
 
+    const treeLayout = await page.evaluate(() => {
+        const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+        const parent = box('.node[data-id="n1"] > .hd');
+        const leftChild = box('.node[data-id="n2"] > .hd');
+        const rightChild = box('.node[data-id="n4"] > .hd');
+        const root = document.querySelector('#root');
+        return {
+            parentAbove: parent.bottom < leftChild.top && parent.bottom < rightChild.top,
+            childrenSameRow: Math.abs(leftChild.top - rightChild.top) < 2,
+            childrenLeftToRight: leftChild.left < rightChild.left,
+            horizontalOverflow: root.scrollWidth > root.clientWidth + 1,
+        };
+    });
+    check('부모가 자식보다 위에 배치됨', treeLayout.parentAbove, JSON.stringify(treeLayout));
+    check('형제 자식이 같은 행에 배치됨', treeLayout.childrenSameRow, JSON.stringify(treeLayout));
+    check('형제 자식이 좌우로 나란히 배치됨', treeLayout.childrenLeftToRight, JSON.stringify(treeLayout));
+    check('넓어진 트리에 패널 수평 스크롤 영역이 생김',
+        treeLayout.horizontalOverflow, JSON.stringify(treeLayout));
+    check('트리 부모-자식 연결선이 그려짐', await page.locator('.tree-lines path').count() === 3);
+
     check('형제 순번 ①② 부여',
         (await page.locator('.node[data-id="n2"] > .hd > .idx').innerText()).trim() === '1' &&
         (await page.locator('.node[data-id="n4"] > .hd > .idx').innerText()).trim() === '2');
@@ -472,7 +492,9 @@ const sample = {
     await page.click('#btn-board');
     await page.waitForTimeout(300);
     check('트리 모드로 복귀', await page.locator('#root.board').count() === 0);
-    check('중첩 구조가 되돌아옴', await page.locator('.node .kids .node').count() >= 1);
+    check('부모 위·자식 아래 트리 구조가 되돌아옴',
+        await page.locator('.node .kids .node').count() >= 1 &&
+        await page.locator('.tree-lines path').count() >= 1);
     check('보드에서 돌아와도 노드 수 그대로', await page.locator('.node').count() === allNodes);
 
     await page.setViewportSize({ width: 1100, height: 1000 });

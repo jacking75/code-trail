@@ -2,9 +2,13 @@
   "name": "code-trail",
   "displayName": "Code Trail",
   "description": "함수를 클릭하면 코드를 인라인으로 펼쳐 보여주고, 그 안에서 또 클릭하면 계속 이어붙는 코드 탐색 트리",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "local",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jacking75/code-trail.git"
+  },
   "engines": {
     "vscode": "^1.80.0"
   },
