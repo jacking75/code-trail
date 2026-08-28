@@ -26,6 +26,8 @@
  *   noisyStderr         stderr 로 많은 줄을 뱉는다
  *   noDefinitionResult  정의를 못 찾는다 (typeDefinition 폴백 시험용)
  *   declarationTarget   정의가 몸통 없는 선언으로 간다 (자동 구현 추적 시험용)
+ *   externalTarget      정의가 프로젝트 **밖** 파일로 간다 (일시 문서 권한 시험용).
+ *                       `--external-file=<절대경로>` 로 그 파일을 지정한다
  *
  * `--crash-once=<파일경로>` 를 주면 **처음 뜬 프로세스만** 죽는다. 그 파일을
  * 표시로 남겨 두 번째 프로세스는 정상 동작한다 — 재시작 뒤에 제대로 도는지를
@@ -49,6 +51,10 @@ const slowMs = Number(
 const crashOnceMarker = args
     .find((a) => a.startsWith('--crash-once='))
     ?.slice('--crash-once='.length);
+/** `externalTarget` 이 가리킬 프로젝트 밖 파일. 절대경로다. */
+const externalFile = args
+    .find((a) => a.startsWith('--external-file='))
+    ?.slice('--external-file='.length);
 
 /** 이 프로세스가 죽어야 하는지. `--crash-once` 는 첫 프로세스에만 적용된다. */
 function shouldCrash() {
@@ -114,6 +120,11 @@ const DEFINITION_TARGET = {
 };
 
 function definitionUri(requestUri) {
+    if (has('externalTarget') && externalFile !== undefined) {
+        // 프로젝트 밖으로 보낸다. 표준 라이브러리 헤더로 가는 상황과 같다.
+        const posix = externalFile.split('\\').join('/');
+        return `file:///${posix.replace(/^\/+/, '')}`;
+    }
     // 같은 디렉터리의 registry.cpp 로 보낸다.
     return requestUri.replace(/\/[^/]+$/, TARGET_URI_SUFFIX);
 }

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { stat } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
 import { resolveProjectRoot, startServer, type RunningServer } from '@code-trail/server';
@@ -15,7 +16,20 @@ import { findLiveServer } from './reuse.js';
  * 종료 신호를 받는다. 심볼 해석과 트레일 변경은 하지 않는다(구현서 5.2).
  */
 
-const VERSION = '0.0.0';
+/**
+ * `-v` 가 찍는 버전.
+ *
+ * 자기 `package.json` 에서 읽는다. 여기 상수로 적어두면 배포할 때마다 두 곳을
+ * 고쳐야 하고, 한쪽만 고치면 `npm ls` 와 `code-trail -v` 가 다른 말을 한다.
+ */
+function readVersion(): string {
+    try {
+        const require = createRequire(import.meta.url);
+        return (require('../package.json') as { version?: string }).version ?? '0.0.0';
+    } catch {
+        return '0.0.0';
+    }
+}
 
 function fail(message: string): never {
     process.stderr.write(`code-trail: ${message}\n`);
@@ -123,7 +137,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
         return;
     }
     if (args.mode === 'version') {
-        process.stdout.write(`${VERSION}\n`);
+        process.stdout.write(`${readVersion()}\n`);
         return;
     }
     await run(args);

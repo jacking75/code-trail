@@ -47,6 +47,8 @@ export interface StartServerOptions {
     /** 테스트에서 LSP 요청 timeout 과 재시작 간격을 줄인다. */
     lspRequestTimeoutMs?: number;
     lspRestartDelaysMs?: readonly number[];
+    /** 언어 서버가 이만큼 버티면 재시도 횟수를 되돌린다. 테스트에서 줄인다. */
+    lspStableAfterMs?: number;
 }
 
 export interface RunningServer {
@@ -97,6 +99,9 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
             : {}),
         ...(options.lspRestartDelaysMs !== undefined
             ? { restartDelaysMs: options.lspRestartDelaysMs }
+            : {}),
+        ...(options.lspStableAfterMs !== undefined
+            ? { stableAfterMs: options.lspStableAfterMs }
             : {}),
     });
 

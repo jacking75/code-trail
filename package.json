@@ -1,201 +1,36 @@
 {
-  "name": "code-trail",
-  "displayName": "Code Trail",
-  "description": "함수를 클릭하면 코드를 인라인으로 펼쳐 보여주고, 그 안에서 또 클릭하면 계속 이어붙는 코드 탐색 트리",
-  "version": "0.6.0",
-  "workspaces": [
-    "packages/*"
-  ],
-  "publisher": "local",
+  "name": "code-trail-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Code Trail 작업 공간. 배포하는 것은 packages/cli 의 code-trail 이다.",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/jacking75/code-trail.git"
   },
+  "workspaces": [
+    "packages/*"
+  ],
   "engines": {
-    "vscode": "^1.80.0"
-  },
-  "categories": [
-    "Visualization",
-    "Programming Languages",
-    "Other"
-  ],
-  "keywords": [
-    "call hierarchy",
-    "call graph",
-    "code navigation",
-    "code reading",
-    "trail"
-  ],
-  "activationEvents": [],
-  "main": "./out/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "codeTrail.startFromCursor",
-        "title": "Code Trail: 커서 위치에서 탐색 시작",
-        "category": "Code Trail"
-      },
-      {
-        "command": "codeTrail.addRootFromCursor",
-        "title": "Code Trail: 커서 위치를 새 루트로 추가",
-        "category": "Code Trail"
-      },
-      {
-        "command": "codeTrail.openPanel",
-        "title": "Code Trail: 패널 열기",
-        "category": "Code Trail"
-      },
-      {
-        "command": "codeTrail.clear",
-        "title": "Code Trail: 전체 지우기",
-        "category": "Code Trail"
-      },
-      {
-        "command": "codeTrail.moveToNewWindow",
-        "title": "Code Trail: 패널을 새 창으로 빼기",
-        "category": "Code Trail"
-      },
-      {
-        "command": "codeTrail.diagnose",
-        "title": "Code Trail: 언어 서버 지원 확인",
-        "category": "Code Trail"
-      },
-      {
-        "command": "codeTrail.exportMarkdown",
-        "title": "Code Trail: Markdown으로 내보내기",
-        "category": "Code Trail"
-      },
-      {
-        "command": "codeTrail.exportJson",
-        "title": "Code Trail: JSON으로 저장",
-        "category": "Code Trail"
-      },
-      {
-        "command": "codeTrail.importJson",
-        "title": "Code Trail: JSON에서 불러오기",
-        "category": "Code Trail"
-      }
-    ],
-    "menus": {
-      "editor/context": [
-        {
-          "command": "codeTrail.startFromCursor",
-          "group": "navigation@100",
-          "when": "editorTextFocus"
-        },
-        {
-          "command": "codeTrail.addRootFromCursor",
-          "group": "navigation@101",
-          "when": "editorTextFocus"
-        }
-      ]
-    },
-    "keybindings": [
-      {
-        "command": "codeTrail.startFromCursor",
-        "key": "ctrl+alt+t",
-        "mac": "cmd+alt+t",
-        "when": "editorTextFocus"
-      }
-    ],
-    "configuration": {
-      "title": "Code Trail",
-      "properties": {
-        "codeTrail.contextLines": {
-          "type": "number",
-          "default": 40,
-          "markdownDescription": "언어 서버가 심볼의 전체 본문 범위를 알려주지 못할 때, 정의 위치를 기준으로 보여줄 최대 줄 수."
-        },
-        "codeTrail.maxCodeLines": {
-          "type": "number",
-          "default": 250,
-          "markdownDescription": "노드 하나에 표시할 코드의 최대 줄 수. 초과분은 `…더 보기`로 접힌다."
-        },
-        "codeTrail.clickTarget": {
-          "type": "string",
-          "enum": [
-            "allSymbols",
-            "callsOnly"
-          ],
-          "enumDescriptions": [
-            "함수·클래스·타입·변수 등 모든 식별자를 클릭 가능하게 한다",
-            "호출 지점(뒤에 여는 괄호가 오는 식별자)만 클릭 가능하게 한다"
-          ],
-          "default": "allSymbols",
-          "description": "코드 본문에서 클릭 가능한 대상."
-        },
-        "codeTrail.autoFollowSingleImplementation": {
-          "type": "boolean",
-          "default": true,
-          "markdownDescription": "인터페이스 메서드처럼 몸통 없는 선언이 열렸을 때, 그 선언의 구현이 **정확히 하나뿐이면** 그 구현까지 자식 노드로 바로 펼친다. 구현이 둘 이상이면 고를 것이 있으므로 손대지 않고 헤더의 `⚑` 안내만 띄운다. 선언 노드 자체는 지우지 않는다."
-        },
-        "codeTrail.childOrder": {
-          "type": "string",
-          "enum": [
-            "source",
-            "click"
-          ],
-          "enumDescriptions": [
-            "같은 부모 아래 형제 노드를 부모 코드에 나온 순서(= 호출 순서)로 정렬한다",
-            "같은 부모 아래 형제 노드를 내가 클릭한 순서로 정렬한다"
-          ],
-          "default": "source",
-          "description": "형제 노드 정렬 순서. 패널 툴바에서도 즉시 바꿀 수 있다."
-        },
-        "codeTrail.revealInEditorOnAdd": {
-          "type": "boolean",
-          "default": false,
-          "description": "노드를 추가할 때 실제 에디터에서도 해당 위치를 함께 연다."
-        },
-        "codeTrail.autoCollapseSiblings": {
-          "type": "boolean",
-          "default": false,
-          "description": "새 자식 노드를 추가할 때 같은 레벨의 다른 노드를 자동으로 접는다."
-        },
-        "codeTrail.showAbsolutePath": {
-          "type": "boolean",
-          "default": false,
-          "description": "노드 헤더에 워크스페이스 상대경로 대신 절대경로를 표시한다."
-        },
-        "codeTrail.fontSize": {
-          "type": "number",
-          "default": 0,
-          "markdownDescription": "코드 폰트 크기(px). 0이면 에디터 설정을 따른다. **0보다 큰 값을 넣으면 `#codeTrail.fitToWidth#` 는 무시되고 이 크기로 고정된다.**"
-        },
-        "codeTrail.fitToWidth": {
-          "type": "boolean",
-          "default": true,
-          "markdownDescription": "패널 폭에 맞춰 코드 본문 글자 크기를 자동으로 줄인다. 지금 펼쳐진 노드 중 가장 빠듯한 것을 기준으로 하나의 크기를 정하므로, 노드마다 글자 크기가 달라지지 않는다. 헤더 글자는 줄이지 않는다."
-        },
-        "codeTrail.minFontSize": {
-          "type": "number",
-          "default": 8,
-          "markdownDescription": "`#codeTrail.fitToWidth#` 로 줄일 수 있는 하한(px). 여기서도 안 들어가는 줄은 그 노드에만 가로 스크롤이 생긴다."
-        }
-      }
-    }
+    "node": ">=20.11.0"
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "build": "npm run build -w @code-trail/shared && npm run build -w @code-trail/server && npm run build:lib -w @code-trail/web && npm run build -w @code-trail/web && npm run build -w @code-trail/cli",
+    "build": "npm run build -w @code-trail/shared && npm run build -w @code-trail/server && npm run build:lib -w @code-trail/web && npm run build -w @code-trail/web && npm run build -w code-trail",
     "dev": "npm run dev -w @code-trail/web",
     "start": "node packages/cli/dist/main.js",
-    "typecheck": "tsc -p ./ --noEmit && npm run typecheck --workspaces --if-present",
-    "test": "node test/tokenizer.test.js && node test/shell.test.js && node --test \"test/unit/*.test.mjs\" && node --test \"test/integration/*.test.mjs\"",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "node --test \"test/unit/*.test.mjs\" && node --test \"test/integration/*.test.mjs\"",
     "test:unit": "node --test \"test/unit/*.test.mjs\"",
     "test:integration": "node --test \"test/integration/*.test.mjs\"",
     "test:e2e": "node test/e2e/shell.e2e.mjs && node test/e2e/trail.e2e.mjs",
     "test:lsp": "node test/smoke/real-lsp.mjs",
     "test:perf": "node test/perf/board-1000.mjs",
-    "test:ui": "node test/ui.test.js",
-    "screenshot": "node test/screenshot.js"
+    "test:pack": "node test/pack/files.test.mjs",
+    "clean": "npm run clean --workspaces --if-present",
+    "test:install": "node test/pack/install-smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "20.x",
-    "@types/vscode": "^1.80.0",
     "playwright": "^1.62.1",
     "typescript": "^5.4.0",
     "ws": "^8.21.3"

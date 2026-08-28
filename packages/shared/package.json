@@ -1,7 +1,6 @@
 {
   "name": "@code-trail/shared",
-  "version": "0.0.0",
-  "private": true,
+  "version": "1.0.0",
   "description": "Code Trail 의 공유 도메인 모델과 서버-웹 프로토콜. 호스트(VS Code, Node, 브라우저)에 의존하지 않는다.",
   "license": "MIT",
   "type": "module",
@@ -14,7 +13,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.map"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -23,5 +23,16 @@
   },
   "dependencies": {
     "zod": "^4.1.0"
+  },
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jacking75/code-trail.git",
+    "directory": "packages/shared"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

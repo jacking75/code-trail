@@ -1,12 +1,38 @@
 {
-  "name": "@code-trail/cli",
-  "version": "0.0.0",
-  "private": true,
-  "description": "code-trail CLI. 인자를 읽고 프로젝트를 검증한 뒤 로컬 서버를 띄우고 브라우저를 연다.",
+  "name": "code-trail",
+  "version": "1.0.0",
+  "description": "함수를 클릭하면 코드를 인라인으로 펼쳐 보여주고, 그 안에서 또 클릭하면 계속 이어붙는 코드 탐색 트리. 로컬 서버를 띄우고 브라우저에서 연다.",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "code-trail": "./dist/main.js"
+    "code-trail": "dist/main.js"
+  },
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "keywords": [
+    "call hierarchy",
+    "call graph",
+    "code navigation",
+    "code reading",
+    "lsp",
+    "trail"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jacking75/code-trail.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/jacking75/code-trail#readme",
+  "bugs": {
+    "url": "https://github.com/jacking75/code-trail/issues"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -14,7 +40,7 @@
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "dependencies": {
-    "@code-trail/server": "0.0.0",
-    "@code-trail/shared": "0.0.0"
+    "@code-trail/server": "1.0.0",
+    "@code-trail/shared": "1.0.0"
   }
 }

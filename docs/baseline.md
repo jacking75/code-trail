@@ -1,7 +1,13 @@
 # 기준선 — VS Code 확장 마지막 상태
 
 독립 프로그램 전환([`standalone-implementation-plan.md`](standalone-implementation-plan.md)) 의 **단계 0** 산출물이다.
-전환 중 "원래 어떻게 동작했지?" 를 확인할 곳은 여기다.
+"원래 어떻게 동작했지?" 를 확인할 곳은 여기다.
+
+> **이 문서에 적힌 명령과 파일은 지금 저장소에 없다.** 확장 소스(`src/`, `media/`)와
+> 그 테스트(`test/tokenizer.test.js`, `test/shell.test.js`, `test/ui.test.js`,
+> `test/screenshot.js`, `test/preview.html`)는 1.0.0(단계 11)에서 지웠다.
+> 아래를 실제로 돌려 보려면 먼저 `git checkout v0.6.0-vscode-extension` 을 한다.
+> 이 문서는 **그 시점의 기록**이므로 새 프로그램에 맞춰 고치지 않는다.
 
 기록 시각: 2026-08-28 14:38 KST
 
@@ -31,7 +37,7 @@ git diff v0.6.0-vscode-extension -- src media   # 전환 후 확장 코드가 �
 | `node test/shell.test.js` | `ALL PASS` |
 | `node test/ui.test.js` | `ALL PASS` |
 
-`test/ui.test.js` 는 브라우저가 필요하다. 컨테이너 밖에서는 `CT_CHROME` 으로 넘긴다.
+`test/ui.test.js` 는 브라우저가 필요했다. 컨테이너 밖에서는 `CT_CHROME` 으로 넘겼다.
 
 ```bash
 CT_CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe" node test/ui.test.js

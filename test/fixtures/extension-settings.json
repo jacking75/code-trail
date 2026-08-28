@@ -1,0 +1,61 @@
+{
+  "source": "v0.6.0-vscode-extension 의 package.json contributes.configuration.properties",
+  "note": "확장을 지운 뒤에도 옮긴 설정의 기본값이 그대로인지 대조하려고 굳혀 둔 것이다. 고치지 않는다.",
+  "properties": {
+    "contextLines": {
+      "default": 40,
+      "type": "number",
+      "description": ""
+    },
+    "maxCodeLines": {
+      "default": 250,
+      "type": "number",
+      "description": ""
+    },
+    "clickTarget": {
+      "default": "allSymbols",
+      "type": "string",
+      "description": "코드 본문에서 클릭 가능한 대상."
+    },
+    "autoFollowSingleImplementation": {
+      "default": true,
+      "type": "boolean",
+      "description": ""
+    },
+    "childOrder": {
+      "default": "source",
+      "type": "string",
+      "description": "형제 노드 정렬 순서. 패널 툴바에서도 즉시 바꿀 수 있다."
+    },
+    "revealInEditorOnAdd": {
+      "default": false,
+      "type": "boolean",
+      "description": "노드를 추가할 때 실제 에디터에서도 해당 위치를 함께 연다."
+    },
+    "autoCollapseSiblings": {
+      "default": false,
+      "type": "boolean",
+      "description": "새 자식 노드를 추가할 때 같은 레벨의 다른 노드를 자동으로 접는다."
+    },
+    "showAbsolutePath": {
+      "default": false,
+      "type": "boolean",
+      "description": "노드 헤더에 워크스페이스 상대경로 대신 절대경로를 표시한다."
+    },
+    "fontSize": {
+      "default": 0,
+      "type": "number",
+      "description": ""
+    },
+    "fitToWidth": {
+      "default": true,
+      "type": "boolean",
+      "description": ""
+    },
+    "minFontSize": {
+      "default": 8,
+      "type": "number",
+      "description": ""
+    }
+  }
+}

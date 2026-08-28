@@ -167,6 +167,8 @@ export const COMMAND_ERROR_CODES = [
     'LSP_TIMEOUT',
     'PATH_DENIED',
     'PERSISTENCE_FAILED',
+    /** 서버가 닫히는 중이다. 이 명령은 저장되지 않는다. */
+    'SERVER_STOPPING',
     'INTERNAL_ERROR',
 ] as const;
 

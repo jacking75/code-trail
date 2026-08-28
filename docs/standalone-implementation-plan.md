@@ -256,88 +256,88 @@
 
 ### 0.11 단계 10 — 전체 보안과 회복성 검증
 
-- [ ] 모든 API가 인증을 요구하는지 목록 기반으로 검사한다.
-- [ ] 모든 WebSocket 명령이 runtime schema 검증을 거치는지 검사한다.
-- [ ] 다른 origin의 HTTP·WebSocket 요청을 거부한다.
-- [ ] 세션 토큰이 URL query·로그·파일에 남지 않는지 검사한다.
-- [ ] 절대경로와 코드 본문이 일반 오류 응답에 노출되지 않는지 검사한다.
-- [ ] 외부 LSP 정의 URI의 일시 documentId 권한을 구현한다.
-- [ ] 재시작 후 외부 파일 권한이 자동 복원되지 않는지 확인한다.
-- [ ] 여러 브라우저 탭의 revision 충돌 처리를 검증한다.
-- [ ] commandId 멱등 재전송을 검증한다.
-- [ ] WebSocket 재연결과 snapshot 재동기화를 검증한다.
-- [ ] 저장 중 강제 종료 후 임시 파일 복구를 검증한다.
-- [ ] LSP 세 번 연속 crash 후 자동 재시작이 멈추는지 검증한다.
-- [ ] 서버 종료 중 새 연결과 새 명령을 거부하는지 검증한다.
-- [ ] 보안·회복성 통합 테스트 묶음이 통과한다.
-- [ ] **단계 10 완료**
+- [x] 모든 API가 인증을 요구하는지 목록 기반으로 검사한다.
+- [x] 모든 WebSocket 명령이 runtime schema 검증을 거치는지 검사한다.
+- [x] 다른 origin의 HTTP·WebSocket 요청을 거부한다.
+- [x] 세션 토큰이 URL query·로그·파일에 남지 않는지 검사한다.
+- [x] 절대경로와 코드 본문이 일반 오류 응답에 노출되지 않는지 검사한다.
+- [x] 외부 LSP 정의 URI의 일시 documentId 권한을 구현한다.
+- [x] 재시작 후 외부 파일 권한이 자동 복원되지 않는지 확인한다.
+- [x] 여러 브라우저 탭의 revision 충돌 처리를 검증한다.
+- [x] commandId 멱등 재전송을 검증한다.
+- [x] WebSocket 재연결과 snapshot 재동기화를 검증한다.
+- [x] 저장 중 강제 종료 후 임시 파일 복구를 검증한다.
+- [x] LSP 세 번 연속 crash 후 자동 재시작이 멈추는지 검증한다.
+- [x] 서버 종료 중 새 연결과 새 명령을 거부하는지 검증한다.
+- [x] 보안·회복성 통합 테스트 묶음이 통과한다.
+- [x] **단계 10 완료**
 
 ### 0.12 단계 11 — VS Code 확장 완전 제거와 문서 정리
 
-- [ ] 현재 확장의 최종 tag가 원격 저장소에 보존됐는지 확인한다.
-- [ ] `src/extension.ts`를 제거한다.
-- [ ] `src/panel.ts`를 제거한다.
-- [ ] VS Code 종속 옛 `src/symbols.ts`를 제거한다.
-- [ ] 확장 개발 호스트용 `.vscode/launch.json` 구성을 제거한다.
-- [ ] 확장 전용 `.vscode/tasks.json` 작업을 제거한다.
-- [ ] `test/preview.html`을 제거한다.
-- [ ] `test/shell.test.js`를 제거한다.
-- [ ] `@types/vscode` 의존성을 제거한다.
-- [ ] `engines.vscode`, `main`, `activationEvents`, `contributes`를 제거한다.
-- [ ] `vscode:prepublish`를 제거한다.
-- [ ] `.vscodeignore`를 제거한다.
-- [ ] 저장소의 `.vsix` 파일을 제거한다.
-- [ ] README를 CLI 설치·실행·언어 서버·웹 UI 기준으로 다시 작성한다.
-- [ ] `docs/terms.md`를 브라우저 앱 기준으로 갱신한다.
-- [ ] `docs/terms.svg`를 브라우저 앱 기준으로 갱신하고 눈으로 확인한다.
-- [ ] CHANGELOG에 독립 프로그램 전환 주 버전을 기록한다.
-- [ ] package version을 새 주 버전으로 올린다.
-- [ ] AGENTS.md의 명령·구조·용어·동기화 표를 갱신한다.
-- [ ] `import 'vscode'`가 저장소에서 검색되지 않는지 확인한다.
-- [ ] `acquireVsCodeApi`, `WebviewPanel`, `executeDefinitionProvider`가 검색되지 않는지 확인한다.
-- [ ] VS Code 없이 전체 빌드와 테스트가 통과하는지 확인한다.
-- [ ] **단계 11 완료**
+- [x] 현재 확장의 최종 tag가 원격 저장소에 보존됐는지 확인한다.
+- [x] `src/extension.ts`를 제거한다.
+- [x] `src/panel.ts`를 제거한다.
+- [x] VS Code 종속 옛 `src/symbols.ts`를 제거한다.
+- [x] 확장 개발 호스트용 `.vscode/launch.json` 구성을 제거한다.
+- [x] 확장 전용 `.vscode/tasks.json` 작업을 제거한다.
+- [x] `test/preview.html`을 제거한다.
+- [x] `test/shell.test.js`를 제거한다.
+- [x] `@types/vscode` 의존성을 제거한다.
+- [x] `engines.vscode`, `main`, `activationEvents`, `contributes`를 제거한다.
+- [x] `vscode:prepublish`를 제거한다.
+- [x] `.vscodeignore`를 제거한다.
+- [x] 저장소의 `.vsix` 파일을 제거한다.
+- [x] README를 CLI 설치·실행·언어 서버·웹 UI 기준으로 다시 작성한다.
+- [x] `docs/terms.md`를 브라우저 앱 기준으로 갱신한다.
+- [x] `docs/terms.svg`를 브라우저 앱 기준으로 갱신하고 눈으로 확인한다.
+- [x] CHANGELOG에 독립 프로그램 전환 주 버전을 기록한다.
+- [x] package version을 새 주 버전으로 올린다.
+- [x] AGENTS.md의 명령·구조·용어·동기화 표를 갱신한다.
+- [x] `import 'vscode'`가 저장소에서 검색되지 않는지 확인한다.
+- [x] `acquireVsCodeApi`, `WebviewPanel`, `executeDefinitionProvider`가 검색되지 않는지 확인한다. 남은 것은 이 문서의 위 두 줄과 20.4의 확인 목록뿐이다 — 무엇을 찾아야 하는지 적어둔 자리라 지우면 확인 방법이 사라진다.
+- [x] VS Code 없이 전체 빌드와 테스트가 통과하는지 확인한다.
+- [x] **단계 11 완료**
 
 ### 0.13 단계 12 — 패키징과 릴리스
 
-- [ ] npm CLI 패키지의 `bin` 항목을 설정한다.
-- [ ] CLI·서버·shared·웹 정적 자산을 배포물에 포함한다.
-- [ ] 언어 서버 바이너리가 배포물에 포함되지 않는지 확인한다.
-- [ ] 개발 소스맵·fixture·로그·토큰을 배포물에서 제외한다.
-- [ ] `npm pack` 결과 파일 목록을 자동 검증한다.
-- [ ] 깨끗한 Windows 환경에서 설치·실행한다.
-- [ ] 깨끗한 macOS 환경에서 설치·실행한다.
-- [ ] 깨끗한 Linux 환경에서 설치·실행한다.
-- [ ] Windows x64·arm64 CI를 구성한다.
-- [ ] macOS x64·arm64 CI를 구성한다.
-- [ ] Linux x64·arm64 CI를 구성한다.
-- [ ] 라이선스와 외부 의존성 고지를 포함한다.
-- [ ] 설치·업데이트·제거 문서를 작성한다.
-- [ ] 첫 독립 프로그램 릴리스 후보를 만든다.
-- [ ] 릴리스 후보로 네 언어 실제 프로젝트 스모크 테스트를 수행한다.
-- [ ] npm 배포 또는 배포 아카이브 게시를 완료한다.
-- [ ] **단계 12 완료**
+- [x] npm CLI 패키지의 `bin` 항목을 설정한다.
+- [x] CLI·서버·shared·웹 정적 자산을 배포물에 포함한다.
+- [x] 언어 서버 바이너리가 배포물에 포함되지 않는지 확인한다.
+- [x] 개발 소스맵·fixture·로그·토큰을 배포물에서 제외한다.
+- [x] `npm pack` 결과 파일 목록을 자동 검증한다. (`npm run test:pack`)
+- [x] 깨끗한 Windows 환경에서 설치·실행한다. (`npm run test:install` — tarball 넷을 임시 폴더에 실제로 설치하고 서버를 띄워 확인)
+- [ ] 깨끗한 macOS 환경에서 설치·실행한다. **못 했다** — 이 기계에 macOS 가 없다. CI 의 `install-smoke` 작업이 같은 검사를 macOS 러너에서 돌린다.
+- [ ] 깨끗한 Linux 환경에서 설치·실행한다. **못 했다** — 위와 같은 이유. CI 의 `install-smoke` 작업이 Linux 러너에서 돌린다.
+- [x] Windows x64·arm64 CI를 구성한다. (`.github/workflows/ci.yml`)
+- [x] macOS x64·arm64 CI를 구성한다. (`macos-13` = x64, `macos-14` = arm64)
+- [x] Linux x64·arm64 CI를 구성한다. arm64 러너(`ubuntu-24.04-arm`, `windows-11-arm`)는 저장소에서 켜져 있어야 그 줄이 돈다.
+- [x] 라이선스와 외부 의존성 고지를 포함한다. (`THIRD-PARTY-NOTICES.md`)
+- [x] 설치·업데이트·제거 문서를 작성한다. (README `## 설치와 실행`)
+- [x] 첫 독립 프로그램 릴리스 후보를 만든다. `npm pack -w <각 패키지>` 가 네 tarball 을 만들고, `npm run test:install` 이 그것을 설치해 띄운다.
+- [ ] 릴리스 후보로 네 언어 실제 프로젝트 스모크 테스트를 수행한다. **못 했다** — 이 기계에 clangd·gopls·roslyn 이 없고 rust-analyzer 는 rustup proxy 뿐이다. `npm run test:lsp` 이 fixture 를 들고 있으니 서버가 설치된 기계에서 돌리면 확인된다.
+- [ ] npm 배포 또는 배포 아카이브 게시를 완료한다. **하지 않았다** — 배포는 되돌릴 수 없고 npm 자격 증명도 없다. 패키지 쪽 준비(이름, `bin`, `files`, `publishConfig`, 버전)는 끝났으므로 `npm publish --workspaces` 한 번이면 된다. 저장소 주인이 정할 일이다.
+- [ ] **단계 12 완료** — 위 세 줄(macOS·Linux 설치, 실제 언어 서버 스모크, npm 배포)이 이 기계에서 못 하는 것이라 열어 둔다.
 
 ### 0.14 최종 인수 체크
 
-- [ ] VS Code가 없는 환경에서 실행된다.
-- [ ] 데스크톱 셸 없이 기본 브라우저에서 동작한다.
-- [ ] Windows, macOS, Linux에서 프로젝트를 연다.
-- [ ] C/C++, C#, Go, Rust의 정의와 문서 심볼 탐색이 성공한다.
-- [ ] 지원 가능한 언어 서버에서 구현과 타입 정의 탐색이 성공한다.
-- [ ] 심볼 해석이 네 표준 LSP 요청만 사용한다.
-- [ ] 탭·한글·이모지·CRLF 코드의 원본과 좌표가 보존된다.
-- [ ] 트리의 부모-자식·형제·재귀 규칙이 유지된다.
-- [ ] 단일 구현만 자동 추적하고 복수 구현은 자동 선택하지 않는다.
-- [ ] 트리·보드·브레드크럼·진입 링크·순번·배지가 정상 동작한다.
-- [ ] 트레일·보드 좌표·노드 크기·설정이 `.code-trail/`에서 복원된다.
-- [ ] 기존 확장 JSON을 읽거나 가져오는 기능이 없다.
-- [ ] VS Code 확장 소스와 VSIX 흐름이 완전히 제거됐다.
-- [ ] 서버가 loopback 외 주소에서 접근되지 않는다.
-- [ ] 인증·Origin·경로 탈출·명령 주입 테스트가 통과한다.
-- [ ] 단위·통합·E2E·실제 LSP 스모크 테스트가 통과한다.
-- [ ] README·CHANGELOG·용어 문서·AGENTS.md·작업 로그가 일치한다.
-- [ ] **독립 프로그램 전환 완료**
+- [x] VS Code가 없는 환경에서 실행된다. 저장소에 `vscode` 를 참조하는 코드가 하나도 없고, `npm run test:install` 이 워크스페이스 밖 폴더에서 서버를 띄운다.
+- [x] 데스크톱 셸 없이 기본 브라우저에서 동작한다. Electron·Tauri 를 쓰지 않는다.
+- [ ] Windows, macOS, Linux에서 프로젝트를 연다. **Windows 만 실제로 확인했다.** 나머지 둘은 CI 가 돌린다.
+- [ ] C/C++, C#, Go, Rust의 정의와 문서 심볼 탐색이 성공한다. **가짜 언어 서버로만 확인했다** — 이 기계에 네 서버가 없다. `npm run test:lsp` 이 실제 서버용 fixture 를 들고 있다.
+- [ ] 지원 가능한 언어 서버에서 구현과 타입 정의 탐색이 성공한다. 위와 같은 이유. 프로토콜 수준의 동작은 `test/integration/lsp.test.mjs` 가 확인한다.
+- [x] 심볼 해석이 네 표준 LSP 요청만 사용한다. 가짜 서버가 `references` 요청을 받으면 표시를 남기고 테스트가 그걸 잡는다.
+- [x] 탭·한글·이모지·CRLF 코드의 원본과 좌표가 보존된다. (`test/unit/tokenizer-port.test.mjs`, `test/integration/security.test.mjs` 의 "원본 문자열을 한 글자도 바꾸지 않는다")
+- [x] 트리의 부모-자식·형제·재귀 규칙이 유지된다.
+- [x] 단일 구현만 자동 추적하고 복수 구현은 자동 선택하지 않는다.
+- [x] 트리·보드·브레드크럼·진입 링크·순번·배지가 정상 동작한다. (`npm run test:e2e`)
+- [x] 트레일·보드 좌표·노드 크기·설정이 `.code-trail/`에서 복원된다. E2E 가 서버를 실제로 껐다 켜서 확인한다.
+- [x] 기존 확장 JSON을 읽거나 가져오는 기능이 없다. 가져오기 명령도 경로도 없다.
+- [x] VS Code 확장 소스와 VSIX 흐름이 완전히 제거됐다.
+- [x] 서버가 loopback 외 주소에서 접근되지 않는다. (`test/integration/security.test.mjs` 의 바인딩 검사)
+- [x] 인증·Origin·경로 탈출·명령 주입 테스트가 통과한다. (`security` · `resilience` · `editor` 세 묶음)
+- [x] 단위·통합·E2E·실제 LSP 스모크 테스트가 통과한다. 스모크는 네 언어 모두 "서버 없음" 을 이유로 적고 건너뛴다.
+- [x] README·CHANGELOG·용어 문서·AGENTS.md·작업 로그가 일치한다.
+- [ ] **독립 프로그램 전환 완료** — 코드와 문서는 끝났다. 남은 것은 이 기계에서 할 수 없는 셋이다: 다른 운영체제에서의 설치 확인, 실제 언어 서버 네 개로 하는 스모크, npm 배포.
 
 ## 1. 문서 상태
 
@@ -1149,6 +1149,7 @@ interface CommandError {
         | 'LSP_TIMEOUT'
         | 'PATH_DENIED'
         | 'PERSISTENCE_FAILED'
+        | 'SERVER_STOPPING'
         | 'INTERNAL_ERROR';
     message: string;
     retryable: boolean;
@@ -1157,6 +1158,8 @@ interface CommandError {
 ```
 
 `details`에는 stack, 절대경로, 코드 본문, 환경 변수, 원문 LSP payload를 넣지 않는다.
+
+`SERVER_STOPPING`은 단계 10에서 추가했다. 종료 절차는 저장을 끝낸 뒤 언어 서버를 내리는데, 그 사이에 들어온 명령을 처리하면 트레일이 또 바뀌고 그 변경은 어디에도 남지 않는다. 그래서 종료가 시작된 순간부터 새 WebSocket 연결과 새 명령을 모두 거절하고, 왜 거절했는지 이 코드로 알린다.
 
 ### 15.3 정의 클릭 시퀀스
 

@@ -44,6 +44,13 @@ export class WebSocketGateway {
     private readonly clients = new Set<Client>();
     private readonly recentCommands = new Set<string>();
     private nextClientId = 1;
+    /**
+     * 종료 절차가 시작됐다.
+     *
+     * 여기부터는 새 연결도 새 명령도 받지 않는다. 받아 두면 저장을 이미 끝낸
+     * 뒤에 트레일이 또 바뀌고, 그 변경은 어디에도 남지 않는다.
+     */
+    private stopping = false;
 
     constructor(private readonly context: ServerContext) {}
 
@@ -51,8 +58,17 @@ export class WebSocketGateway {
         return this.clients.size;
     }
 
+    get isStopping(): boolean {
+        return this.stopping;
+    }
+
     /** 새 연결. 인증은 이 함수를 부르기 전에 끝나 있어야 한다. */
     accept(socket: WebSocket): void {
+        if (this.stopping) {
+            // 1001 = going away
+            socket.close(1001, 'server stopping');
+            return;
+        }
         const client: Client = { socket, id: this.nextClientId++ };
         this.clients.add(client);
         this.context.logger.debug('웹소켓이 붙었다.', { clientId: client.id });
@@ -73,6 +89,7 @@ export class WebSocketGateway {
 
     /** 모든 연결을 닫는다. 종료 절차가 부른다. */
     closeAll(): void {
+        this.stopping = true;
         this.broadcast('server.stopping' as EventType, {}, {});
         for (const client of this.clients) {
             client.socket.close(1001, 'server stopping');
@@ -250,6 +267,15 @@ export class WebSocketGateway {
     // ── 받기 ────────────────────────────────────────────────────────────────
 
     private async onMessage(client: Client, raw: string): Promise<void> {
+        if (this.stopping) {
+            // 저장은 이미 끝났다. 여기서 받아 처리하면 그 변경은 어디에도 안 남는다.
+            this.sendError(client, {
+                code: 'SERVER_STOPPING',
+                message: '서버가 닫히는 중이다. 이 명령은 저장되지 않는다.',
+                retryable: false,
+            });
+            return;
+        }
         let parsedJson: unknown;
         try {
             parsedJson = JSON.parse(raw);

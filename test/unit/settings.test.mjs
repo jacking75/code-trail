@@ -1,13 +1,7 @@
 /* 확장 설정이 새 ProjectSettings 로 옮겨졌는지 — node --test "test/unit/*.test.mjs" */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-import { shared } from './helpers.mjs';
-
-const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
+import { fixture, shared } from './helpers.mjs';
 
 /**
  * 확장 `codeTrail.*` → 새 `ui.*`.
@@ -31,12 +25,18 @@ const PORTED = {
 /** 옮기지 않기로 한 것. 이유는 체크리스트 9절에 적혀 있다. */
 const DROPPED = ['showAbsolutePath', 'autoCollapseSiblings'];
 
+/**
+ * 확장의 `codeTrail.*` 기본값.
+ *
+ * 단계 11 에서 확장 매니페스트를 지웠으므로 더는 `package.json` 에서 읽을 수 없다.
+ * 그 시점의 값을 `test/fixtures/extension-settings.json` 에 굳혀 두고 여기서 읽는다 —
+ * 대조할 상대가 사라졌다고 검사를 지우면, 기본값이 조용히 달라져도 아무도 모른다.
+ */
 function extensionDefaults() {
-    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-    const props = pkg.contributes.configuration.properties;
+    const { properties } = fixture('extension-settings.json');
     const out = {};
-    for (const [key, value] of Object.entries(props)) {
-        out[key.replace(/^codeTrail\./, '')] = value.default;
+    for (const [key, value] of Object.entries(properties)) {
+        out[key] = value.default;
     }
     return out;
 }

@@ -1,10 +1,26 @@
 {
   "name": "@code-trail/web",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Code Trail 브라우저 프론트엔드. 파일 탐색기, 읽기 전용 코드 화면, 트레일·보드 화면.",
+  "version": "1.0.0",
+  "description": "Code Trail 브라우저 프론트엔드. 파일 탐색기, 읽기 전용 코드 화면, 트레일·보드·진단 화면.",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jacking75/code-trail.git",
+    "directory": "packages/web"
+  },
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "vite build",
     "build:lib": "tsc -p tsconfig.lib.json",
@@ -12,16 +28,14 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
   },
-  "dependencies": {
-    "@code-trail/shared": "0.0.0",
-    "monaco-editor": "^0.56.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
-  },
   "devDependencies": {
+    "@code-trail/shared": "1.0.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^6.1.1",
+    "monaco-editor": "^0.56.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "vite": "^8.2.2"
   }
 }

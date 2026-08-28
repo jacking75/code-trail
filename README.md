@@ -1,19 +1,27 @@
 # Code Trail
 
-코드를 읽어 내려간 **경로 그 자체**를 트리로 남기는 VS Code 확장이다.
+코드를 읽어 내려간 **경로 그 자체**를 트리로 남기는 프로그램이다.
+프로젝트 폴더를 가리켜 실행하면 로컬 서버가 뜨고 기본 브라우저가 열린다.
 
-함수 위에서 단축키를 누르면 그 함수 본문이 패널에 펼쳐진다. 본문 안의 식별자를 클릭하면
-그 정의가 **자식 노드로 아래에 붙는다**. 또 클릭하면 또 붙는다. 시작 지점에서 지금까지
-어떤 순서로 타고 들어왔는지가 위에서 아래로 흐르는 트리로 그대로 남고, 각 단계를 접었다 폈다 할 수 있다.
+```
+npx code-trail ./my-project
+```
 
-VS Code 내장 Call Hierarchy는 트리를 보여주지만 코드 본문을 보여주지 않고,
-마켓플레이스의 Call Graph 계열 확장들은 그래프만 그리고 코드는 에디터로 점프시킨다.
-Code Trail은 그 사이의 빈칸을 메운다.
+함수 위에서 `Ctrl+Alt+T` 를 누르면 그 함수 본문이 트레일 패널에 펼쳐진다.
+본문 안의 식별자를 클릭하면 그 정의가 **자식 노드로 아래에 붙는다**. 또 클릭하면 또 붙는다.
+시작 지점에서 지금까지 어떤 순서로 타고 들어왔는지가 위에서 아래로 흐르는 트리로 그대로 남고,
+각 단계를 접었다 폈다 할 수 있다.
+
+에디터의 Call Hierarchy 는 트리를 보여주지만 코드 본문을 보여주지 않고,
+Call Graph 계열 도구들은 그래프만 그리고 코드는 에디터로 점프시킨다.
+Code Trail 은 그 사이의 빈칸을 메운다.
+
+**편집기가 아니다.** 코드는 읽기만 하고, 고칠 때는 `↗` 로 평소 쓰는 에디터를 연다.
 
 ## 트리 구조
 
-`A` 안에서 `B`를 클릭하고, 다시 `A` 안에서 `C`를 클릭하면
-**B와 C는 A의 형제 자식으로 나란히** 붙는다. C가 B 밑으로 들어가지 않는다.
+`A` 안에서 `B` 를 클릭하고, 다시 `A` 안에서 `C` 를 클릭하면
+**B 와 C 는 A 의 형제 자식으로 나란히** 붙는다. C 가 B 밑으로 들어가지 않는다.
 클릭한 코드가 어느 노드에 속해 있느냐가 부모를 결정하기 때문이다.
 
 ```
@@ -33,52 +41,98 @@ Code Trail은 그 사이의 빈칸을 메운다.
 형제 순서는 툴바의 `⇅` 버튼으로 **코드 순서(= 호출 순서, 기본값)** 와
 **클릭 순서** 사이를 오갈 수 있다.
 
-패널의 각 부분을 뭐라고 부르는지는 [docs/terms.md](docs/terms.md) 에 그림으로 정리해 두었다.
-
-트리의 각 노드는 본문을 읽기 좋은 폭으로 유지한다. 자식이 많아 한 행이 패널보다 넓어지면
-**트레일 패널 아래에 수평 스크롤바가 생긴다.** 좌우로 움직여 같은 깊이의 형제 노드를 본다.
+화면 각 부분을 뭐라고 부르는지는 [docs/terms.md](docs/terms.md) 에 그림으로 정리해 두었다.
 
 ## 동작 방식
 
-심볼 해석은 전부 **VS Code의 언어 서버 API**에 위임한다. 자체 파서를 두지 않으므로
-Definition Provider를 제공하는 언어라면 대체로 동작한다.
+심볼 해석은 전부 **언어 서버(LSP)** 에 위임한다. 자체 파서를 두지 않는다.
+쓰는 요청은 넷뿐이다.
 
-| 언어 | 필요한 확장 |
-| --- | --- |
-| C / C++ | clangd 또는 C/C++ (`ms-vscode.cpptools`) |
-| C# | **C# (`ms-dotnettools.csharp`) 하나면 된다.** C# Dev Kit은 필요 없다 |
-| Go | Go (`golang.go` / gopls) |
-| Rust | rust-analyzer |
-| 그 외 | Definition Provider를 제공하는 모든 언어 |
+```
+textDocument/definition        식별자의 정의
+textDocument/documentSymbol    심볼 목록과 본문 범위
+textDocument/implementation    구현 찾기
+textDocument/typeDefinition    정의를 못 찾았을 때의 폴백
+```
 
-쓰는 API는 `executeDefinitionProvider`, `executeDocumentSymbolProvider`,
-`executeImplementationProvider`, `executeTypeDefinitionProvider` 넷뿐이다.
-전부 표준 LSP 기능이라 언어 서버만 붙어 있으면 된다.
+전부 표준 LSP 기능이라, 이 넷에 답하는 언어 서버라면 붙는다.
+지금 지원하는 언어와 서버는 넷이다.
 
-지금 환경이 되는지 확인하려면 대상 파일을 열고
-명령 팔레트 → **`Code Trail: 언어 서버 지원 확인`** 을 실행한다.
-provider별 응답 여부가 표로 나온다.
+| 언어 | 언어 서버 | 어디서 찾나 |
+| --- | --- | --- |
+| C / C++ | clangd | 설정 → `PATH` → LLVM 설치 위치 |
+| C# | roslyn-language-server | 설정 → `PATH` |
+| Go | gopls | 설정 → `PATH` → `GOBIN` → `GOPATH/bin` |
+| Rust | rust-analyzer | 설정 → `PATH` → rustup(`CARGO_HOME`) |
+
+**언어 서버를 대신 내려받지 않는다.** 이미 설치된 것을 찾거나 설정에 적힌 경로를 쓴다.
+설치 명령은 `진단` 탭이 안내만 하고 우리가 실행하지 않는다 —
+남의 기계에 도구를 몰래 설치하는 것은 그 자체로 놀랄 일이다.
+
+지금 환경이 되는지는 **`진단` 탭**에서 본다. 실행 파일을 어디서 찾았는지, 프로세스가 떠 있는지,
+어떤 capability 를 광고했는지, 마지막 요청이 언제 성공했는지가 언어별로 나온다.
+`✓ 확인` 을 누르면 프로젝트 안의 실제 파일 하나로 요청을 보내보고,
+응답이 오면 그때 `지원됨` 배지가 붙는다.
 
 ### C# 참고
 
-기본 C# 확장은 2.x부터 Roslyn 기반 언어 서버를 단독으로 띄우므로
-Dev Kit 없이도 정의 이동·문서 심볼·구현 찾기가 모두 동작한다.
-Dev Kit이 추가하는 건 솔루션 탐색기, 테스트 탐색기 같은 IDE 편의 기능이지
-언어 분석이 아니다.
+C# 독립 언어 서버는 배포 규약이 아직 안정되지 않았다. 직접 설치한 뒤
+`.code-trail/settings.json` 의 `languages.csharp.executable` 에 경로를 적는다.
 
-다른 프로젝트로 넘어가는 정의 이동이 안 되면 Code Trail이 아니라
-Roslyn이 솔루션을 다 못 읽은 것이다. `dotnet.defaultSolution` 에
-`.sln` 경로를 지정해본다.
+솔루션 후보(`.sln`, `.csproj`)가 여럿이면 **우리가 고르지 않는다.**
+`진단` 탭의 **솔루션** 칸에서 고르면 `languages.csharp.solutionPath` 에
+프로젝트 상대경로로 저장된다.
+
+## 설치와 실행
+
+Node.js 20.11 이상이 필요하다.
+
+```
+# 설치 없이 한 번 써보기
+npx code-trail ./my-project
+
+# 전역 설치
+npm install -g code-trail
+code-trail ./my-project
+
+# 업데이트
+npm update -g code-trail
+
+# 제거
+npm uninstall -g code-trail
+```
+
+`code-trail <경로>` 는 그 폴더를 프로젝트 루트로 잡아 로컬 서버를 띄우고 브라우저를 연다.
+
+| 인자 | 뜻 |
+| --- | --- |
+| `<경로>` | 열 프로젝트 폴더. 생략하면 현재 폴더 |
+| `--port <번호>` | 쓸 포트. 생략하면 빈 포트를 고른다 |
+| `--no-open` | 브라우저를 자동으로 열지 않는다 |
+| `--trail <trail-id>` | 시작한 뒤 이 트레일을 고른다 |
+| `--log-level <level>` | `error` \| `warn` \| `info` \| `debug` (기본 `info`) |
+| `-v`, `--version` | 버전 |
+| `-h`, `--help` | 도움말 |
+
+서버는 **`127.0.0.1` 에만 바인딩한다.** 외부 인터페이스로 여는 옵션은 제공하지 않는다.
+접속에는 프로세스가 사는 동안만 쓰는 256비트 세션 토큰이 필요하고,
+그 토큰은 URL fragment 로만 전달된다 — fragment 는 서버로 전송되지 않고 로그에도 안 남는다.
+
+같은 프로젝트에 서버가 이미 떠 있으면 새로 띄우지 않고 그 주소를 열어준다.
+
+프로젝트 안 `.code-trail/` 에 설정과 트레일이 저장된다.
+`.code-trail/runtime/` 은 스스로 `.gitignore` 를 두어 감춘다 —
+**프로젝트 루트의 `.gitignore` 는 우리가 고치지 않는다.**
 
 ## 사용법
 
 | 동작 | 방법 |
 | --- | --- |
-| 탐색 시작 | 함수 위에 커서를 놓고 `Ctrl+Alt+T` (macOS `Cmd+Alt+T`) |
-| 새 루트 추가 | 명령 팔레트 → `Code Trail: 커서 위치를 새 루트로 추가` |
-| 한 단계 파고들기 | 패널의 코드에서 **식별자 클릭** |
-| 구현체 찾기 | 호출부에서 **Alt + 클릭**, 또는 선언 노드 헤더의 **`⚑`**. 구현이 하나뿐이면 그냥 클릭해도 거기까지 따라간다 |
-| 실제 에디터에서 열기 | **Ctrl/Cmd + 클릭**, 또는 노드 헤더의 `↗` |
+| 파일 열기 | 왼쪽 **파일 탐색기**에서 고르거나 이름으로 검색 |
+| 탐색 시작 | 코드 화면에서 함수 위를 누르고 `Ctrl+Alt+T` (macOS `Cmd+Alt+T`) |
+| 한 단계 파고들기 | 노드 본문의 **식별자 클릭** |
+| 구현체 찾기 | 호출부에서 **Alt + 클릭**, 또는 선언 노드 헤더의 **`⚑`** |
+| 외부 에디터에서 열기 | **Ctrl/Cmd + 클릭**, 또는 노드 헤더의 `↗` |
 | 접기 / 펼치기 | 노드 헤더 클릭 |
 | 노드 삭제 | 노드 헤더의 `✕` (하위 노드까지 함께) |
 | 형제 정렬 바꾸기 | 툴바 `⇅ 코드 순서` ↔ `⇅ 클릭 순서` |
@@ -88,9 +142,12 @@ Roslyn이 솔루션을 다 못 읽은 것이다. `dotnet.defaultSolution` 에
 | 그 노드만 글자 크기 | 코드 위에서 **Ctrl + 휠** |
 | 크기 되돌리기 | **줄 번호 칸 더블클릭** |
 | 새 루트로 떼어내기 | 노드 헤더의 **`⇱`** (하위 노드도 함께 올라온다) |
-| 패널을 독립 창으로 | 툴바 `⧉ 새 창` (또는 명령 팔레트 → `Code Trail: 패널을 새 창으로 빼기`) |
+| 트레일 여러 개 | 앱 바의 `＋ 새 트레일` · 목록 · `✎ 이름` · `🗑` |
 | 기록 남기기 | 툴바 `Markdown` → 트리 전체가 코드 블록 포함 문서로 |
-| 세션 저장/복원 | 툴바 `저장` / `불러오기` (JSON) |
+| 언어 서버 상태 | `진단` 탭 |
+
+트레일은 **자동으로 저장된다.** 저장·불러오기 버튼이 없다 —
+브라우저를 닫았다 열어도, 서버를 다시 띄워도 마지막 상태 그대로다.
 
 ### 인터페이스 · 가상 함수 — 선언만 나올 때
 
@@ -100,7 +157,7 @@ Roslyn이 솔루션을 다 못 읽은 것이다. `dotnet.defaultSolution` 에
 **구현이 딱 하나뿐이면 그 구현까지 자동으로 이어서 펼친다.** 고를 것이 없는데
 한 번 더 누르게 할 이유가 없기 때문이다. 선언 노드는 지우지 않고 그대로 두므로
 트리에는 `인터페이스 선언 → 구현` 두 단계가 남는다.
-이 동작은 `codeTrail.autoFollowSingleImplementation` 로 끌 수 있다.
+이 동작은 `ui.autoFollowSingleImplementation` 로 끌 수 있다.
 
 **구현이 둘 이상이면 자동으로 고르지 않는다.** 호출부의 정적 타입만으로는 실제로 어느
 구현이 도는지 알 수 없어서, 하나를 골라 보여주면 그게 실행되는 코드라고 오해하게 된다.
@@ -109,6 +166,8 @@ Roslyn이 솔루션을 다 못 읽은 것이다. `dotnet.defaultSolution` 에
 
 호출부에서 곧장 구현으로 가고 싶으면 **Alt+클릭**을 쓴다.
 `⚑` 는 몸통이 있는 메서드(가상 함수, `virtual`/`override`)에서도 쓸 수 있다 — 재정의한 곳들을 모아준다.
+
+같은 이유로, 정의 후보가 여럿일 때도 우리가 고르지 않고 목록을 띄워 사용자가 고르게 한다.
 
 해당하는 경우:
 
@@ -123,7 +182,7 @@ Roslyn이 솔루션을 다 못 읽은 것이다. `dotnet.defaultSolution` 에
 - **선언만** — 몸통이 없는 선언이다. `⚑` 로 구현을 펼친다.
 - **근사** — 언어 서버가 그 심볼의 전체 본문 범위를 알려주지 않아 끝을 추정한 경우다.
   추정 순서는 ① 정의 결과가 함께 준 전체 범위 → ② 바로 뒤에 시작하는 다음 심볼의
-  앞 줄까지 → ③ 그마저 없으면 `codeTrail.contextLines` 만큼 이다.
+  앞 줄까지 → ③ 그마저 없으면 `ui.contextLines` 만큼 이다.
 
 ### 헤더에 표시되는 것
 
@@ -133,15 +192,15 @@ Roslyn이 솔루션을 다 못 읽은 것이다. `dotnet.defaultSolution` 에
 붙는다.** 함수·메서드 노드에는 붙이지 않는다 — 어느 클래스 소속인지는 대개 코드 본문에
 이미 보이고, 헤더에서는 경로가 밀려나기 때문이다.
 
-**경로는 저장소 루트 디렉터리 이름부터 끝까지 전부 나온다** (`gameserver/src/net/registry.cpp:42`).
-말줄임으로 자르지 않고, 자리가 모자라면 시그니처 쪽이 먼저 줄어든다.
-멀티 루트 워크스페이스에서는 이 앞부분이 어느 저장소인지도 알려준다.
+**경로는 프로젝트 루트 기준 상대경로다** (`src/net/registry.cpp:42`).
+절대경로는 브라우저로 나가지 않는다. 예외는 언어 서버가 프로젝트 밖(표준 라이브러리 헤더 등)을
+가리켰을 때뿐이고, 그때는 그 파일이 어디 있는지 알아야 하므로 전체 경로를 보여준다.
 
 ### 트리 모드 — 부모 위, 자식 아래
 
 기본 트리 모드에서는 부모 노드가 위에 있고, 그 부모의 자식 노드들이 바로 아래의 같은 행에
-좌우로 놓인다. 각 자식의 하위 노드는 그 아래 행으로 이어지고 연결선이 관계를 보여준다.
-형제가 많아 트리가 패널 폭을 넘으면 패널의 수평 스크롤바로 좌우를 탐색한다.
+좌우로 놓인다. 각 자식의 하위 노드는 그 아래 행으로 이어지고 가이드선이 관계를 보여준다.
+형제가 많아 트리가 화면 폭을 넘으면 수평 스크롤로 좌우를 탐색한다.
 
 ### 보드 모드 — 노드를 자유롭게 늘어놓기
 
@@ -150,8 +209,8 @@ Roslyn이 솔루션을 다 못 읽은 것이다. `dotnet.defaultSolution` 에
 여러 함수를 나란히 놓고 비교할 때 쓴다.
 
 **옮겨도 트리 구조는 바뀌지 않는다.** 화면 배치일 뿐이라 `▤ 트리` 로 돌아가면
-원래의 부모 위·자식 아래 모양 그대로다. 보드에서 잡아둔 자리도 기억하므로 다시 보드로 오면 그대로다.
-(자리 정보는 패널이 열려 있는 동안만 유지된다. JSON 저장에는 들어가지 않는다.)
+원래의 부모 위·자식 아래 모양 그대로다. 보드에서 잡아둔 자리는 트레일과 함께 저장되므로
+새로고침해도, 서버를 다시 띄워도 그 자리에 있다.
 
 구조를 진짜로 바꾸고 싶으면 노드 헤더의 **`⇱`** 를 누른다. 그 노드가 하위 노드와 함께
 트리 맨 위로 올라가 독립된 루트가 된다. 깊이 들어간 함수를 새 기준점으로 삼을 때 쓴다.
@@ -164,55 +223,37 @@ Roslyn이 솔루션을 다 못 읽은 것이다. `dotnet.defaultSolution` 에
   이렇게 직접 맞춘 노드는 아래의 자동 폭 맞춤이 건드리지 않는다.
 - **되돌리기** — 줄 번호 칸을 더블클릭하면 그 노드의 높이·글자 크기가 원래대로 돌아간다.
 
-### 패널 크기와 위치 — `⧉ 새 창`
+둘 다 트레일과 함께 저장된다.
 
-트레일 패널은 **에디터 탭 하나**다. 그래서 기본적으로는 편집기 영역의 제 칸을 채울 뿐이고,
-확장이 창 크기를 픽셀로 정하는 API는 VS Code에 없다.
+### 창을 좁혀도 코드가 다 보이게
 
-마우스로 자유롭게 조절하고 싶으면 툴바의 **`⧉ 새 창`** 을 누른다.
-패널이 **독립된 창으로 떨어져 나오고**, 그때부터는 창 모서리를 끌어 크기를 조절하고
-제목 표시줄을 끌어 원하는 자리(다른 모니터 포함)로 옮길 수 있다.
-VS Code 1.85 이상이 필요하고, 탭 드래그가 안 되는 환경에서도 이 버튼은 동작한다.
-
-창을 줄이면 아래의 폭 맞춤이 걸려 **코드 글자도 함께 줄어** 내용이 다 보인다.
-원래대로 되돌리려면 그 창의 탭을 원래 창으로 끌어다 놓거나, 창을 닫고 패널을 다시 연다.
-
-### 패널을 좁혀도 코드가 다 보이게
-
-패널 폭이 줄면 **코드 본문 글자를 자동으로 줄여** 가로로 넘치지 않게 한다.
+창 폭이 줄면 **코드 본문 글자를 자동으로 줄여** 가로로 넘치지 않게 한다.
 지금 펼쳐진 노드 중 가장 빠듯한 것 하나를 기준으로 크기를 정하므로,
 노드마다 글자 크기가 달라지지 않는다. 다시 넓히면 원래 크기로 돌아온다.
 
 **헤더 글자는 줄이지 않는다.** 헤더까지 작아지면 트리 구조가 눈에 안 들어온다.
 헤더는 대신 자리가 모자라면 다음 줄로 접힌다.
 
-하한은 `codeTrail.minFontSize`(기본 8px)다. 거기서도 안 들어가는 긴 줄은
-그 노드에만 가로 스크롤이 생긴다. 자동 조절이 싫으면 `codeTrail.fitToWidth` 를 끄거나,
-`codeTrail.fontSize` 에 원하는 크기를 넣으면 그 값으로 고정된다.
+하한은 `ui.minFontSize`(기본 8px)다. 거기서도 안 들어가는 긴 줄은
+그 노드에만 가로 스크롤이 생긴다. 자동 조절이 싫으면 `ui.fitToWidth` 를 끄거나,
+`ui.fontSize` 에 원하는 크기를 넣으면 그 값으로 고정된다.
 
 ## 설정
 
-| 키 | 기본값 | 설명 |
-| --- | --- | --- |
-| `codeTrail.clickTarget` | `allSymbols` | 클릭 대상. `callsOnly` 로 바꾸면 호출 지점만 링크가 된다 |
-| `codeTrail.autoFollowSingleImplementation` | `true` | 선언만 열렸고 구현이 **하나뿐**이면 그 구현까지 자동으로 펼침. 둘 이상이면 `⚑` 로 넘긴다 |
-| `codeTrail.childOrder` | `source` | 형제 정렬. `source`=코드 순서, `click`=클릭 순서 |
-| `codeTrail.maxCodeLines` | `250` | 노드 하나에 처음 표시할 최대 줄 수. 초과분은 "더 보기" |
-| `codeTrail.contextLines` | `40` | 본문 범위도 다음 심볼 경계도 못 구할 때 보여줄 줄 수 |
-| `codeTrail.revealInEditorOnAdd` | `false` | 노드 추가 시 실제 에디터도 같이 이동 |
-| `codeTrail.showAbsolutePath` | `false` | 저장소 루트 기준 경로 대신 절대경로 표시 |
-| `codeTrail.fitToWidth` | `true` | 패널 폭에 맞춰 코드 글자 크기를 자동으로 줄임 |
-| `codeTrail.minFontSize` | `8` | 폭 맞춤이 줄일 수 있는 하한(px) |
-| `codeTrail.fontSize` | `0` | 코드 폰트 크기(px). 0이면 에디터 설정을 따름. 0보다 크면 폭 맞춤을 끄고 이 크기로 고정 |
-
-### 독립 프로그램의 설정
-
-`packages/` 쪽은 VS Code 설정 대신 프로젝트 안의 `.code-trail/settings.json` 을 쓴다.
-`ui.*` 는 위 표와 같은 값들이고, 여기에 언어 서버 설정이 더 붙는다.
+프로젝트 안의 `.code-trail/settings.json` 하나다. 형상 관리에 넣어도 되는 파일이다.
 
 | 키 | 기본값 | 설명 |
 | --- | --- | --- |
 | `ui.theme` | `system` | `system` \| `light` \| `dark` |
+| `ui.clickTarget` | `allSymbols` | 클릭 대상. `callsOnly` 로 바꾸면 호출 지점만 링크가 된다 |
+| `ui.childOrder` | `source` | 형제 정렬. `source`=코드 순서, `click`=클릭 순서 |
+| `ui.maxCodeLines` | `250` | 노드 하나에 처음 표시할 최대 줄 수. 초과분은 "더 보기" |
+| `ui.contextLines` | `40` | 본문 범위도 다음 심볼 경계도 못 구할 때 보여줄 줄 수 |
+| `ui.fitToWidth` | `true` | 화면 폭에 맞춰 코드 글자 크기를 자동으로 줄임 |
+| `ui.minFontSize` | `8` | 폭 맞춤이 줄일 수 있는 하한(px) |
+| `ui.fontSize` | `0` | 코드 글자 크기(px). 0보다 크면 폭 맞춤보다 우선한다 |
+| `ui.autoFollowSingleImplementation` | `true` | 선언만 열렸고 구현이 **하나뿐**이면 그 구현까지 자동으로 펼침 |
+| `ui.revealInExternalEditorOnAdd` | `false` | 노드 추가 시 외부 에디터도 같이 그 위치를 연다 |
 | `editor.executable` | `null` | 외부 에디터 실행 파일. `null` 이면 열기 기능을 끈다 |
 | `editor.args` | `[]` | 실행 인자. `{path}`, `{line}`, `{column}`, `{project}` 만 쓴다 |
 | `languages.<언어>.enabled` | `true` | 그 언어의 서버를 쓸지 |
@@ -223,140 +264,63 @@ VS Code 1.85 이상이 필요하고, 탭 드래그가 안 되는 환경에서도
 | `languages.csharp.solutionPath` | `null` | 열 솔루션. **프로젝트 상대경로.** 후보가 여럿이면 우리가 고르지 않는다 |
 
 `<언어>` 는 `cpp`, `csharp`, `go`, `rust` 넷이다.
-탐지 순서와 진단 항목은 `npm run start` 로 띄운 뒤 **`진단` 탭**에서 본다
-(원본은 `GET /api/diagnostics`).
 
 `editor.executable` 을 직접 적지 않아도 된다. `진단` 탭의 **외부 에디터** 칸이
-PATH 에서 찾은 후보(VS Code, Cursor, Zed, Sublime, JetBrains, Helix, Emacs, Vim …)를
-인자 틀과 함께 보여주고, 고르면 그 값이 설정에 적힌다. **고르기 전에는 아무것도
-실행하지 않는다.**
+`PATH` 에서 찾은 후보(VS Code, Cursor, Zed, Sublime, JetBrains, Helix, Emacs, Vim …)를
+인자 틀과 함께 보여주고, 고르면 그 값이 설정에 적힌다. **고르기 전에는 아무것도 실행하지 않는다.**
 
-`진단` 탭의 `지원됨` 배지는 프로세스가 떴다는 뜻이 아니다. `✓ 확인` 을 누르면
-프로젝트 안의 실제 파일 하나로 `documentSymbol` 과 `definition` 을 보내보고,
-둘 다 응답했을 때만 붙는다.
+외부 에디터는 **셸을 거치지 않고** 실행 파일과 인자 배열을 그대로 넘긴다.
+파일 이름에 `;` 나 `&&` 가 있어도 인자 하나로 간다. 경로는 브라우저가 보낸 값이 아니라
+서버가 문서 권한 목록에서 역조회한 것이다.
 
-## 설치
+## 안전에 관해
 
-받은 `.vsix` 를 바로 설치하려면:
+로컬 도구지만 **브라우저는 신뢰 경계 밖**이라고 보고 만들었다.
 
-```
-code --install-extension code-trail-0.6.0.vsix
-```
+- `127.0.0.1` 에만 바인딩한다. 외부로 여는 옵션이 없다.
+- 모든 API 와 WebSocket 이 세션 토큰을 요구한다. 토큰은 URL fragment 로만 오고
+  query·로그·파일 어디에도 남지 않는다.
+- `Host` 헤더를 확인해 DNS rebinding 을 막고, WebSocket 은 `Origin` 을 확인한다.
+- CSP 로 인라인 스크립트와 외부 CDN 을 막는다.
+- 브라우저는 파일 경로를 모른다. 서버가 발급한 불투명한 `documentId` 로만 문서를 요청한다.
+  프로젝트 밖 파일은 언어 서버가 결과로 돌려줬을 때만 일시 권한을 얻고, 서버를 다시 띄우면 사라진다.
+- 자식 프로세스(언어 서버, 외부 에디터)를 셸 없이 띄운다.
+- 오류 응답에 절대경로·코드 본문·환경 변수·토큰을 담지 않는다.
 
-또는 VS Code에서 `확장` 패널 → 우측 상단 `⋯` → `VSIX에서 설치…` → 파일 선택.
-설치 후 창을 새로고침(`개발자: 창 다시 로드`)하면 명령이 잡힌다.
-
-제거는 `code --uninstall-extension local.code-trail`.
-
-## 소스에서 vsix 빌드하기
-
-Node.js 18 이상이 필요하다. 프로젝트 루트에서:
+## 개발
 
 ```
-npm install                 # 의존성 (TypeScript, 타입 정의)
-npm run compile             # src/*.ts → out/*.js
-npx @vscode/vsce package    # → code-trail-<version>.vsix
+npm install
+npm run build                   # shared → server → web → cli
+npm run start -- <프로젝트 경로> # 서버를 띄우고 브라우저를 연다
+npm run dev                     # Vite 개발 서버 (웹만 고칠 때)
+npm run typecheck
 ```
 
-`vsce` 는 따로 설치할 필요 없다. `npx` 가 임시로 받아 실행한다.
-전역에 두고 싶으면 `npm install -g @vscode/vsce` 후 `vsce package`.
-
-`vsce package` 는 내부적으로 `vscode:prepublish` 스크립트를 돌리므로
-`npm run compile` 은 사실 생략해도 되지만, 타입 오류를 먼저 보려면 따로 돌리는 편이 낫다.
-
-출력 파일명을 지정하려면:
-
-```
-npx @vscode/vsce package --out dist/code-trail.vsix
-```
-
-버전을 올리려면 `package.json` 의 `version` 을 고치거나
-`npx @vscode/vsce package patch` (자동으로 0.5.0 → 0.5.1).
-
-### 빌드가 막힐 때
-
-| 증상 | 원인과 조치 |
-| --- | --- |
-| `Missing publisher name` | `package.json` 의 `publisher` 필드가 비었다. 아무 문자열이나 넣으면 로컬 설치용으로는 충분하다 |
-| `A 'repository' field is missing` 프롬프트 | 마켓플레이스에 올릴 게 아니면 `--allow-missing-repository` 를 붙인다 |
-| `LICENSE` 관련 경고 | 무시해도 되고, 굳이 없애려면 `--skip-license` |
-| `out/extension.js` 없음 | `npm run compile` 이 실패한 것이다. `npx tsc -p ./ --noEmit` 으로 오류를 먼저 본다 |
-
-`.vscodeignore` 가 `src/`, `test/`, `node_modules/`, 소스맵을 제외하므로
-패키지에는 `out/`, `media/`, `package.json`, 문서만 들어간다.
-
-## 개발 중 동작 확인
-
-고칠 때마다 `.vsix` 를 만들어 설치할 필요는 없다. 그건 배포 직전 최종 확인용이다.
-개발 중에는 훨씬 짧은 루프가 두 단계 있다.
-
-### 1. 웹뷰만 고칠 때 — VS Code를 띄우지 않는다
-
-`media/main.js`, `media/tokenizer.js`, `media/style.css` 는 컴파일하지 않는 평문 JS/CSS다.
-`test/preview.html` 이 `acquireVsCodeApi` 를 스텁으로 갈아끼워 두었으므로,
-이 파일을 브라우저에서 그냥 열면 확장 없이도 트리 렌더링·클릭·툴바가 그대로 돈다.
-
-```
-start test/preview.html       # 저장 → 브라우저 새로고침이 전부다
-node test/tokenizer.test.js   # 토크나이저 단위 테스트
-node test/shell.test.js       # panel.ts 셸 ↔ preview.html 동기화 검사
-node test/ui.test.js          # 같은 하네스를 playwright로 자동 검증
-```
-
-편집에서 확인까지 1~2초다. 단 두 가지를 기억한다.
-
-- `panel.ts` 의 툴바 HTML을 바꾸면 `test/preview.html` 도 같이 고쳐야 한다.
-  안 그러면 `main.js` 가 `getElementById` 에서 null을 잡고 죽는다.
-  `node test/shell.test.js` 가 이 어긋남을 잡아준다.
-- 심볼 해석은 언어 서버가 하므로 여기서는 검증되지 않는다. 렌더링과 상호작용만 본다.
-
-### 2. 확장 전체를 볼 때 — `F5`
-
-VS Code로 이 폴더를 열고 `F5` 를 누르면 **확장 개발 호스트** 창이 새로 뜨고
-그 창에 이 프로젝트가 확장으로 로드된다. 설치 과정이 없다.
-`.vscode/launch.json` 의 `확장 실행` 구성이 `.vscode/tasks.json` 의 `npm: compile` 을
-먼저 돌리므로 컴파일도 자동이다.
-
-| 고친 곳 | 반영 방법 |
-| --- | --- |
-| `src/*.ts` | 터미널에 `npm run watch` 를 띄워두고, 개발 호스트 창에서 `Ctrl+R` (`개발자: 창 다시 로드`) |
-| `media/*` | 컴파일 불필요. 패널을 닫았다 다시 열면 된다 (`Code Trail: 패널 열기`). 옛 파일이 계속 잡히면 창 다시 로드 |
-| `package.json` 의 명령·설정 기여 | 개발 호스트 창을 닫고 `F5` 를 다시 누른다 |
-
-웹뷰 쪽 오류는 개발 호스트 창에서 `개발자: 웹뷰 개발자 도구 열기` 로 본다.
-전용 DevTools가 열려 `main.js` 에 브레이크포인트를 걸 수 있다.
-`src/*.ts` 쪽 브레이크포인트는 원래 창에서 그대로 걸린다.
-
-CLI로도 같은 창을 띄울 수 있다:
-
-```
-code --extensionDevelopmentPath=<이 폴더의 절대경로> <탐색할_프로젝트_폴더>
-```
-
-### 어느 쪽을 쓰나
-
-**웹뷰 렌더링·클릭 로직은 `preview.html`, 언어 서버 연동·명령·메시지 왕복은 `F5`.**
-이 확장의 핵심은 C++·C#·Go 심볼 해석이므로, `F5` 로 확인할 때는
-해당 언어 확장이 설치된 실제 프로젝트 폴더를 개발 호스트 창에서 열어야 의미가 있다.
-
-## 테스트
+### 테스트
 
 ```
 npm test                      # 브라우저가 필요 없는 것 전부
-npm run test:ui               # 웹뷰 렌더링·상호작용 (playwright 필요)
-npm run test:e2e              # 독립 프로그램 전체 (playwright 필요)
+npm run test:e2e              # 진짜 서버 + 진짜 브라우저 (playwright 필요)
 npm run test:lsp              # 실제 언어 서버 스모크. 설치된 언어만 돌고 나머지는 건너뛴다
+npm run test:pack             # 배포물에 들어갈 파일 목록 검사
 npm run test:perf             # 1,000개 노드 성능 측정 (playwright 있으면 화면까지)
 ```
 
 `npm test` 가 도는 것:
 
 ```
-node test/tokenizer.test.js          # 토크나이저 (주석/문자열 오탐, 줄·컬럼 매핑)
-node test/shell.test.js              # panel.ts 셸 ↔ preview.html 동기화
 node --test "test/unit/*.test.mjs"          # 도메인·프로토콜·심볼 선택·보드 배치·CLI 인자
-node --test "test/integration/*.test.mjs"   # 진짜 로컬 서버 + 가짜 언어 서버 + 외부 에디터
+node --test "test/integration/*.test.mjs"   # 진짜 로컬 서버 + 가짜 언어 서버 + 외부 에디터 + 경계
 ```
+
+`test/fake-lsp/server.mjs` 는 진짜 clangd·gopls 없이 LSP 계층을 시험하기 위한 가짜 서버다.
+정상 동작만이 아니라 **실제 언어 서버가 하는 나쁜 일들**(한 줄짜리 range, stdout 오염,
+요청 중 crash, 뒤늦은 capability 등록, 프로젝트 밖으로 가는 정의)을 시나리오로 재현한다.
+
+`test/integration/resilience.test.mjs` 는 기능이 아니라 **경계**를 본다 —
+인증, 명령 스키마, 다른 origin, 토큰이 남는 자리, 오류에 새는 것, 여러 탭의 revision 충돌,
+`commandId` 멱등 재전송, 저장 중 강제 종료, 언어 서버 연속 crash, 종료 중 새 명령.
 
 `test/integration/editor.test.mjs` 는 외부 에디터를 **셸 없이** 띄우는지 본다.
 파일 이름에 `; touch pwned &&` 를 넣어 두고, 그것이 인자 하나로만 가는지와
@@ -365,54 +329,55 @@ node --test "test/integration/*.test.mjs"   # 진짜 로컬 서버 + 가짜 언�
 `test/perf/board-1000.mjs` 는 언어 서버를 1,000번 부르는 대신 저장 파일을 직접 만들어
 넣고 **불러오기와 그리기**만 잰다. 결과와 병목은 [`docs/perf-1000-nodes.md`](docs/perf-1000-nodes.md) 에 있다.
 
-`test/fake-lsp/server.mjs` 는 진짜 clangd·gopls 없이 LSP 계층을 시험하기 위한 가짜 서버다.
-정상 동작만이 아니라 **실제 언어 서버가 하는 나쁜 일들**(한 줄짜리 range, stdout 오염,
-요청 중 crash, 뒤늦은 capability 등록)을 시나리오로 재현한다.
-
 `test/unit` 과 `test/integration` 은 빌드된 `packages/*/dist` 를 불러온다.
 먼저 `npm run build` 를 돌린다.
 
-`shell.test.js` 는 `panel.ts` 의 HTML 셸과 `test/preview.html` 을 비교한다.
-id 집합이 양쪽에 똑같이 있는지, `main.js` 가 `getElementById` 로 찾는 것이 양쪽에 다 있는지,
-`panel.ts` 가 `asWebviewUri` 로 거는 `media/` 파일을 `preview.html` 도 로드하는지 셋을 본다.
-한쪽만 고치면 여기서 걸린다.
-
-UI 테스트는 `playwright` 를 쓴다 (`npm install` 이 함께 받는다). 브라우저는 컨테이너의 프리설치 크로미움을 기본으로 찾는다.
-`CT_CHROME` 환경변수로 실행 파일을 직접 지정할 수 있다.
+브라우저를 쓰는 것(`test:e2e`, `test:perf`)은 `playwright` 를 쓴다 (`npm install` 이 함께 받는다).
+컨테이너의 프리설치 크로미움을 기본으로 찾고, 경로가 다르면 `CT_CHROME` 으로 넘긴다.
 
 ## 구조
 
-```
-src/symbols.ts   언어 서버 호출 → 심볼의 전체 본문 범위와 코드 추출
-src/trail.ts     트레일 트리 모델, 재귀 감지, Markdown/JSON 직렬화
-src/panel.ts     웹뷰 패널, 확장↔웹뷰 메시지 처리
-src/extension.ts 명령 등록
-media/tokenizer.js  하이라이팅 + 식별자에 (줄, 컬럼) 심기
-media/main.js       트리 렌더링, 클릭 처리, 툴바
-media/style.css     VS Code 테마 변수 기반 스타일
-```
-
-`packages/` 아래는 **VS Code 없이 도는 독립 프로그램으로 옮기는 중인 코드**다.
-확장 동작에는 영향을 주지 않는다.
+npm workspaces 다. 배포하는 것은 `packages/cli` 의 `code-trail` 이다.
 
 ```
-npm run build
-npm run start -- <프로젝트 경로>
+packages/shared/src/domain/     ResolvedSymbol, Trail, 설정, 저장 스키마, Markdown, UUID
+packages/shared/src/protocol/   명령·이벤트 타입과 Zod 런타임 스키마
+
+packages/server/src/security/   토큰, Host·Origin 검사, 경로 경계, CSP
+packages/server/src/persistence/ .code-trail/ 저장소, 원자적 쓰기, debounce, 잠금 파일
+packages/server/src/workspace/  파일 트리, 이름 검색, 문서 권한(documentId), 파일 감시
+packages/server/src/trails/     트레일 정본과 mutation queue
+packages/server/src/http/       읽기 전용 API
+packages/server/src/ws/         명령 수신과 이벤트 방송
+packages/server/src/lsp/        JSON-RPC 전송, 문서 동기화, 상태 머신·재시작
+packages/server/src/lsp/adapters/  언어별 탐지·진단. 언어를 아는 유일한 자리다
+packages/server/src/symbols/    평탄화, 심볼 선택, 본문 범위, 선언만 판정
+packages/server/src/editor/     외부 에디터 탐지와 실행
+
+packages/web/src/api/           토큰 부트스트랩, HTTP, WebSocket, 명령 보내기
+packages/web/src/tokenizer/     하이라이팅 + 식별자에 좌표 심기 (순수 함수)
+packages/web/src/features/      파일 탐색기, 검색, 코드 화면, 트레일 화면, 진단 화면
+packages/cli/src/               인자 해석, 서버 재사용 감지, 브라우저 열기
 ```
 
-로 띄우면 파일을 찾아 읽고, 함수 위에서 `Ctrl+Alt+T` 로 트레일을 시작하고,
-식별자를 클릭해 정의를 자식 노드로 펼치고, `⬚ 보드` 로 노드를 자유롭게 늘어놓고,
-`↗` 로 외부 에디터에서 열 수 있다. clangd·gopls·rust-analyzer·
-roslyn-language-server 를 설치해 두면 자동으로 찾고, `진단` 탭이 어느 실행 파일을
-어떻게 찾았는지·프로세스와 capability 상태가 어떤지·최근 로그가 무엇인지 보여준다.
-아직 남은 것은 **전체 보안·회복성 검증**(단계 10)과 **확장 제거**(단계 11)다.
-계획은 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md),
-확장 마지막 상태의 기준선은 [`docs/baseline.md`](docs/baseline.md) 에 있다.
+트레일의 정본은 **서버**에 있다. 화면은 명령을 보내고 이벤트를 받아서만 바뀐다 —
+먼저 그려두면 서버가 거절했을 때(오래된 revision, 권한 없는 문서) 두 상태가 어긋난다.
 
-식별자 클릭 좌표는 토크나이저가 심어둔 원본 파일 기준 `(줄, 컬럼)`이고,
-그 좌표를 그대로 `executeDefinitionProvider`에 넘긴다. 즉 정확도는 토크나이저가 아니라
+식별자 클릭 좌표는 토크나이저가 심어둔 원본 파일 기준 `(줄, 컬럼)` 이고,
+그 좌표를 그대로 `textDocument/definition` 에 넘긴다. 즉 정확도는 토크나이저가 아니라
 언어 서버가 책임진다. 토크나이저는 "클릭 후보를 고르고 주석·문자열을 제외하는" 일만 한다.
+
+## 지난 이야기
+
+Code Trail 은 VS Code 확장으로 시작했다. 1.0.0 에서 확장을 걷어내고
+브라우저에서 도는 독립 프로그램이 되었다. 전환 계획과 그 근거는
+[`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md),
+확장 마지막 상태의 기준선 기록은 [`docs/baseline.md`](docs/baseline.md) 에 있다.
+확장 시절 코드는 태그 `v0.6.0-vscode-extension` 에 남아 있다.
+
+**확장이 만들던 JSON 을 읽거나 가져오는 기능은 없다.** 저장 형식이 다르고,
+반쯤 맞는 변환기는 맞는지 아닌지 알 수 없는 데이터를 만든다.
 
 ## 라이선스
 
-MIT
+MIT. 외부 의존성의 라이선스 고지는 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) 에 있다.

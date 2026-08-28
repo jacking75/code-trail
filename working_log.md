@@ -1,5 +1,15 @@
 # 작업 로그
 
+## 2026-08-28 23:37 KST — 독립 프로그램 전환 단계 10·11·12와 최종 인수 체크
+
+- 단계 10: 경계를 목록으로 훑는 `test/integration/resilience.test.mjs` 를 만들었다. 라우트 목록 기반 인증 검사, 모든 명령의 스키마 검증, 다른 origin 거부, 토큰이 남는 자리, 오류에 새는 것, 여러 탭 revision 충돌, commandId 멱등 재전송, 저장 중 강제 종료, 언어 서버 연속 crash, 종료 중 새 명령.
+- 고친 것 둘: 뜨자마자 죽는 언어 서버가 매번 `initialize` 에 성공해 자동 재시작이 영원히 멈추지 않던 것(이제 요청이 응답했거나 일정 시간 버텼을 때만 backoff 를 되돌린다), 그리고 종료 절차 중에도 새 연결과 명령을 받던 것(`SERVER_STOPPING`).
+- 단계 11: VS Code 확장을 지웠다. `src/`, `media/`, 확장 테스트, `.vscode/launch.json`·`tasks.json`, `.vscodeignore`, `.vsix`, 매니페스트 기여 항목, `@types/vscode`. 확장 설정 기본값은 fixture 로 굳혀 대조 검사를 살렸다.
+- README·CHANGELOG·`docs/terms.*`·CLAUDE.md·AGENTS.md 를 독립 프로그램 기준으로 다시 썼다. terms.svg 는 브라우저로 열어 툴바가 겹치지 않는지 눈으로 확인했다.
+- 단계 12: 배포 단위를 네 패키지(`code-trail` + `@code-trail/{server,shared,web}`) 1.0.0 으로 묶었다. `npm run test:pack` 이 배포물 목록을, `npm run test:install` 이 tarball 을 깨끗한 폴더에 설치해 서버까지 띄워 확인한다. CI 는 3 OS × x64·arm64 로 구성했다.
+- 모두 통과: 단위 150 + 통합 105 + E2E 72 + pack + install + LSP 스모크.
+- **못 한 것 셋**: macOS·Linux 에서의 설치 확인, 실제 언어 서버 네 개로 하는 스모크, npm 배포. 앞의 둘은 이 기계에 환경이 없고(CI 가 대신 돌린다), 배포는 되돌릴 수 없어 저장소 주인이 정할 일이라 남겨 두었다. 구현서 0.13·0.14 에 줄마다 이유를 적어 두었다.
+
 ## 2026-08-28 22:14 KST — 독립 프로그램 전환 단계 8·9 완료
 
 - 보드 모드를 붙였다. 모든 노드를 `#root` 바로 아래에 평평하게 놓고 부모 오른쪽 → 자식 왼쪽 곡선으로 잇는다. 자식은 DOM 이 아니라 모델에서 찾는다(`features/trail/board.ts`).

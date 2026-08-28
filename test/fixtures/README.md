@@ -9,7 +9,8 @@
 | `resolved-symbols.json` | 확장의 `ResolvedSymbol` 6종 | `test/unit/shared-independence.test.mjs` |
 | `trail-legacy.json` | 확장의 `version: 1` 저장 형식 | 새 스키마와의 비교용 (읽지 않는다) |
 | `webview-messages.json` | 확장↔웹뷰 메시지와 각각의 대체 경로 | `test/unit/shared-independence.test.mjs` |
-| `preview-state.json` | `test/preview.html` 에 넣는 `setState` | `test/screenshot.js` |
+| `preview-state.json` | 확장 웹뷰에 넣던 `setState` | 기록용 (읽지 않는다) |
+| `extension-settings.json` | 확장의 `codeTrail.*` 기본값 | `test/unit/settings.test.mjs` |
 
 **이 파일들은 과거의 기록이다. 새 기능에 맞춰 고치지 않는다.**
 새 형식의 샘플이 필요하면 `test/unit/helpers.mjs` 의 `makeSymbol` · `makeTrail` 을 쓴다.

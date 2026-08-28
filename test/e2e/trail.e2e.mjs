@@ -95,6 +95,25 @@ const browser = await chromium.launch({
 
 try {
     const page = await browser.newPage({ viewport: { width: 1500, height: 950 } });
+    /*
+     * 열린 WebSocket 을 붙들어 둔다.
+     *
+     * 재연결을 시험하려면 연결을 끊어야 하는데, 브라우저를 오프라인으로 만들어도
+     * 이미 열린 소켓은 안 끊긴다. 서버를 닫으면 포트와 토큰이 바뀌어 재연결이
+     * 아니라 새 접속이 된다. 그래서 화면이 만든 소켓을 그대로 잡아 둔다 —
+     * **테스트 쪽 기교이고 제품 코드에는 손대지 않는다.**
+     */
+    await page.addInitScript(() => {
+        const Native = window.WebSocket;
+        window.__ctSockets = [];
+        class Tracked extends Native {
+            constructor(...args) {
+                super(...args);
+                window.__ctSockets.push(this);
+            }
+        }
+        window.WebSocket = Tracked;
+    });
     const errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));
     page.on('console', (m) => {
@@ -521,6 +540,36 @@ try {
         { timeout: 8000 },
     );
     check('노드가 지워졌다', (await page.locator('#root > .node').count()) === 1);
+
+    console.log(`${NL}[WebSocket 재연결]`);
+    const beforeDrop = await page.locator('#root > .node').count();
+    const socketsBefore = await page.evaluate(() => window.__ctSockets.length);
+    // 서버는 그대로 두고 연결만 끊는다.
+    await page.evaluate(() => {
+        window.__ctSockets[window.__ctSockets.length - 1].close();
+    });
+    await page.waitForFunction(
+        () => document.querySelector('.conn')?.textContent !== '연결됨',
+        undefined,
+        { timeout: 15000 },
+    );
+    check('끊기면 연결 상태가 바뀐다', true);
+    await page.waitForFunction(
+        () => document.querySelector('.conn')?.textContent === '연결됨',
+        undefined,
+        { timeout: 30000 },
+    );
+    check(
+        '스스로 다시 붙는다',
+        (await page.evaluate(() => window.__ctSockets.length)) > socketsBefore,
+    );
+    // 다시 붙으면 서버가 snapshot 을 새로 보낸다. 그 사이에 놓친 것이 있어도 맞춰진다.
+    await page.waitForFunction(
+        (count) => document.querySelectorAll('#root > .node').length === count,
+        beforeDrop,
+        { timeout: 15000 },
+    );
+    check('다시 붙으면 snapshot 으로 트리가 맞춰진다', (await page.locator('#root > .node').count()) === beforeDrop);
 
     console.log(`${NL}[진단 화면]`);
     await page.locator('.pane-tabs .tab', { hasText: '진단' }).click();

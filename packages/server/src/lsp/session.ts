@@ -33,6 +33,14 @@ import {
 
 export const RESTART_DELAYS_MS = [1_000, 2_000, 5_000] as const;
 
+/**
+ * 뜬 뒤 이만큼 버티면 "쓸 만하다" 고 본다.
+ *
+ * 이 값이 없으면 뜨자마자 죽는 서버가 매번 initialize 에 성공하면서 재시도
+ * 횟수를 되돌려, 자동 재시작이 영원히 멈추지 않는다.
+ */
+export const STABLE_AFTER_MS = 10_000;
+
 export interface LspSessionOptions {
     language: SupportedLanguage;
     command: SpawnCommand;
@@ -45,6 +53,8 @@ export interface LspSessionOptions {
     /** 테스트에서 짧게 줄인다. */
     requestTimeoutMs?: number;
     restartDelaysMs?: readonly number[];
+    /** 뜬 뒤 이만큼 살아 있으면 재시도 횟수를 되돌린다. 테스트에서 줄인다. */
+    stableAfterMs?: number;
     /** `initialize` 에 실어 보낼 언어별 옵션. */
     initializationOptions?: unknown;
 }
@@ -59,6 +69,8 @@ export class LspSession {
     /** 이 세션이 살아 있는 동안 다시 띄운 총 횟수. 진단 화면이 쓴다. */
     private restartCount = 0;
     private restartTimer: NodeJS.Timeout | undefined;
+    /** 뜬 뒤 이만큼 살아 있으면 backoff 를 되돌린다. */
+    private stableTimer: NodeJS.Timeout | undefined;
     private startPromise: Promise<void> | undefined;
     private disposed = false;
     private serverName: string | null = null;
@@ -71,10 +83,31 @@ export class LspSession {
 
     private readonly logger: Logger;
     private readonly restartDelays: readonly number[];
+    private readonly stableAfterMs: number;
 
     constructor(private readonly options: LspSessionOptions) {
         this.logger = options.logger.child(`lsp:${options.language}`);
         this.restartDelays = options.restartDelaysMs ?? RESTART_DELAYS_MS;
+        this.stableAfterMs = options.stableAfterMs ?? STABLE_AFTER_MS;
+    }
+
+    /**
+     * "이 서버는 쓸 만하다" 고 인정하고 재시도 횟수를 되돌린다.
+     *
+     * `initialize` 에 성공했다는 것만으로는 부족하다. 뜨자마자 죽는 서버는
+     * 매번 initialize 에 성공하므로, 성공할 때마다 횟수를 되돌리면 영원히
+     * 다시 띄운다. 요청 하나가 실제로 응답했거나, 뜬 채로 일정 시간을 버텼을
+     * 때만 인정한다.
+     */
+    private markStable(): void {
+        this.backoffAttempt = 0;
+    }
+
+    private clearStableTimer(): void {
+        if (this.stableTimer) {
+            clearTimeout(this.stableTimer);
+            this.stableTimer = undefined;
+        }
     }
 
     get language(): SupportedLanguage {
@@ -212,8 +245,18 @@ export class LspSession {
             this.initializeMs = Date.now() - startedAt;
             this.serverName = result.serverName;
             this.lastError = null;
-            // 뜨는 데 성공했다. 다음 사고는 다시 1초부터 센다.
-            this.backoffAttempt = 0;
+            // 여기서 backoffAttempt 를 되돌리지 않는다. 뜨자마자 죽는 서버는
+            // 매번 여기까지 오므로, 그러면 자동 재시작이 영원히 멈추지 않는다.
+            this.clearStableTimer();
+            this.stableTimer = setTimeout(() => {
+                this.stableTimer = undefined;
+                if (this.state === 'ready' || this.state === 'degraded') {
+                    this.markStable();
+                }
+            }, this.stableAfterMs);
+            if (typeof this.stableTimer.unref === 'function') {
+                this.stableTimer.unref();
+            }
             // 필수 capability 가 없으면 실행 중이어도 기능이 줄어든다(구현서 11.3).
             const usable = result.capabilities.definition || result.capabilities.documentSymbol;
             this.setState(usable ? 'ready' : 'degraded');
@@ -281,6 +324,7 @@ export class LspSession {
         }
         const tail = this.client?.stderr.tail(3).join(' ') ?? '';
         this.lastExit = { code, signal, at: new Date().toISOString() };
+        this.clearStableTimer();
         this.client?.dispose();
         this.client = undefined;
         this.documents?.forgetAll();
@@ -375,6 +419,8 @@ export class LspSession {
                 at: new Date().toISOString(),
             };
             this.verifiedMethods.add(method);
+            // 요청 하나가 실제로 응답했다. 이 서버는 쓸 만하다.
+            this.markStable();
             return result;
         } catch (error) {
             // 요청 도중 서버가 죽으면 JSON-RPC 연결 오류가 온다. 그대로 위로
@@ -399,6 +445,7 @@ export class LspSession {
     async stop(): Promise<void> {
         this.disposed = true;
         this.clearRestartTimer();
+        this.clearStableTimer();
         const client = this.client;
         this.client = undefined;
         this.documents = undefined;

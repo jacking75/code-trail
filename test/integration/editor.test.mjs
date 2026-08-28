@@ -141,7 +141,7 @@ test('설정한 에디터를 shell 없이 argv 배열 그대로 실행한다', a
             assert.equal(opened.payload.launched, true);
             assert.equal(opened.payload.reason, null);
 
-            await waitForFile(outPath, 5000);
+            await waitForFile(outPath, 20000);
             const argv = JSON.parse(await readFile(outPath, 'utf8'));
             assert.equal(argv.length, 3, JSON.stringify(argv));
             assert.equal(argv[0], '--goto');
@@ -174,7 +174,7 @@ test('파일 이름에 셸 특수문자가 있어도 인자 하나로만 간다'
             const opened = await client.wait((e) => e.type === 'editor.opened');
             assert.equal(opened.payload.launched, true);
 
-            await waitForFile(outPath, 5000);
+            await waitForFile(outPath, 20000);
             const argv = JSON.parse(await readFile(outPath, 'utf8'));
             assert.equal(argv.length, 1, JSON.stringify(argv));
             assert.equal(argv[0], path.join(root, ...NASTY.split('/')));

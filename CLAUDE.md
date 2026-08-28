@@ -1,6 +1,10 @@
-# Code Tail
-VS Code 확장. 함수 본문을 웹뷰 패널에 인라인으로 펼치고, 코드 안의 식별자를 클릭하면
-그 정의가 자식 노드로 중첩되며 쌓이는 코드 탐색 트리.
+# Code Trail
+
+`code-trail <프로젝트 경로>` 로 실행하는 프로그램. 로컬 서버가 뜨고 브라우저가 열린다.
+함수 본문을 웹 화면에 인라인으로 펼치고, 코드 안의 식별자를 클릭하면 그 정의가
+자식 노드로 중첩되며 쌓이는 코드 탐색 트리다.
+
+**편집기가 아니다.** 코드는 읽기만 하고, 고칠 때는 외부 에디터를 연다.
 
 ## 용어
 
@@ -8,12 +12,16 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 코드 식별자는 영어(오른쪽 칸), 사람에게 보이는 글은 한글(왼쪽 칸)이다.
 
 각각이 화면 어디를 가리키는지는 [`docs/terms.md`](docs/terms.md) 에 그림으로 있다.
-**패널 UI를 바꾸면 `docs/terms.svg` 도 같이 고친다.**
+**트레일 패널 UI를 바꾸면 `docs/terms.svg` 도 같이 고친다.**
 
 | 용어 | 코드 / DOM | 뜻 |
 | --- | --- | --- |
-| **트레일 패널** (줄여서 **패널**) | `TrailPanel`, viewType `codeTrail.panel` | 함수 본문이 펼쳐지는 웹뷰 창 **전체**. "뷰어", "윈도우", "미리보기 창"이라 부르지 않는다 |
-| **트레일** | `Trail` | 패널에 담긴 탐색 트리 전체. 저장·불러오기·Markdown 내보내기의 단위 |
+| **앱 바** | `.app-bar` | 맨 위 줄. 프로젝트 이름 · 트레일 고르기 · 연결 상태 |
+| **파일 탐색기** | `FileTree`·`FileSearch`, `.sidebar` | 왼쪽의 프로젝트 파일 목록과 이름 검색 |
+| **코드 화면** | `CodeView`, `.code-view` | Monaco 로 파일 전체를 보여주는 읽기 전용 탭. 여기서 `Ctrl+Alt+T` 를 누른다 |
+| **트레일 패널** (줄여서 **패널**) | `TrailView`, `.trail` | 함수 본문이 펼쳐지는 탭 **전체**. "뷰어", "윈도우", "미리보기 창"이라 부르지 않는다 |
+| **진단 화면** | `DiagnosticsView`, `#diagnostics` | 언어 서버 상태·점검 결과·로그와 외부 에디터 설정을 보여주는 탭 |
+| **트레일** | `Trail` | 패널에 담긴 탐색 트리 전체. 자동 저장과 Markdown 내보내기의 단위 |
 | **루트** | `Trail.roots` | `Ctrl+Alt+T` 로 시작한 최상위 노드. 여러 개 있을 수 있다 |
 | **노드** | `TrailNode`, `.node` | 심볼 하나가 차지하는 덩어리 = 헤더 + 진입 링크 + 본문 + 자식. "카드", "박스"가 아니다 |
 | **헤더** | `.hd` | 노드의 첫 줄. `종류 · 이름 · 시그니처 · 경로:줄 · 배지 · 버튼`. 클릭하면 접힌다 |
@@ -22,22 +30,14 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 | **호출부** | `origin.line` / `origin.char`, `.clickable.visited` | 부모 본문에서 클릭했던 그 지점. 펼쳐본 뒤에는 ①②③ 순번이 붙는다 |
 | **순번** | `.idx`(헤더), `data-idx`(호출부) | 형제 노드 번호. 부모 호출부의 ①과 자식 노드의 ①이 한 짝이다 |
 | **배지** | `.badge` | 헤더 오른쪽의 `재귀` · `선언만` · `근사` |
-| **브레드크럼** | `#breadcrumb` | 패널 맨 위의 현재 경로 줄 |
-| **툴바** | `#toolbar` | 전체 펼치기·접기, 정렬, 필터, 내보내기, 지우기 버튼 줄 |
-| **트리 모드 / 보드 모드** | `#root.board`, `boardMode` | 기본은 **트리 모드**(자식이 부모 안에 중첩). **보드 모드**는 노드를 캔버스에 자유 배치하고 헤더를 끌어 옮긴다 |
+| **브레드크럼** | `#breadcrumb` | 패널 위쪽의 현재 경로 줄 |
+| **툴바** | `#toolbar` | 전체 펼치기·접기, 정렬, 보드 전환, 필터, 내보내기, 지우기 버튼 줄 |
+| **트리 모드 / 보드 모드** | `#root.board`, `Trail.mode` | 기본은 **트리 모드**(자식이 부모 안에 중첩). **보드 모드**는 노드를 캔버스에 자유 배치하고 헤더를 끌어 옮긴다 |
 | **연결선** | `.board-lines path` | 보드 모드에서 부모 오른쪽 → 자식 왼쪽을 잇는 곡선. 트리 모드의 가이드선에 해당한다 |
+| **폭 맞춤** | `useFitToWidth`, `--ct-code-font-size` | 가장 빠듯한 노드에 맞춰 **코드 본문** 글자만 줄이는 것. 헤더는 안 줄인다 |
 | **심볼** | `ResolvedSymbol` | 언어 서버가 준 정의 하나 + 본문 코드 + 좌표. 노드가 감싸고 있는 알맹이 |
 | **클릭 후보** | `.tok.clickable` | 토크나이저가 좌표를 심어둔 식별자 span. 주석·문자열 안의 단어는 후보가 아니다 |
-
-독립 프로그램에만 있는 화면은 아래 이름으로 부른다. 확장 패널에는 없던 것이라
-위 표와 `docs/terms.svg` 에는 안 나온다.
-
-| 용어 | 코드 / DOM | 뜻 |
-| --- | --- | --- |
-| **파일 탐색기** | `FileTree`, `.sidebar` | 왼쪽의 프로젝트 파일 목록과 이름 검색 |
-| **코드 화면** | `CodeView`, `.code-view` | Monaco 로 파일 전체를 보여주는 읽기 전용 탭. 여기서 `Ctrl+Alt+T` 를 누른다 |
-| **진단 화면** | `DiagnosticsView`, `#diagnostics` | 언어 서버 상태·점검 결과·로그와 외부 에디터 설정을 보여주는 탭 |
-| **폭 맞춤** | `useFitToWidth`, `--ct-code-font-size` | 가장 빠듯한 노드에 맞춰 **코드 본문** 글자만 줄이는 것. 헤더는 안 줄인다 |
+| **문서 권한** | `DocumentGrant`, `documentId` | 서버가 발급한 불투명한 파일 ID. 브라우저는 경로를 모르고 이것만 들고 있다 |
 
 동사는 이렇게 쓴다.
 
@@ -48,21 +48,17 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 
 ## 지금 무엇을 하고 있나
 
-**독립 프로그램으로 전환하는 중이다.** 계획은 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md)
-이고 그 문서 0장의 체크리스트가 진행의 정본이다. 단계 0~9가 끝났다.
-**다음은 단계 10(전체 보안과 회복성 검증)이다.**
+**독립 프로그램 전환이 끝났다.** 계획서는 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md)
+이고 그 문서 0장의 체크리스트가 진행의 정본이다. 단계 0~12와 최종 인수 체크가 끝났고,
+확정하지 못한 줄에는 그 자리에 이유가 적혀 있다.
 
-- `src/`, `media/` — **지금 동작하는 VS Code 확장.** 단계 10까지 그대로 둔다. 손대면 기준선이 흔들린다.
-- `packages/` — **새 독립 프로그램.** 파일을 찾아 읽고, `Ctrl+Alt+T` 로 트레일을 시작하고,
-  식별자를 클릭해 정의를 자식 노드로 펼치고, 보드 모드로 늘어놓고, 외부 에디터로 열고,
-  언어 서버 상태를 진단 화면에서 보는 것까지 브라우저에서 된다.
+- `packages/` 가 전부다. VS Code 확장 소스(`src/`, `media/`)와 `.vsix` 흐름은 1.0.0 에서 지웠다.
+  확장 마지막 상태는 태그 `v0.6.0-vscode-extension` 이고 기준선 기록은 [`docs/baseline.md`](docs/baseline.md) 다.
 - 언어 서버는 어댑터가 찾는다(설정 → PATH → 플랫폼별·GOBIN·rustup). **자동으로 내려받지 않는다.**
-- 아직 없는 것: **전체 보안·회복성 검증**(단계 10), **확장 제거**(단계 11).
 - **실제 언어 서버로 검증하지 못한 것이 있다.** 이 기계에 clangd·gopls·roslyn 이 없고
-  rust-analyzer 는 rustup proxy 만 있다. `npm run test:lsp` 이 fixture 를 들고 있으니
-  해당 서버가 있는 기계에서 돌리면 확인된다. 구현서 0.7 에 어느 줄인지 표시해 뒀다.
-- 확장 마지막 상태는 tag `v0.6.0-vscode-extension` 이고 기준선 기록은 [`docs/baseline.md`](docs/baseline.md) 다.
-- 확장에서 되던 동작을 새 프로그램에서 무엇으로 확인할지는 [`docs/e2e-port-checklist.md`](docs/e2e-port-checklist.md) 에 있다.
+  rust-analyzer 는 rustup proxy 만 있다. `npm run test:pack` · `npm run test:install` 은
+  Windows 에서만 실제로 돌렸다. 어느 줄이 그런지는 구현서 0.7 · 0.13 · 0.14 에 표시해 뒀다.
+- 확장에서 되던 동작이 새 프로그램의 무엇으로 옮겨졌는지는 [`docs/e2e-port-checklist.md`](docs/e2e-port-checklist.md) 에 있다.
 
 지금 되는 것을 눈으로 보려면:
 
@@ -76,72 +72,75 @@ npm run start -- <프로젝트 경로>
 ```
 npm install
 
-# 새 독립 프로그램 (packages/)
 npm run build                   # shared → server → web → cli
 npm run start -- <경로>         # 서버를 띄우고 브라우저를 연다
 npm run dev                     # Vite 개발 서버 (웹만 고칠 때)
-npm run typecheck               # 확장 + 모든 workspace
+npm run typecheck               # 모든 workspace
 npm test                        # test/unit + test/integration (브라우저 불필요)
 npm run test:e2e                # 진짜 서버 + 진짜 브라우저 (playwright 필요)
 npm run test:lsp                # 실제 언어 서버 스모크. 설치된 언어만 돈다
+npm run test:pack               # 배포물 파일 목록 검사 (npm pack --dry-run)
+npm run test:install            # tarball 을 깨끗한 폴더에 설치하고 띄워 본다
 npm run test:perf               # 1,000개 노드 성능 측정 → docs/perf-1000-nodes.md
-
-# 지금 동작하는 확장 (src/, media/)
-npm run compile                 # tsc → out/
-npx @vscode/vsce package        # → code-trail-<version>.vsix
-npm run test:ui                 # 웹뷰 (playwright 필요)
-npm run screenshot              # docs/baseline/tree-mode.png, board-mode.png 다시 만들기
 ```
 
 `npm test` 는 빌드된 `packages/*/dist` 를 불러온다. 먼저 `npm run build` 를 돌린다.
-브라우저를 쓰는 것(`test:e2e`, `test:ui`, `screenshot`)은 컨테이너의 프리설치 Chromium을 기본으로 찾는다.
+브라우저를 쓰는 것(`test:e2e`, `test:perf`)은 컨테이너의 프리설치 Chromium을 기본으로 찾는다.
 경로가 다르면 `CT_CHROME=/path/to/chrome` 로 넘긴다.
 
 ## 지켜야 할 것
 
 **심볼 해석은 전부 언어 서버가 한다.** 자체 파서를 만들지 않는다.
+쓰는 요청은 넷뿐이다.
 
-| 하는 일 | 확장 (`src/`) | 독립 프로그램 (`packages/server/src/`) |
-| --- | --- | --- |
-| 식별자 정의 | `executeDefinitionProvider` | `textDocument/definition` |
-| 심볼과 본문 범위 | `executeDocumentSymbolProvider` | `textDocument/documentSymbol` |
-| 구현 찾기 | `executeImplementationProvider` | `textDocument/implementation` |
-| 정의 폴백 | `executeTypeDefinitionProvider` | `textDocument/typeDefinition` |
+```
+textDocument/definition        식별자의 정의
+textDocument/documentSymbol    심볼 목록과 본문 범위
+textDocument/implementation    구현 찾기
+textDocument/typeDefinition    정의 폴백
+```
 
 **이 넷만 쓴다.** C++·C#·Go·Rust를 동시에 지원하는 유일한 방법이고, 언어별 분기를
-코드에 넣지 않는 이유다. 특히 `textDocument/references` 를 구현 찾기 폴백으로 쓰지 않는다 —
-참조에는 호출부가 섞여 있어서 "이 메서드를 부르는 함수"가 구현으로 붙는다.
+공통 계층에 넣지 않는 이유다. 특히 `textDocument/references` 를 구현 찾기 폴백으로 쓰지
+않는다 — 참조에는 호출부가 섞여 있어서 "이 메서드를 부르는 함수"가 구현으로 붙는다.
 `test/fake-lsp/server.mjs` 가 그 요청이 오면 stderr에 표시를 남기고 테스트가 그걸 잡는다.
 
-**`media/tokenizer.js` 는 하이라이팅과 "클릭 후보 고르기"만 담당한다.**
-정확도를 책임지지 않는다. 식별자 span에 원본 파일 기준 절대 좌표
-(`data-l` = 줄, `data-c` = 컬럼, 둘 다 0-based)를 심고, 그 좌표를 그대로
-언어 서버에 넘기는 것이 전부다. 여기에 타입 추론이나 스코프 해석을 넣지 않는다.
+**`packages/web/src/tokenizer/` 는 하이라이팅과 "클릭 후보 고르기"만 담당한다.**
+정확도를 책임지지 않는다. 식별자 토큰에 원본 파일 기준 절대 좌표
+(`line`, `char`, 둘 다 0-based UTF-16)를 심고, 그 좌표를 그대로 언어 서버에 넘기는 것이
+전부다. 여기에 타입 추론이나 스코프 해석을 넣지 않는다.
 단 주석·문자열 안의 단어는 클릭 대상에서 제외해야 한다 (테스트가 이걸 검증한다).
 
 **코드를 표시할 때 원본 문자열을 변형하지 않는다.**
 공통 들여쓰기 제거, 탭→스페이스 변환 모두 금지. 컬럼 좌표가 어긋난다.
 
-**`media/*.js` 는 컴파일하지 않는 브라우저용 평문 JS다.**
-TypeScript 문법, `import`/`export`, 옵셔널 체이닝 금지. 번들러 없다.
-웹뷰 CSP상 인라인 스크립트와 외부 CDN도 불가 — 새 리소스는 `media/` 에 두고
-`asWebviewUri` 로 참조한다.
+**트레일의 정본은 서버에 있다.** 화면은 명령을 보내고 이벤트를 받아서만 바뀐다 —
+낙관적으로 먼저 그려두면 서버가 거절했을 때(오래된 revision, 권한 없는 문서) 두 상태가
+어긋나고, 그 어긋남은 다음 명령의 `baseRevision` 을 타고 번진다.
+
+**화면 상태는 revision 을 올리지 않는다.** 접기(`trail.toggleNode`), 모드 전환,
+보드 좌표, 활성 노드는 트리 모양을 바꾸지 않는다. revision 을 올리면 노드를 하나 누른
+것만으로 그 순간 날아가던 구조 명령이 `STALE_REVISION` 으로 거절된다.
 
 **폭 맞춤은 코드 본문에만 건다.** `.code` 는 `--ct-code-font-size` 를 쓰고
-`main.js` 의 `applyFontSize` 가 이것만 덮어쓴다. 헤더 이름(`.name`)이 쓰는
-`--ct-font-size` 는 건드리지 않는다 — 헤더까지 작아지면 트리 구조가 안 읽힌다.
+`useFitToWidth` 가 이것만 덮어쓴다. 헤더 이름(`.name`)이 쓰는 `--ct-font-size` 는
+건드리지 않는다 — 헤더까지 작아지면 트리 구조가 안 읽힌다.
 새 UI를 넣을 때 `--ct-font-size` 를 "코드 폰트"로 오해하지 않는다.
 
 **부모-자식 관계는 "클릭한 코드가 어느 노드에 속했는가"로만 정해진다.**
 A 안에서 B, C를 클릭하면 둘 다 A의 형제 자식이다. 이 규칙을 깨지 않는다.
 보드 모드에서 노드를 아무 데나 끌어다 놓아도 이 관계는 바뀌지 않는다 — 화면 배치일 뿐이다.
-관계를 바꾸는 것은 `⇱`(새 루트로 떼어내기) 하나뿐이고, 그건 확장 쪽 `promoteToRoot` 가 한다.
+관계를 바꾸는 것은 `⇱`(새 루트로 떼어내기) 하나뿐이다.
 
 **보드 모드에서는 노드를 `#root` 바로 아래에 평평하게 늘어놓는다.**
 중첩된 채로 절대 배치를 하면 자식 좌표가 부모 기준이 되어 엉킨다.
-그래서 자식을 DOM 이 아니라 모델에서 찾는다 — 확장은 `nodes[id].children`(`childBoxes`),
-독립 프로그램은 `features/trail/board.ts` 의 `flattenTree`·`connectors` 다.
-어느 쪽도 DOM 순회로 되돌리지 않는다. 두 모드 모두에서 깨진다.
+그래서 자식을 DOM 이 아니라 모델에서 찾는다 — `features/trail/board.ts` 의
+`flattenTree`·`connectors` 다. DOM 순회로 되돌리지 않는다. 두 모드 모두에서 깨진다.
+
+**브라우저는 파일 경로를 모른다.** 서버가 발급한 불투명한 `documentId` 로만 문서를
+요청한다. 프로젝트 밖 파일(표준 라이브러리 헤더 등)은 언어 서버가 결과로 돌려줬을 때만
+권한을 얻고, 서버를 다시 띄우면 사라진다. 저장에서 불러온 노드에는 **프로젝트 안 파일만**
+권한을 다시 발급한다.
 
 **외부 에디터는 브라우저가 보낸 경로로 열지 않는다.** 브라우저는 `documentId` 만
 보내고 실제 경로는 서버가 문서 권한 목록에서 역조회한다. 실행은 `shell: false` 로
@@ -153,21 +152,14 @@ A 안에서 B, C를 클릭하면 둘 다 A의 형제 자식이다. 이 규칙을
 `documentSymbol` 과 `definition` 이 응답했다는 뜻이고, 그 확인은 `lsp.verify` 명령이
 사용자가 눌렀을 때만 돈다. 진단 화면을 여는 것만으로 네 언어 서버를 다 띄우지 않는다.
 
+**오류에 절대경로·코드 본문·환경 변수·토큰을 담지 않는다.** 브라우저는 신뢰 경계 밖이고,
+오류 메시지는 그 경계를 넘는 통로다. 실행 파일도 이름만 내보낸다.
+
+**언어 서버를 자동으로 내려받지 않는다.** 설치 명령은 진단 화면이 안내만 한다.
+
 ## 구조
 
-지금 동작하는 확장:
-
-```
-src/symbols.ts    언어 서버 호출 → ResolvedSymbol (본문 코드 + 좌표 + declarationOnly 등)
-src/trail.ts      트리 모델, 재귀 감지, Markdown/JSON 직렬화
-src/panel.ts      웹뷰 패널, 확장↔웹뷰 메시지 처리, HTML 셸
-src/extension.ts  명령 등록
-media/tokenizer.js  하이라이팅 + 식별자에 좌표 심기
-media/main.js       트리 렌더링, 클릭 처리, 툴바
-media/style.css     VS Code 테마 변수 기반 스타일
-```
-
-전환 중인 독립 프로그램 (npm workspaces):
+npm workspaces. 배포하는 것은 `packages/cli` 의 `code-trail` 이다.
 
 ```
 packages/shared/src/domain/     ResolvedSymbol, Trail, 설정, 저장 스키마, Markdown, UUID
@@ -186,30 +178,22 @@ packages/server/src/editor/     외부 에디터 탐지와 실행 (shell 없이,
 
 packages/web/src/api/           토큰 부트스트랩, HTTP, WebSocket, 명령 보내기
 packages/web/src/tokenizer/     하이라이팅 + 식별자에 좌표 심기 (순수 함수)
-packages/web/src/features/      파일 탐색기, 검색, Monaco 코드 화면, 트레일 화면, 진단 화면
+packages/web/src/features/      파일 탐색기, 검색, 코드 화면, 트레일 화면, 진단 화면
 packages/web/src/features/trail/board.ts  보드 배치 계산 (순수 함수. 브라우저 없이 테스트한다)
 packages/cli/src/               인자 해석, 서버 재사용 감지, 브라우저 열기
 
-test/unit/                      도메인·프로토콜·심볼 선택·CLI 인자 (node:test)
-test/integration/               진짜 서버 + 가짜 언어 서버 (node:test)
+test/unit/                      도메인·프로토콜·심볼 선택·보드 배치·CLI 인자 (node:test)
+test/integration/               진짜 서버 + 가짜 언어 서버 + 외부 에디터 + 경계 (node:test)
 test/e2e/                       진짜 브라우저까지 (playwright)
 test/fake-lsp/                  나쁜 언어 서버를 흉내내는 stdio fixture
 test/smoke/                     실제 언어 서버 스모크 (설치된 언어만)
+test/pack/                      배포물 파일 목록과 설치 스모크
 test/perf/                      1,000개 노드 성능 측정 (결과는 docs/perf-1000-nodes.md)
-test/fixtures/                  단계 0에서 굳힌 확장 시절 데이터
+test/fixtures/                  단계 0에서 굳힌 확장 시절 데이터. **고치지 않는다**
 ```
 
-`packages/shared` 는 파일 시스템·네트워크·DOM·`vscode` 어디에도 의존하지 않는다.
+`packages/shared` 는 파일 시스템·네트워크·DOM 어디에도 의존하지 않는다.
 `test/unit/shared-independence.test.mjs` 가 이걸 검사한다.
-
-메시지는 `panel.ts` 의 `onMessage`(웹뷰→확장)와 `main.js` 의
-`window.addEventListener('message')`(확장→웹뷰) 두 곳에 한 쌍으로 추가한다.
-
-`test/preview.html` 은 `main.js` 를 브라우저에서 그대로 띄우기 위한 하네스다.
-`panel.ts` 의 툴바 HTML을 바꾸면 여기도 같이 고쳐야 한다 (안 그러면 `main.js` 가
-`getElementById` 에서 null을 잡고 죽는다). 이 쌍이 어긋났는지는
-`node test/shell.test.js` 가 잡아준다 — id 집합, `getElementById` 대상,
-`media/` 리소스 로드 여부를 셋 다 비교한다.
 
 ## 바꾸면 같이 고칠 것
 
@@ -217,31 +201,30 @@ test/fixtures/                  단계 0에서 굳힌 확장 시절 데이터
 
 | 고친 곳 | 같이 고칠 것 |
 | --- | --- |
-| `panel.ts` 의 툴바 HTML(`html()`) | `test/preview.html` 의 툴바(`node test/shell.test.js` 가 검사한다), `docs/terms.svg` 의 툴바 |
-| 헤더 구성·배지·버튼 (`main.js` 의 `renderNode`, `style.css`) | `docs/terms.svg` 의 헤더 줄과 콜아웃, README `### 헤더에 표시되는 것` · `### 표시되는 배지` |
-| 패널에 새 부위가 생김 (새 영역·새 버튼·새 표시) | `## 용어` 표에 이름 한 줄, `docs/terms.svg` 에 그 부위와 콜아웃, 필요하면 `docs/terms.md` 의 트리 그림 |
-| 용어를 바꾸거나 새로 정함 | `## 용어` 표, `docs/terms.*`, 그리고 UI 문구(`panel.ts` 토스트, `main.js` 의 `title`)를 같은 말로 |
-| 확장↔웹뷰 메시지 추가 | `panel.ts` 의 `onMessage` 와 `main.js` 의 `window.addEventListener('message')` 에 한 쌍으로 |
-| `package.json` 에 설정 추가 | README `## 설정` 표. 웹뷰가 읽어야 하면 `readConfig` · `ClientConfig` · `main.js` 의 `config` 까지 |
-| 명령·키바인딩 추가 | README `## 사용법` 표 |
-| 사용자가 체감하는 동작 변경 | `CHANGELOG.md` 새 항목 + `package.json` 의 `version`, 그리고 `working_log.md` |
+| 헤더 구성·배지·버튼 (`features/trail/TrailNode.tsx`, `trail.css`) | `docs/terms.svg` 의 헤더 줄과 콜아웃, README `### 헤더에 표시되는 것` · `### 표시되는 배지`, `test/e2e/trail.e2e.mjs` |
+| 툴바 버튼 추가·삭제 (`TrailView.tsx`) | `docs/terms.svg` 의 툴바, README `## 사용법` |
+| 화면에 새 부위가 생김 (새 영역·새 버튼·새 표시) | `## 용어` 표에 이름 한 줄, 트레일 패널 안이면 `docs/terms.svg` 에 그 부위와 콜아웃 |
+| 용어를 바꾸거나 새로 정함 | `## 용어` 표, `docs/terms.*`, 그리고 UI 문구를 같은 말로 |
+| 사용자가 체감하는 동작 변경 | `CHANGELOG.md` 새 항목 + 네 `package.json` 의 `version`, 그리고 `working_log.md` |
 | `packages/shared` 의 도메인 타입 | `packages/shared/src/protocol/schemas.ts` 의 같은 스키마 (`satisfies` 가 컴파일에서 잡는다), `test/unit/` |
-| 새 명령·이벤트 추가 | `protocol/commands.ts` 또는 `events.ts` 의 payload 스키마, 그리고 구현서 14.2·15.2 |
-| 전환 단계 하나를 끝냄 | 구현서 0장 체크리스트, `docs/e2e-port-checklist.md` 의 해당 줄, `working_log.md` |
-| HTTP 경로·WebSocket 명령 추가 | 구현서 15.1·14.2 표, `test/integration/` 에 거부 경로까지 |
+| 새 명령·이벤트 추가 | `protocol/commands.ts` 또는 `events.ts` 의 payload 스키마, 구현서 14.2·15.2, `test/unit/protocol.test.mjs` 의 목록 |
+| HTTP 경로 추가 | 구현서 15.1 표, `test/integration/resilience.test.mjs` 의 인증 훑기가 자동으로 잡는다 |
 | 경로를 받는 새 API | `security/paths.ts` 를 반드시 통과시키고 `test/integration/security.test.mjs` 에 탈출 시도 한 줄 |
 | LSP 요청·응답 처리 변경 | `test/fake-lsp/server.mjs` 에 그 상황을 재현하는 시나리오와 `test/integration/lsp.test.mjs` 한 줄 |
 | 심볼 선택·본문 범위 규칙 | `test/unit/symbols.test.mjs`, 그리고 구현서 13장 |
-| 노드 헤더·배지·본문 (`features/trail/`) | `test/e2e/trail.e2e.mjs`, README `### 헤더에 표시되는 것` · `### 표시되는 배지` |
 | `packages/web/src/tokenizer/` | `test/unit/tokenizer-port.test.mjs`. 주석·문자열 제외가 깨지면 여기서 걸린다 |
 | 언어별 탐지·진단 | 그 어댑터 파일 하나 안에서만. 공통 계층에 `if (language === ...)` 를 넣지 않는다 |
 | 보드 배치 규칙 (`features/trail/board.ts`) | `test/unit/board.test.mjs`, `test/e2e/trail.e2e.mjs` 의 `[보드 모드]`, 무거워졌으면 `docs/perf-1000-nodes.md` |
 | 외부 에디터 실행 경로 (`server/src/editor/`) | `test/integration/editor.test.mjs` 에 셸 특수문자 한 줄. 자리표시자를 늘리면 README `## 설정` 과 구현서 17.1 |
 | 진단 화면에 항목 추가 | `LspSessionInfo` → `/api/diagnostics` → `LanguageDiagnostics` → `DiagnosticsView` 넷을 한 벌로, 그리고 구현서 18 |
-| `.code-trail/settings.json` 항목 추가 | `shared/domain/settings.ts`, `protocol/schemas.ts`, README `### 독립 프로그램의 설정` |
+| `.code-trail/settings.json` 항목 추가 | `shared/domain/settings.ts`, `protocol/schemas.ts`, README `## 설정` |
+| `package.json` 의 `files`·`bin`·의존성 | `npm run test:pack` 과 `npm run test:install` 을 돌린다. 새 런타임 의존성은 `THIRD-PARTY-NOTICES.md` 에도 |
+| CLI 인자 추가 | `packages/cli/src/args.ts` 의 `USAGE`, README `## 설치와 실행` 표, `test/unit/cli-args.test.mjs` |
 | 언어 서버 예외 처리 추가 | 아래 `## 언어 서버별 함정` |
 
-이 중 기계가 잡아주는 건 첫 줄(`node test/shell.test.js`)뿐이다. 나머지는 사람이 챙긴다.
+이 중 기계가 잡아주는 것은 프로토콜 스키마(컴파일), 명령 목록(`test/unit/protocol.test.mjs`),
+API 인증(`test/integration/resilience.test.mjs`), 배포물 목록(`npm run test:pack`) 넷이다.
+나머지는 사람이 챙긴다.
 
 `docs/terms.svg` 는 손으로 쓴 SVG다. 좌표가 전부 상수로 박혀 있으니
 `<!-- 노드 A 헤더 -->` 같은 주석으로 구역을 찾아 그 근처만 고친다.
@@ -261,3 +244,9 @@ test/fixtures/                  단계 0에서 굳힌 확장 시절 데이터
   자동으로 따라가는 경로에서는 `resolveImplementationsAt` 의 참조 검색 폴백을 끈다.
   참조에는 호출부가 섞여 있어서 "이 메서드를 부르는 함수"로 끌려갈 수 있다.
   선언 노드는 어느 쪽이든 지우지 않는다. "인터페이스를 거쳐 갔다"도 경로의 일부다.
+- **뜨자마자 죽는 서버**는 매번 `initialize` 에 성공한다. 그래서 성공만으로 재시도
+  횟수를 되돌리면 자동 재시작이 영원히 멈추지 않는다. 요청 하나가 실제로 응답했거나
+  (`markStable`) 뜬 채로 `STABLE_AFTER_MS` 를 버텼을 때만 되돌린다.
+- **Windows 의 `.cmd`/`.bat` shim** 은 `shell: false` 로 못 띄운다(Node CVE-2024-27980 대응).
+  탐지에서 빼고, 설정에 적혀 있으면 그 이유를 알린다. `cmd /c` 로 우회하지 않는다 —
+  인자가 셸 문법으로 해석되면 "셸을 거치지 않는다" 규칙이 무너진다.

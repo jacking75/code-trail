@@ -36,11 +36,10 @@
   <rect x="122" y="64" width="60" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="128" y="75">⤡ 전체 접기</text>
   <rect x="188" y="64" width="62" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="194" y="75">⇅ 코드 순서</text>
   <rect x="256" y="64" width="40" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="261" y="75">⬚ 보드</text>
-  <rect x="302" y="64" width="46" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="308" y="75">⧉ 새 창</text>
-  <rect x="354" y="64" width="92" height="16" rx="3" fill="#26292f" stroke="#3d424c"/><text x="360" y="75" fill="#7f8794">이름/경로 필터…</text>
-  <rect x="452" y="64" width="40" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="459" y="75">저장</text>
-  <rect x="498" y="64" width="48" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="505" y="75">불러오기</text>
-  <rect x="552" y="64" width="38" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="559" y="75">지우기</text>
+  <rect x="302" y="64" width="92" height="16" rx="3" fill="#26292f" stroke="#3d424c"/><text x="308" y="75" fill="#7f8794">이름/경로 필터…</text>
+  <rect x="400" y="64" width="58" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="406" y="75">Markdown</text>
+  <rect x="464" y="64" width="38" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="471" y="75">지우기</text>
+  <text x="556" y="75" fill="#7f8794">노드 4</text>
 </g>
 
 <!-- 브레드크럼 -->
@@ -128,12 +127,12 @@
   <!-- 트레일 패널 -->
   <path class="lead" d="M612 48 L600 58"/><circle class="dot" cx="600" cy="58" r="2.5"/>
   <text class="u lbl" x="620" y="44">트레일 패널</text>
-  <text class="u sub" x="620" y="58">함수 본문이 펼쳐지는 웹뷰 창 전체. 줄여서 “패널”</text>
+  <text class="u sub" x="620" y="58">함수 본문이 펼쳐지는 탭 전체. 줄여서 “패널”</text>
 
   <!-- 툴바 -->
   <path class="lead" d="M612 82 L594 78"/><circle class="dot" cx="594" cy="78" r="2.5"/>
   <text class="u lbl" x="620" y="80">툴바</text>
-  <text class="u sub" x="660" y="80">펼치기·접기 / 정렬 / 보드 / 새 창 / 필터 / 내보내기 / 지우기</text>
+  <text class="u sub" x="660" y="80">펼치기·접기 / 정렬 / 보드 / 필터 / 내보내기 / 지우기</text>
 
   <!-- 브레드크럼 -->
   <path class="lead" d="M612 112 L594 110"/><circle class="dot" cx="594" cy="110" r="2.5"/>
@@ -188,6 +187,6 @@
 
 <!-- ─────────────────────────────── 아래 설명 -->
 <text class="u leg" x="40" y="500">형제 — B(Find)와 C(Invoke)는 둘 다 A 안에서 클릭해 나온 자식이라 나란히 붙는다. C 가 B 밑으로 들어가지 않는다.</text>
-<text class="u leg" x="40" y="518">트레일 — 이 패널에 담긴 트리 전체. 저장·불러오기·Markdown 내보내기의 단위다. 최상위 노드 A 가 루트.</text>
+<text class="u leg" x="40" y="518">트레일 — 이 패널에 담긴 트리 전체. 자동 저장과 Markdown 내보내기의 단위다. 최상위 노드 A 가 루트.</text>
 <text class="u leg" x="40" y="536">심볼(ResolvedSymbol) — 노드가 감싸고 있는 알맹이. 언어 서버가 준 정의 + 본문 코드 + 좌표.</text>
 </svg>

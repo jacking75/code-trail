@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -64,6 +65,9 @@ export async function createApp(options: AppOptions): Promise<CodeTrailApp> {
         forceCloseConnections: true,
     });
 
+    // 훅은 게이트웨이보다 먼저 등록된다. 참조 상자로 이어 준다.
+    const gatewayRef: { current: WebSocketGateway | undefined } = { current: undefined };
+
     const origin = `http://127.0.0.1:${port}`;
     const headers = securityHeaders({ origin, dev: options.dev ?? false });
 
@@ -78,7 +82,20 @@ export async function createApp(options: AppOptions): Promise<CodeTrailApp> {
         // WebSocket 업그레이드는 아래 `/ws` 라우트가 직접 인증한다.
         // `request.ws` 는 라우트 안에서만 세워지므로 여기서는 헤더를 본다 —
         // 이걸 놓치면 업그레이드가 이 훅에서 401 로 막혀 라우트까지 못 간다.
+        // 종료 중일 때도 여기서 가로채지 않는다. 업그레이드 중인 소켓에
+        // 평범한 HTTP 응답을 쓰면 어느 쪽으로도 끝나지 않는다 —
+        // 게이트웨이가 1001 로 닫아 준다.
         if (request.headers.upgrade?.toLowerCase() === 'websocket') {
+            return;
+        }
+        // 종료가 시작되면 아무것도 받지 않는다. 정적 자산도 마찬가지다 —
+        // 지금 화면을 새로 띄워봐야 곧 끊길 서버를 보게 된다.
+        if (gatewayRef.current?.isStopping === true) {
+            await reply.code(503).send({
+                code: 'SERVER_STOPPING',
+                message: '서버가 닫히는 중이다.',
+                retryable: false,
+            });
             return;
         }
         if (isPublicPath(request.url)) {
@@ -109,6 +126,7 @@ export async function createApp(options: AppOptions): Promise<CodeTrailApp> {
     });
 
     const gateway = new WebSocketGateway(context);
+    gatewayRef.current = gateway;
 
     app.get('/ws', { websocket: true }, (socket, request) => {
         const failure = checkSocketAuth({ token, port }, {
@@ -159,8 +177,20 @@ export async function createApp(options: AppOptions): Promise<CodeTrailApp> {
     return { fastify: app, gateway };
 }
 
-/** 빌드된 웹 자산의 기본 위치. `packages/web/dist` 다. */
+/**
+ * 빌드된 웹 자산의 위치.
+ *
+ * 배포된 뒤에는 `node_modules/@code-trail/web/dist` 이고, 이 저장소 안에서는
+ * `packages/web/dist` 다. 두 경우 모두 패키지 해석기에 물어보면 나온다 —
+ * 상대경로만 쓰면 설치 배치가 조금만 달라져도 빈 화면이 뜬다.
+ */
 export function defaultWebRoot(serverDistDir: string): string {
-    // dist/ 기준으로 packages/server/dist → packages/web/dist
-    return path.resolve(serverDistDir, '..', '..', 'web', 'dist');
+    try {
+        const require = createRequire(path.join(serverDistDir, 'index.js'));
+        const manifest = require.resolve('@code-trail/web/package.json');
+        return path.join(path.dirname(manifest), 'dist');
+    } catch {
+        // 워크스페이스 링크가 없을 때의 마지막 수단.
+        return path.resolve(serverDistDir, '..', '..', 'web', 'dist');
+    }
 }

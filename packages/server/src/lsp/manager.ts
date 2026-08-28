@@ -65,6 +65,8 @@ export interface LspManagerOptions {
     /** 테스트에서 짧게 줄인다. */
     requestTimeoutMs?: number;
     restartDelaysMs?: readonly number[];
+    /** 뜬 뒤 이만큼 살아 있으면 재시도 횟수를 되돌린다. 테스트에서 줄인다. */
+    stableAfterMs?: number;
 }
 
 export class LspManager {
@@ -129,6 +131,9 @@ export class LspManager {
                 : {}),
             ...(this.options.restartDelaysMs !== undefined
                 ? { restartDelaysMs: this.options.restartDelaysMs }
+                : {}),
+            ...(this.options.stableAfterMs !== undefined
+                ? { stableAfterMs: this.options.stableAfterMs }
                 : {}),
         });
         this.sessions.set(language, session);
