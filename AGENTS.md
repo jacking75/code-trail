@@ -39,12 +39,21 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 ## 지금 무엇을 하고 있나
 
 **독립 프로그램으로 전환하는 중이다.** 계획은 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md)
-이고 그 문서 0장의 체크리스트가 진행의 정본이다. 단계 0(기준선)과 단계 1(모노레포와 공유 도메인)이 끝났다.
+이고 그 문서 0장의 체크리스트가 진행의 정본이다. 단계 0~3이 끝났다.
+**다음은 단계 4(공통 LSP 전송 계층)다.**
 
 - `src/`, `media/` — **지금 동작하는 VS Code 확장.** 단계 10까지 그대로 둔다. 손대면 기준선이 흔들린다.
-- `packages/` — **새 독립 프로그램.** shared 도메인·프로토콜만 채워져 있고 서버·웹·CLI는 뼈대다.
+- `packages/` — **새 독립 프로그램.** `code-trail <경로>` 로 뜨고, 파일을 찾아 읽기 전용으로 볼 수 있다.
+  아직 **심볼 해석이 없다** — 식별자를 클릭해 정의를 펼치는 것이 Code Trail 의 본체인데 그게 단계 5~6이다.
 - 확장 마지막 상태는 tag `v0.6.0-vscode-extension` 이고 기준선 기록은 [`docs/baseline.md`](docs/baseline.md) 다.
 - 확장에서 되던 동작을 새 프로그램에서 무엇으로 확인할지는 [`docs/e2e-port-checklist.md`](docs/e2e-port-checklist.md) 에 있다.
+
+지금 되는 것을 눈으로 보려면:
+
+```
+npm run build
+npm run start -- <프로젝트 경로>
+```
 
 ## 명령
 
@@ -52,19 +61,22 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 npm install
 
 # 새 독립 프로그램 (packages/)
-npm run build                   # shared → server → cli
+npm run build                   # shared → server → web → cli
+npm run start -- <경로>         # 서버를 띄우고 브라우저를 연다
+npm run dev                     # Vite 개발 서버 (웹만 고칠 때)
 npm run typecheck               # 확장 + 모든 workspace
-npm test                        # 토크나이저 + 셸 + test/unit (브라우저 불필요)
+npm test                        # test/unit + test/integration (브라우저 불필요)
+npm run test:e2e                # 진짜 서버 + 진짜 브라우저 (playwright 필요)
 
 # 지금 동작하는 확장 (src/, media/)
 npm run compile                 # tsc → out/
 npx @vscode/vsce package        # → code-trail-<version>.vsix
 npm run test:ui                 # 웹뷰 (playwright 필요)
-npm run screenshot              # docs/baseline/*.png 다시 만들기
+npm run screenshot              # docs/baseline/tree-mode.png, board-mode.png 다시 만들기
 ```
 
-`npm test` 의 `test/unit` 은 `packages/shared/dist` 를 불러온다. 먼저 `npm run build` 를 돌린다.
-`npm run test:ui` 와 `npm run screenshot` 은 컨테이너의 프리설치 Chromium을 쓴다.
+`npm test` 는 빌드된 `packages/*/dist` 를 불러온다. 먼저 `npm run build` 를 돌린다.
+브라우저를 쓰는 것(`test:e2e`, `test:ui`, `screenshot`)은 컨테이너의 프리설치 Chromium을 기본으로 찾는다.
 경로가 다르면 `CT_CHROME=/path/to/chrome` 로 넘긴다.
 
 ## 지켜야 할 것
@@ -122,10 +134,22 @@ media/style.css     VS Code 테마 변수 기반 스타일
 ```
 packages/shared/src/domain/     ResolvedSymbol, Trail, 설정, 저장 스키마, Markdown, UUID
 packages/shared/src/protocol/   명령·이벤트 타입과 Zod 런타임 스키마
-packages/server/src/            로컬 서버 (단계 2부터)
-packages/web/src/               브라우저 프론트엔드 (단계 2부터)
-packages/cli/src/               code-trail CLI (단계 2부터)
-test/unit/                      shared 단위 테스트 (node:test)
+
+packages/server/src/security/   토큰, Host·Origin 검사, 경로 경계, CSP
+packages/server/src/persistence/ .code-trail/ 저장소, 원자적 쓰기, debounce, 잠금 파일
+packages/server/src/workspace/  파일 트리, 이름 검색, 문서 권한(documentId), 파일 감시
+packages/server/src/trails/     트레일 정본과 mutation queue
+packages/server/src/http/       읽기 전용 API
+packages/server/src/ws/         명령 수신과 이벤트 방송
+packages/server/src/lsp/        언어 서버 (단계 4~6)
+
+packages/web/src/api/           토큰 부트스트랩, HTTP, WebSocket
+packages/web/src/features/      파일 탐색기, 검색, Monaco 코드 화면
+packages/cli/src/               인자 해석, 서버 재사용 감지, 브라우저 열기
+
+test/unit/                      도메인·프로토콜·CLI 인자 (node:test)
+test/integration/               진짜 서버를 띄워 보는 검사 (node:test)
+test/e2e/                       진짜 브라우저까지 (playwright)
 test/fixtures/                  단계 0에서 굳힌 확장 시절 데이터
 ```
 
@@ -158,6 +182,8 @@ test/fixtures/                  단계 0에서 굳힌 확장 시절 데이터
 | `packages/shared` 의 도메인 타입 | `packages/shared/src/protocol/schemas.ts` 의 같은 스키마 (`satisfies` 가 컴파일에서 잡는다), `test/unit/` |
 | 새 명령·이벤트 추가 | `protocol/commands.ts` 또는 `events.ts` 의 payload 스키마, 그리고 구현서 14.2·15.2 |
 | 전환 단계 하나를 끝냄 | 구현서 0장 체크리스트, `docs/e2e-port-checklist.md` 의 해당 줄, `working_log.md` |
+| HTTP 경로·WebSocket 명령 추가 | 구현서 15.1·14.2 표, `test/integration/` 에 거부 경로까지 |
+| 경로를 받는 새 API | `security/paths.ts` 를 반드시 통과시키고 `test/integration/security.test.mjs` 에 탈출 시도 한 줄 |
 | 언어 서버 예외 처리 추가 | 아래 `## 언어 서버별 함정` |
 
 이 중 기계가 잡아주는 건 첫 줄(`node test/shell.test.js`)뿐이다. 나머지는 사람이 챙긴다.

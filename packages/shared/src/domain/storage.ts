@@ -110,9 +110,9 @@ function storeNodeUi(state: NodeUiState): NodeUiState {
 
 export function toStoredTrail(trail: Trail): StoredTrail {
     const nodeUi: Record<string, NodeUiState> = {};
-    // 노드 ID 로 정렬한다. Map 의 삽입 순서를 그대로 쓰면 같은 트레일이라도
-    // 사용자가 어떤 노드를 먼저 옮겼는지에 따라 파일이 달라진다.
-    for (const [id, state] of trail.nodeUiEntries().sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+    // `nodeUiEntries` 가 노드 ID 순으로 준다. JSON 객체의 키 순서가 그대로
+    // 파일 순서가 되므로 여기서 다시 흔들지 않는다.
+    for (const [id, state] of trail.nodeUiEntries()) {
         nodeUi[id] = storeNodeUi(state);
     }
     return {

@@ -1,0 +1,23 @@
+import type { Logger } from './config/logger.js';
+import type { ProjectStore } from './persistence/store.js';
+import type { TrailService } from './trails/service.js';
+import type { DocumentRegistry } from './workspace/documents.js';
+import type { WorkspaceTree } from './workspace/tree.js';
+
+/**
+ * 서버 한 대가 들고 있는 것들.
+ *
+ * 프로세스 하나가 프로젝트 하나만 연다(구현서 5.1). 그래서 이 묶음은 서버당
+ * 하나뿐이고, 경로 보안·저장소·트레일 정본이 전부 같은 프로젝트 루트를 기준으로 돈다.
+ */
+export interface ServerContext {
+    /** 심볼릭 링크를 푼 실제 프로젝트 루트. 절대경로다. */
+    projectRoot: string;
+    /** 화면에 찍는 프로젝트 이름. 절대경로를 브라우저로 내보내지 않는다. */
+    projectName: string;
+    logger: Logger;
+    store: ProjectStore;
+    trails: TrailService;
+    tree: WorkspaceTree;
+    documents: DocumentRegistry;
+}

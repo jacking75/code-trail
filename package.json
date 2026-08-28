@@ -180,9 +180,14 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "build": "npm run build -w @code-trail/shared && npm run build -w @code-trail/server && npm run build -w @code-trail/cli",
+    "build": "npm run build -w @code-trail/shared && npm run build -w @code-trail/server && npm run build -w @code-trail/web && npm run build -w @code-trail/cli",
+    "dev": "npm run dev -w @code-trail/web",
+    "start": "node packages/cli/dist/main.js",
     "typecheck": "tsc -p ./ --noEmit && npm run typecheck --workspaces --if-present",
-    "test": "node test/tokenizer.test.js && node test/shell.test.js && node --test \"test/unit/*.test.mjs\"",
+    "test": "node test/tokenizer.test.js && node test/shell.test.js && node --test \"test/unit/*.test.mjs\" && node --test \"test/integration/*.test.mjs\"",
+    "test:unit": "node --test \"test/unit/*.test.mjs\"",
+    "test:integration": "node --test \"test/integration/*.test.mjs\"",
+    "test:e2e": "node test/e2e/shell.e2e.mjs",
     "test:ui": "node test/ui.test.js",
     "screenshot": "node test/screenshot.js"
   },
@@ -190,6 +195,12 @@
     "@types/node": "20.x",
     "@types/vscode": "^1.80.0",
     "playwright": "^1.62.1",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "ws": "^8.21.3"
+  },
+  "overrides": {
+    "monaco-editor": {
+      "dompurify": "^3.4.14"
+    }
   }
 }

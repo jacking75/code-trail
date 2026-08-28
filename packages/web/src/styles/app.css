@@ -1,0 +1,256 @@
+/*
+ * 확장 시절 `media/style.css` 의 구조를 이어받되 VS Code 테마 변수 의존을 뺐다.
+ * 색은 CSS 변수 한 곳에서만 정한다 — 단계 7에서 `ui.theme` 설정이 이 변수를 갈아끼운다.
+ */
+
+:root {
+    --ct-bg: #1f2335;
+    --ct-bg-raised: #1a1b26;
+    --ct-bg-input: #16161e;
+    --ct-fg: #c0caf5;
+    --ct-fg-muted: #7f88b0;
+    --ct-accent: #7aa2f7;
+    --ct-border: #2c3048;
+    --ct-danger: #f7768e;
+
+    --ct-font: system-ui, -apple-system, 'Segoe UI', 'Noto Sans KR', sans-serif;
+    --ct-code-font: 'Cascadia Mono', Consolas, 'DejaVu Sans Mono', monospace;
+    --ct-font-size: 13px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+    height: 100%;
+    margin: 0;
+}
+
+body {
+    background: var(--ct-bg);
+    color: var(--ct-fg);
+    font-family: var(--ct-font);
+    font-size: var(--ct-font-size);
+}
+
+.app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* 상단 앱 바 */
+.app-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 12px;
+    background: var(--ct-bg-raised);
+    border-bottom: 1px solid var(--ct-border);
+    flex: 0 0 auto;
+}
+
+.app-name {
+    font-weight: 600;
+    color: var(--ct-accent);
+}
+
+.project {
+    color: var(--ct-fg-muted);
+}
+
+.spacer {
+    flex: 1;
+}
+
+.trail-count,
+.conn {
+    font-size: 12px;
+    color: var(--ct-fg-muted);
+}
+
+.conn::before {
+    content: '●';
+    margin-inline-end: 4px;
+}
+
+.conn-open::before {
+    color: #9ece6a;
+}
+
+.conn-connecting::before {
+    color: #e0af68;
+}
+
+.conn-closed::before {
+    color: var(--ct-danger);
+}
+
+/* 본문 */
+.app-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+.sidebar {
+    width: 280px;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    border-inline-end: 1px solid var(--ct-border);
+    background: var(--ct-bg-raised);
+    overflow: auto;
+}
+
+.main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 파일 탐색기 */
+.file-search {
+    padding: 8px;
+    border-bottom: 1px solid var(--ct-border);
+}
+
+.file-search input {
+    width: 100%;
+    padding: 4px 6px;
+    background: var(--ct-bg-input);
+    color: var(--ct-fg);
+    border: 1px solid var(--ct-border);
+    border-radius: 3px;
+    font: inherit;
+}
+
+.tree-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.tree-root {
+    padding-block: 4px;
+}
+
+.tree-row {
+    display: block;
+    width: 100%;
+    text-align: start;
+    padding: 2px 8px;
+    background: none;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tree-row:hover {
+    background: rgba(122, 162, 247, 0.12);
+}
+
+.tree-row.active {
+    background: rgba(122, 162, 247, 0.22);
+}
+
+.tree-mark {
+    display: inline-block;
+    width: 12px;
+    color: var(--ct-fg-muted);
+}
+
+.tree-dir {
+    font-weight: 500;
+}
+
+.tree-note {
+    padding: 2px 12px;
+    color: var(--ct-fg-muted);
+    font-size: 12px;
+}
+
+.search-results {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0;
+    max-height: 40vh;
+    overflow: auto;
+}
+
+.search-name {
+    margin-inline-end: 8px;
+}
+
+.search-path {
+    color: var(--ct-fg-muted);
+    font-size: 11px;
+}
+
+/* 코드 화면 */
+.doc-bar {
+    display: flex;
+    gap: 12px;
+    align-items: baseline;
+    padding: 4px 12px;
+    border-bottom: 1px solid var(--ct-border);
+    font-family: var(--ct-code-font);
+    font-size: 12px;
+}
+
+.doc-path {
+    color: var(--ct-fg);
+}
+
+.code-view {
+    flex: 1;
+    min-height: 0;
+}
+
+.placeholder {
+    padding: 32px;
+    color: var(--ct-fg);
+}
+
+.muted {
+    color: var(--ct-fg-muted);
+}
+
+.panel-error {
+    margin: 0;
+    padding: 8px 12px;
+    color: var(--ct-danger);
+    border-top: 1px solid var(--ct-border);
+}
+
+.fatal {
+    padding: 48px;
+}
+
+.fatal h1 {
+    color: var(--ct-accent);
+}
+
+/* 파일이 바뀌었을 때 나오는 다시 읽기 버튼 */
+.stale {
+    margin-inline-start: auto;
+    padding: 1px 8px;
+    background: rgba(224, 175, 104, 0.18);
+    color: #e0af68;
+    border: 1px solid rgba(224, 175, 104, 0.4);
+    border-radius: 3px;
+    font: inherit;
+    cursor: pointer;
+}
+
+.stale:hover {
+    background: rgba(224, 175, 104, 0.3);
+}

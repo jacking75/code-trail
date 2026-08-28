@@ -312,19 +312,22 @@ code --extensionDevelopmentPath=<이 폴더의 절대경로> <탐색할_프로�
 ## 테스트
 
 ```
-npm test                      # 아래 셋 중 브라우저가 필요 없는 것 전부
+npm test                      # 브라우저가 필요 없는 것 전부
 npm run test:ui               # 웹뷰 렌더링·상호작용 (playwright 필요)
+npm run test:e2e              # 독립 프로그램 전체 (playwright 필요)
 ```
 
 `npm test` 가 도는 것:
 
 ```
-node test/tokenizer.test.js   # 토크나이저 (주석/문자열 오탐, 줄·컬럼 매핑)
-node test/shell.test.js       # panel.ts 셸 ↔ preview.html 동기화
-node --test "test/unit/*.test.mjs"   # packages/shared 도메인·프로토콜
+node test/tokenizer.test.js          # 토크나이저 (주석/문자열 오탐, 줄·컬럼 매핑)
+node test/shell.test.js              # panel.ts 셸 ↔ preview.html 동기화
+node --test "test/unit/*.test.mjs"          # 도메인·프로토콜·CLI 인자
+node --test "test/integration/*.test.mjs"   # 진짜 로컬 서버 (보안 경계·저장소·WebSocket)
 ```
 
-`test/unit` 은 빌드된 `packages/shared/dist` 를 불러온다. 먼저 `npm run build` 를 돌린다.
+`test/unit` 과 `test/integration` 은 빌드된 `packages/*/dist` 를 불러온다.
+먼저 `npm run build` 를 돌린다.
 
 `shell.test.js` 는 `panel.ts` 의 HTML 셸과 `test/preview.html` 을 비교한다.
 id 집합이 양쪽에 똑같이 있는지, `main.js` 가 `getElementById` 로 찾는 것이 양쪽에 다 있는지,
@@ -347,7 +350,15 @@ media/style.css     VS Code 테마 변수 기반 스타일
 ```
 
 `packages/` 아래는 **VS Code 없이 도는 독립 프로그램으로 옮기는 중인 코드**다.
-아직 실행할 수 있는 것이 없고 확장 동작에도 영향을 주지 않는다.
+확장 동작에는 영향을 주지 않는다.
+
+```
+npm run build
+npm run start -- <프로젝트 경로>
+```
+
+로 띄우면 파일을 찾아 읽기 전용으로 볼 수 있다. **아직 심볼 해석이 없다** —
+식별자를 클릭해 정의를 펼치는 것은 다음 단계에서 붙는다.
 계획은 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md),
 확장 마지막 상태의 기준선은 [`docs/baseline.md`](docs/baseline.md) 에 있다.
 

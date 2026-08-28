@@ -116,6 +116,16 @@ export const documentOpenedPayloadSchema = documentResponseSchema;
 
 export const searchResultPayloadSchema = workspaceSearchResponseSchema;
 
+/**
+ * 프로젝트 안의 파일이 바뀌었다.
+ *
+ * 서버가 대신 다시 읽지 않는다. 보고 있던 코드가 발밑에서 바뀌면 읽던 흐름이
+ * 끊기기 때문이다(구현서 9.4). 무엇이 바뀌었는지만 알리고 갱신은 화면이 정한다.
+ */
+export const filesChangedPayloadSchema = z.object({
+    relPaths: z.array(z.string()),
+});
+
 export const settingsChangedPayloadSchema = z.object({
     settings: projectSettingsSchema,
 });
@@ -170,6 +180,7 @@ export const EVENT_PAYLOADS = {
     'trail.implementationChoice': implementationChoicePayloadSchema,
     'workspace.documentOpened': documentOpenedPayloadSchema,
     'workspace.searchResult': searchResultPayloadSchema,
+    'workspace.filesChanged': filesChangedPayloadSchema,
     'settings.changed': settingsChangedPayloadSchema,
     'lsp.stateChanged': lspStateChangedPayloadSchema,
     'command.error': commandErrorPayloadSchema,

@@ -19,9 +19,9 @@
 | --- | --- | --- | --- | --- |
 | 커서 위치에서 `Ctrl+Alt+T` 로 탐색 시작 | 코드 화면에서 심볼을 골라 루트 생성 | E2E | 3, 7 | [ ] |
 | 커서 위치를 새 루트로 추가 | 같은 화면에서 루트 여러 개 추가 | E2E | 7 | [ ] |
-| 패널 열기 명령 | `code-trail <경로>` 가 브라우저를 연다 | E2E | 2 | [ ] |
-| 워크스페이스 파일을 찾아 연다 (VS Code 탐색기) | 파일 탐색기 지연 로드와 이름 검색 | E2E | 3 | [ ] |
-| — | 프로젝트 밖 경로 요청 거부 | 단위·통합 | 3 | [ ] |
+| 패널 열기 명령 | `code-trail <경로>` 가 브라우저를 연다 | E2E | 2 | [x] |
+| 워크스페이스 파일을 찾아 연다 (VS Code 탐색기) | 파일 탐색기 지연 로드와 이름 검색 | E2E | 3 | [x] |
+| — | 프로젝트 밖 경로 요청 거부 | 단위·통합 | 3 | [x] |
 
 ## 2. 파고들기
 
@@ -34,7 +34,7 @@
 | 주석·문자열 안 단어는 클릭 대상이 아님 | 토크나이저 단위 테스트 이식 | 단위 | 7 | [ ] |
 | 클릭 좌표가 원본 파일 기준 0-based 줄·컬럼 | 탭·비ASCII·surrogate pair 줄의 UTF-16 좌표 | 단위 | 7 | [ ] |
 | 같은 부모에 같은 대상이면 새로 안 붙고 그 노드로 이동 | 중복 자식 판정 후 포커스 | 통합 | 5 | [ ] |
-| 부모는 클릭한 코드가 속한 노드로 정해짐 | 트리 불변식 테스트 | 단위 | 1 | [[x] |
+| 부모는 클릭한 코드가 속한 노드로 정해짐 | 트리 불변식 테스트 | 단위 | 1 | [x] |
 
 ## 3. 선언만 · 구현
 
@@ -59,7 +59,7 @@
 | 툴바 `⇅` 로 형제 정렬(코드 순서 ↔ 클릭 순서) | `childOrder` 설정 | E2E | 7 | [ ] |
 | 이름·경로 필터 | 같은 필터 | E2E | 7 | [ ] |
 | 툴바 `지우기` | `trail.clear` | 통합·E2E | 7 | [ ] |
-| 조상에 같은 심볼이 있으면 `재귀` 배지 | 재귀·순환 판정 | 단위 | 1 | [[x] |
+| 조상에 같은 심볼이 있으면 `재귀` 배지 | 재귀·순환 판정 | 단위 | 1 | [x] |
 
 ## 5. 화면 요소
 
@@ -107,28 +107,28 @@
 | 확장에서 되던 것 | 새 프로그램에서 | 종류 | 단계 | 확인 |
 | --- | --- | --- | --- | --- |
 | 툴바 `Markdown` 내보내기 | `GET /api/trails/:trailId/export.md` 브라우저 다운로드 | 단위·E2E | 1, 7 | [ ] |
-| 툴바 `저장`(JSON 파일 대화상자) | 제외 — `.code-trail/trails/` 자동 저장으로 대체(문서 15.1) | — | 3 | [ ] |
-| 툴바 `불러오기`(JSON 파일 대화상자) | 제외 — 트레일 목록에서 선택(문서 3.2) | — | 3 | [ ] |
-| `version: 1` JSON 읽기 | 제외 — 새 스키마와 호환하지 않음(문서 3.2) | — | — | [[x] |
-| — | 새 저장 스키마 round trip | 단위 | 1 | [[x] |
-| — | debounce 후 원자적 저장, `.tmp` 복구 후보 | 통합 | 3 | [ ] |
+| 툴바 `저장`(JSON 파일 대화상자) | 제외 — `.code-trail/trails/` 자동 저장으로 대체(문서 15.1) | — | 3 | [x] |
+| 툴바 `불러오기`(JSON 파일 대화상자) | 제외 — 트레일 목록에서 선택(문서 3.2) | — | 3 | [x] |
+| `version: 1` JSON 읽기 | 제외 — 새 스키마와 호환하지 않음(문서 3.2) | — | — | [x] |
+| — | 새 저장 스키마 round trip | 단위 | 1 | [x] |
+| — | debounce 후 원자적 저장, `.tmp` 복구 후보 | 통합 | 3 | [x] |
 
 ## 9. 설정
 
 | 확장에서 되던 것 | 새 프로그램에서 | 종류 | 단계 | 확인 |
 | --- | --- | --- | --- | --- |
-| `codeTrail.contextLines` | `ui.contextLines` | 단위 | 1 | [[x] |
-| `codeTrail.maxCodeLines` | `ui.maxCodeLines` | 단위 | 1 | [[x] |
-| `codeTrail.clickTarget` | `ui.clickTarget` | 단위 | 1 | [[x] |
-| `codeTrail.autoFollowSingleImplementation` | `ui.autoFollowSingleImplementation` | 단위 | 1 | [[x] |
-| `codeTrail.childOrder` | `ui.childOrder` | 단위 | 1 | [[x] |
-| `codeTrail.revealInEditorOnAdd` | `ui.revealInExternalEditorOnAdd` | 단위 | 1 | [[x] |
-| `codeTrail.fontSize` | `ui.fontSize` | 단위 | 1 | [[x] |
-| `codeTrail.fitToWidth` | `ui.fitToWidth` | 단위 | 1 | [[x] |
-| `codeTrail.minFontSize` | `ui.minFontSize` | 단위 | 1 | [[x] |
-| `codeTrail.showAbsolutePath` | 제외 — 프로젝트 상대경로만 저장(문서 9.4) | — | — | [[x] |
-| `codeTrail.autoCollapseSiblings` | 제외 — 새 UI에 대응 항목 없음 | — | — | [[x] |
-| — | `ui.theme`, `editor.*`, `languages.*` 신규 | 단위 | 1 | [[x] |
+| `codeTrail.contextLines` | `ui.contextLines` | 단위 | 1 | [x] |
+| `codeTrail.maxCodeLines` | `ui.maxCodeLines` | 단위 | 1 | [x] |
+| `codeTrail.clickTarget` | `ui.clickTarget` | 단위 | 1 | [x] |
+| `codeTrail.autoFollowSingleImplementation` | `ui.autoFollowSingleImplementation` | 단위 | 1 | [x] |
+| `codeTrail.childOrder` | `ui.childOrder` | 단위 | 1 | [x] |
+| `codeTrail.revealInEditorOnAdd` | `ui.revealInExternalEditorOnAdd` | 단위 | 1 | [x] |
+| `codeTrail.fontSize` | `ui.fontSize` | 단위 | 1 | [x] |
+| `codeTrail.fitToWidth` | `ui.fitToWidth` | 단위 | 1 | [x] |
+| `codeTrail.minFontSize` | `ui.minFontSize` | 단위 | 1 | [x] |
+| `codeTrail.showAbsolutePath` | 제외 — 프로젝트 상대경로만 저장(문서 9.4) | — | — | [x] |
+| `codeTrail.autoCollapseSiblings` | 제외 — 새 UI에 대응 항목 없음 | — | — | [x] |
+| — | `ui.theme`, `editor.*`, `languages.*` 신규 | 단위 | 1 | [x] |
 
 ## 10. 호스트에 있던 것
 
@@ -146,16 +146,22 @@
 
 | 항목 | 종류 | 단계 | 확인 |
 | --- | --- | --- | --- |
-| `127.0.0.1`·`::1` 외 바인딩 없음 | 통합 | 2 | [ ] |
-| 토큰 없는 API 요청 거부 | 통합·E2E | 2 | [ ] |
-| 잘못된 Origin 의 WebSocket 거부 | 통합·E2E | 2 | [ ] |
-| 토큰이 URL 에 남지 않음(fragment → `sessionStorage`) | E2E | 2 | [ ] |
-| CSP 가 외부 CDN·인라인 스크립트를 막음 | E2E | 2 | [ ] |
-| 프로젝트 경계 밖 경로·심볼릭 링크 탈출 차단 | 단위·통합 | 3 | [ ] |
-| 오래된 `baseRevision` 명령 거부와 snapshot 재전송 | 통합 | 1, 2 | [ ] |
-| 같은 `commandId` 재전송을 한 번만 처리 | 통합 | 2 | [ ] |
+| `127.0.0.1`·`::1` 외 바인딩 없음 | 통합 | 2 | [x] |
+| 토큰 없는 API 요청 거부 | 통합·E2E | 2 | [x] |
+| 잘못된 Origin 의 WebSocket 거부 | 통합·E2E | 2 | [x] |
+| 토큰이 URL 에 남지 않음(fragment → `sessionStorage`) | E2E | 2 | [x] |
+| CSP 가 외부 CDN·인라인 스크립트를 막음 | E2E | 2 | [x] |
+| 프로젝트 경계 밖 경로·심볼릭 링크 탈출 차단 | 단위·통합 | 3 | [x] |
+| 오래된 `baseRevision` 명령 거부와 snapshot 재전송 | 통합 | 1, 2 | [x] |
+| DNS rebinding 차단 — 모르는 Host 거부 | 통합 | 2 | [x] |
+| 잠금 파일에 토큰이 없음 | 통합 | 2 | [x] |
+| 프로젝트 루트 `.gitignore` 를 건드리지 않음 | 통합 | 3 | [x] |
+| 저장 파일이 결정적이라 diff 가 안 흔들림 | 단위·통합 | 1, 3 | [x] |
+| 파일이 밖에서 바뀌면 알리되 자동으로 다시 읽지 않음 | E2E | 3 | [x] |
+| 같은 `commandId` 재전송을 한 번만 처리 | 통합 | 2 | [x] |
 | 여러 브라우저 탭의 revision 동기화 | E2E | 7 | [ ] |
 | 서버 재시작 후 WebSocket 재연결 | E2E | 2 | [ ] |
+| 설정과 트레일이 서버 재시작 후 복원 | 통합 | 3 | [x] |
 | 언어 서버 비정상 종료 후 재시작 | 통합 | 4 | [ ] |
 | stdout 프로토콜 오염 처리 | 통합 | 4 | [ ] |
-| 오류 `details` 에 stack·절대경로·코드 본문이 없음 | 단위 | 2 | [ ] |
+| 오류 `details` 에 stack·절대경로·코드 본문이 없음 | 단위 | 2 | [x] |

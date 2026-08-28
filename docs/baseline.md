@@ -39,15 +39,21 @@ CT_CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe" node test/ui.t
 
 ## 기준 스크린샷
 
-| 파일 | 내용 |
-| --- | --- |
-| [`baseline/tree-mode.png`](baseline/tree-mode.png) | 트리 모드. 부모 위·자식 아래 배치, 진입 링크, 순번, 재귀·근사 배지 |
-| [`baseline/board-mode.png`](baseline/board-mode.png) | 보드 모드. 노드가 캔버스 직속으로 평평하게 놓이고 연결선이 부모→자식을 잇는다 |
+| 파일 | 내용 | 다시 만드는 법 |
+| --- | --- | --- |
+| [`baseline/tree-mode.png`](baseline/tree-mode.png) | **확장** 트리 모드. 부모 위·자식 아래 배치, 진입 링크, 순번, 재귀·근사 배지 | `npm run screenshot` |
+| [`baseline/board-mode.png`](baseline/board-mode.png) | **확장** 보드 모드. 노드가 캔버스 직속으로 평평하게 놓이고 연결선이 부모→자식을 잇는다 | `npm run screenshot` |
+| [`baseline/standalone-shell.png`](baseline/standalone-shell.png) | **독립 프로그램** 단계 3 시점. 파일 탐색기와 읽기 전용 코드 화면까지 | `npm run test:e2e` |
 
-두 장 모두 아래 명령으로 다시 만든다. 입력은 `test/fixtures/preview-state.json` 하나뿐이라 결과가 재현된다.
+앞의 두 장은 입력이 `test/fixtures/preview-state.json` 하나뿐이라 결과가 재현된다
+(두 번 돌려 바이트가 같은 것을 확인했다). 세 번째 장은 임시 프로젝트를 만들어 찍으므로
+프로젝트 이름 부분만 실행마다 달라진다.
+
+브라우저 경로가 다르면 `CT_CHROME` 으로 넘긴다.
 
 ```bash
-CT_CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe" node test/screenshot.js
+CT_CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe" npm run screenshot
+CT_CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe" npm run test:e2e
 ```
 
 ## Fixture
