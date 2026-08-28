@@ -51,7 +51,8 @@ test('구현서 14.2 의 명령이 전부 있다', () => {
     const documented = [
         'trail.create', 'trail.rename', 'trail.delete', 'trail.select',
         'trail.addRootAt', 'trail.addRootFromSymbol', 'trail.resolve',
-        'trail.resolveImplementations', 'trail.removeNode', 'trail.toggleNode',
+        'trail.resolveImplementations', 'trail.chooseCandidate',
+        'trail.removeNode', 'trail.toggleNode',
         'trail.promoteToRoot', 'trail.setMode', 'trail.setNodeUi',
         'trail.setActiveNode', 'trail.clear', 'trail.exportMarkdown',
         'workspace.openDocument', 'workspace.searchFiles', 'editor.openLocation',

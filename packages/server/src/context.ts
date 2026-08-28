@@ -1,5 +1,7 @@
 import type { Logger } from './config/logger.js';
+import type { LspManager } from './lsp/manager.js';
 import type { ProjectStore } from './persistence/store.js';
+import type { ResolveFlow } from './trails/resolveFlow.js';
 import type { TrailService } from './trails/service.js';
 import type { DocumentRegistry } from './workspace/documents.js';
 import type { WorkspaceTree } from './workspace/tree.js';
@@ -20,4 +22,8 @@ export interface ServerContext {
     trails: TrailService;
     tree: WorkspaceTree;
     documents: DocumentRegistry;
+    /** 언어별 서버 세션. 그 언어 파일을 처음 열 때 뜬다. */
+    lsp: LspManager;
+    /** 정의 클릭 한 번이 일으키는 일. 게이트웨이와 도메인 사이에 있다. */
+    resolveFlow: ResolveFlow;
 }

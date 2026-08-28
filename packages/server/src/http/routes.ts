@@ -3,6 +3,8 @@ import type { FastifyInstance } from 'fastify';
 import { PROTOCOL_VERSION } from '@code-trail/shared';
 
 import type { ServerContext } from '../context.js';
+import { toPublicState } from '../lsp/types.js';
+import type { SupportedLanguage } from '../workspace/languages.js';
 import { PathDeniedError } from '../security/paths.js';
 import { DocumentTooLargeError } from '../workspace/documents.js';
 import { searchFiles } from '../workspace/search.js';
@@ -14,6 +16,8 @@ import { searchFiles } from '../workspace/search.js';
  * 간다. 그래야 "누가 언제 무엇을 바꿨는가" 가 한 통로에 모이고, revision 과
  * 이벤트 방송이 한곳에서 끝난다.
  */
+
+const SUPPORTED_LANGUAGES: readonly string[] = ['cpp', 'csharp', 'go', 'rust'];
 
 function denyStatus(reason: PathDeniedError['reason']): number {
     return reason === 'notFound' ? 404 : 403;
@@ -32,9 +36,13 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
         trails: context.trails.list(),
         activeTrailId: context.trails.getActiveTrailId(),
         capabilities: {
-            // 단계 9에서 외부 에디터가, 단계 6에서 언어 서버가 붙는다.
+            // 외부 에디터 열기는 단계 9에서 붙는다.
             externalEditor: context.store.getSettings().editor.executable !== null,
-            languages: [] as string[],
+            // 설정에 실행 파일이 있는 언어만 알린다. 실제로 뜨는지는 열어봐야 안다.
+            languages: context.lsp
+                .diagnostics()
+                .filter((info) => info.enabled && info.executableName !== null)
+                .map((info) => info.language),
         },
     }));
 
@@ -135,8 +143,40 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
     );
 
     app.get('/api/diagnostics', async () => ({
-        // 언어 서버는 단계 4~6에서 붙는다. 지금은 저장소 쪽 진단만 있다.
-        languages: [] as unknown[],
+        languages: context.lsp.diagnostics().map((info) => ({
+            language: info.language,
+            enabled: info.enabled,
+            state: toPublicState(info.state),
+            // 실행 파일 **이름**만. 전체 경로는 내보내지 않는다(구현서 8.1).
+            executableName: info.executableName,
+            lastError: info.lastError,
+            restartCount: info.restartCount,
+            missingCapabilities: info.missingCapabilities,
+        })),
         recoveryCandidates: context.store.getRecoveryCandidates(),
     }));
+
+    /**
+     * 언어 서버의 최근 stderr.
+     *
+     * 토큰 인증을 거친다(구현서 11.6). 코드 본문이 섞여 들어올 수 있어서
+     * 기본 진단 화면에는 넣지 않고 사용자가 따로 열게 한다.
+     */
+    app.get<{ Params: { language: string } }>(
+        '/api/diagnostics/:language/log',
+        async (request, reply) => {
+            const { language } = request.params;
+            if (!SUPPORTED_LANGUAGES.includes(language as SupportedLanguage)) {
+                return reply.code(404).send({
+                    code: 'NOT_FOUND',
+                    message: '모르는 언어다.',
+                    retryable: false,
+                });
+            }
+            return {
+                language,
+                lines: context.lsp.recentLog(language as SupportedLanguage),
+            };
+        },
+    );
 }

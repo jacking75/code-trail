@@ -62,6 +62,19 @@ export const nodeIdPayloadSchema = z.object({
     nodeId: uuidSchema,
 });
 
+/**
+ * 정의 후보가 여럿일 때 사용자가 하나를 골랐다.
+ *
+ * 서버는 후보 목록을 `trail.definitionChoice` 로 보내고 그 자리에서 기다리지
+ * 않는다. 사용자가 고르면 이 명령이 와서 그때 노드를 붙인다 — 서버가 응답을
+ * 붙들고 기다리면 그 사이 다른 명령이 막힌다.
+ */
+export const chooseCandidatePayloadSchema = z.object({
+    /** `trail.definitionChoice` 가 준 값. 어느 물음에 대한 답인지 가른다. */
+    choiceId: z.string().min(1),
+    candidateId: z.string().min(1),
+});
+
 export const toggleNodePayloadSchema = z.object({
     nodeId: uuidSchema,
     collapsed: z.boolean(),
@@ -145,6 +158,7 @@ export const STRUCTURE_COMMAND_TYPES = [
     'trail.toggleNode',
     'trail.promoteToRoot',
     'trail.clear',
+    'trail.chooseCandidate',
 ] as const;
 
 /** 트리 모양을 건드리지 않는 명령. */
@@ -182,6 +196,7 @@ export const COMMAND_PAYLOADS = {
     'trail.setNodeUi': setNodeUiPayloadSchema,
     'trail.setActiveNode': setActiveNodePayloadSchema,
     'trail.clear': emptyPayloadSchema,
+    'trail.chooseCandidate': chooseCandidatePayloadSchema,
     'trail.exportMarkdown': emptyPayloadSchema,
     'workspace.openDocument': openDocumentPayloadSchema,
     'workspace.searchFiles': searchFilesPayloadSchema,

@@ -39,12 +39,16 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 ## 지금 무엇을 하고 있나
 
 **독립 프로그램으로 전환하는 중이다.** 계획은 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md)
-이고 그 문서 0장의 체크리스트가 진행의 정본이다. 단계 0~3이 끝났다.
-**다음은 단계 4(공통 LSP 전송 계층)다.**
+이고 그 문서 0장의 체크리스트가 진행의 정본이다. 단계 0~5가 끝났다.
+**다음은 단계 6(언어별 LSP 어댑터)다.**
 
 - `src/`, `media/` — **지금 동작하는 VS Code 확장.** 단계 10까지 그대로 둔다. 손대면 기준선이 흔들린다.
-- `packages/` — **새 독립 프로그램.** `code-trail <경로>` 로 뜨고, 파일을 찾아 읽기 전용으로 볼 수 있다.
-  아직 **심볼 해석이 없다** — 식별자를 클릭해 정의를 펼치는 것이 Code Trail 의 본체인데 그게 단계 5~6이다.
+- `packages/` — **새 독립 프로그램.** 파일 탐색, 읽기 전용 코드 화면, 그리고 심볼 해석까지 된다.
+  식별자를 클릭하면 정의가 자식 노드로 붙는다.
+- **아직 언어 서버를 자동으로 찾지 않는다.** `.code-trail/settings.json` 의
+  `languages.<언어>.executable` 에 경로를 직접 적어야 뜬다. 탐지와 언어별 진단이 단계 6이다.
+- 트레일 화면(트리·보드)은 아직 없다. 지금 브라우저에 보이는 것은 파일 탐색기와 코드 화면뿐이고,
+  트레일은 WebSocket 명령으로만 만질 수 있다. 화면은 단계 7~8에서 붙는다.
 - 확장 마지막 상태는 tag `v0.6.0-vscode-extension` 이고 기준선 기록은 [`docs/baseline.md`](docs/baseline.md) 다.
 - 확장에서 되던 동작을 새 프로그램에서 무엇으로 확인할지는 [`docs/e2e-port-checklist.md`](docs/e2e-port-checklist.md) 에 있다.
 
@@ -82,9 +86,18 @@ npm run screenshot              # docs/baseline/tree-mode.png, board-mode.png �
 ## 지켜야 할 것
 
 **심볼 해석은 전부 언어 서버가 한다.** 자체 파서를 만들지 않는다.
-`executeDefinitionProvider` / `executeDocumentSymbolProvider` /
-`executeImplementationProvider` / `executeTypeDefinitionProvider` 넷만 쓴다.
-C++·C#·Go·Rust를 동시에 지원하는 유일한 방법이고, 언어별 분기를 코드에 넣지 않는 이유다.
+
+| 하는 일 | 확장 (`src/`) | 독립 프로그램 (`packages/server/src/`) |
+| --- | --- | --- |
+| 식별자 정의 | `executeDefinitionProvider` | `textDocument/definition` |
+| 심볼과 본문 범위 | `executeDocumentSymbolProvider` | `textDocument/documentSymbol` |
+| 구현 찾기 | `executeImplementationProvider` | `textDocument/implementation` |
+| 정의 폴백 | `executeTypeDefinitionProvider` | `textDocument/typeDefinition` |
+
+**이 넷만 쓴다.** C++·C#·Go·Rust를 동시에 지원하는 유일한 방법이고, 언어별 분기를
+코드에 넣지 않는 이유다. 특히 `textDocument/references` 를 구현 찾기 폴백으로 쓰지 않는다 —
+참조에는 호출부가 섞여 있어서 "이 메서드를 부르는 함수"가 구현으로 붙는다.
+`test/fake-lsp/server.mjs` 가 그 요청이 오면 stderr에 표시를 남기고 테스트가 그걸 잡는다.
 
 **`media/tokenizer.js` 는 하이라이팅과 "클릭 후보 고르기"만 담당한다.**
 정확도를 책임지지 않는다. 식별자 span에 원본 파일 기준 절대 좌표
@@ -141,15 +154,17 @@ packages/server/src/workspace/  파일 트리, 이름 검색, 문서 권한(docu
 packages/server/src/trails/     트레일 정본과 mutation queue
 packages/server/src/http/       읽기 전용 API
 packages/server/src/ws/         명령 수신과 이벤트 방송
-packages/server/src/lsp/        언어 서버 (단계 4~6)
+packages/server/src/lsp/        JSON-RPC 전송, 문서 동기화, 상태 머신·재시작
+packages/server/src/symbols/    평탄화, 심볼 선택, 본문 범위, 선언만 판정
 
 packages/web/src/api/           토큰 부트스트랩, HTTP, WebSocket
 packages/web/src/features/      파일 탐색기, 검색, Monaco 코드 화면
 packages/cli/src/               인자 해석, 서버 재사용 감지, 브라우저 열기
 
-test/unit/                      도메인·프로토콜·CLI 인자 (node:test)
-test/integration/               진짜 서버를 띄워 보는 검사 (node:test)
+test/unit/                      도메인·프로토콜·심볼 선택·CLI 인자 (node:test)
+test/integration/               진짜 서버 + 가짜 언어 서버 (node:test)
 test/e2e/                       진짜 브라우저까지 (playwright)
+test/fake-lsp/                  나쁜 언어 서버를 흉내내는 stdio fixture
 test/fixtures/                  단계 0에서 굳힌 확장 시절 데이터
 ```
 
@@ -184,6 +199,8 @@ test/fixtures/                  단계 0에서 굳힌 확장 시절 데이터
 | 전환 단계 하나를 끝냄 | 구현서 0장 체크리스트, `docs/e2e-port-checklist.md` 의 해당 줄, `working_log.md` |
 | HTTP 경로·WebSocket 명령 추가 | 구현서 15.1·14.2 표, `test/integration/` 에 거부 경로까지 |
 | 경로를 받는 새 API | `security/paths.ts` 를 반드시 통과시키고 `test/integration/security.test.mjs` 에 탈출 시도 한 줄 |
+| LSP 요청·응답 처리 변경 | `test/fake-lsp/server.mjs` 에 그 상황을 재현하는 시나리오와 `test/integration/lsp.test.mjs` 한 줄 |
+| 심볼 선택·본문 범위 규칙 | `test/unit/symbols.test.mjs`, 그리고 구현서 13장 |
 | 언어 서버 예외 처리 추가 | 아래 `## 언어 서버별 함정` |
 
 이 중 기계가 잡아주는 건 첫 줄(`node test/shell.test.js`)뿐이다. 나머지는 사람이 챙긴다.

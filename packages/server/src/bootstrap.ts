@@ -4,6 +4,11 @@ import { fileURLToPath } from 'node:url';
 import { createApp, defaultWebRoot, type CodeTrailApp } from './app.js';
 import { createLogger, type LogLevel, type Logger } from './config/logger.js';
 import type { ServerContext } from './context.js';
+import { pathToUri } from './lsp/documents.js';
+import { LspManager } from './lsp/manager.js';
+import { toPublicState } from './lsp/types.js';
+import { ResolveFlow } from './trails/resolveFlow.js';
+import { SymbolResolver } from './symbols/resolver.js';
 import { removeLock, writeLock } from './persistence/lock.js';
 import { SaveScheduler } from './persistence/scheduler.js';
 import { ProjectStore } from './persistence/store.js';
@@ -38,6 +43,9 @@ export interface StartServerOptions {
     dev?: boolean;
     /** 테스트에서 로그를 가로챈다. */
     logWrite?: (line: string) => void;
+    /** 테스트에서 LSP 요청 timeout 과 재시작 간격을 줄인다. */
+    lspRequestTimeoutMs?: number;
+    lspRestartDelaysMs?: readonly number[];
 }
 
 export interface RunningServer {
@@ -75,6 +83,38 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     const tree = new WorkspaceTree({ projectRoot });
     const documents = new DocumentRegistry(projectRoot);
 
+    // 앱이 만들어진 뒤에야 게이트웨이가 생긴다. 상태 변화는 그때부터 뿌린다.
+    let broadcastLspState: (info: ReturnType<LspManager['diagnostics']>[number]) => void =
+        () => undefined;
+
+    const lsp = new LspManager({
+        projectRoot,
+        logger,
+        getSettings: () => store.getSettings(),
+        onStateChange: (info) => broadcastLspState(info),
+        ...(options.lspRequestTimeoutMs !== undefined
+            ? { requestTimeoutMs: options.lspRequestTimeoutMs }
+            : {}),
+        ...(options.lspRestartDelaysMs !== undefined
+            ? { restartDelaysMs: options.lspRestartDelaysMs }
+            : {}),
+    });
+
+    const resolver = new SymbolResolver({
+        lsp,
+        documents,
+        logger,
+        getContextLines: () => store.getSettings().ui.contextLines,
+    });
+
+    const resolveFlow = new ResolveFlow({
+        trails,
+        resolver,
+        documents,
+        logger,
+        getSettings: () => store.getSettings(),
+    });
+
     const context: ServerContext = {
         projectRoot,
         projectName,
@@ -83,6 +123,8 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         trails,
         tree,
         documents,
+        lsp,
+        resolveFlow,
     };
 
     // 7. 세션 토큰. 프로세스가 사는 동안만 유효하고 디스크에 남기지 않는다.
@@ -108,6 +150,14 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
 
     await app.fastify.listen({ host: '127.0.0.1', port });
 
+    broadcastLspState = (info) => {
+        app.gateway.broadcast('lsp.stateChanged', {
+            language: info.language,
+            state: toPublicState(info.state),
+            lastError: info.lastError,
+        }, {});
+    };
+
     const watcher = new WorkspaceWatcher({
         tree,
         logger,
@@ -116,6 +166,12 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
             // 서버가 대신 다시 읽지 않는다. 무엇이 바뀌었는지만 알린다 —
             // 갱신 시점은 화면(과 사용자)이 정한다.
             app.gateway.broadcast('workspace.filesChanged', { relPaths }, {});
+            // 언어 서버에는 알린다. 그쪽은 낡은 내용으로 답하면 안 된다.
+            for (const relPath of relPaths) {
+                void lsp.notifyFileChanged(
+                    pathToUri(path.join(projectRoot, ...relPath.split('/'))),
+                );
+            }
         },
     });
     watcher.start();
@@ -143,6 +199,8 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         // 3. 대기 중인 저장을 끝낸다.
         await trails.flush();
         await scheduler.stop();
+        // 4~6. 언어 서버에 shutdown/exit 를 보내고, 제한 시간을 넘긴 것만 끝낸다.
+        await lsp.stopAll();
         await app.fastify.close();
         // 7. 잠금 파일을 지운다.
         await removeLock(store.runtimeDir);

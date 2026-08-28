@@ -85,57 +85,57 @@
 
 ### 0.5 단계 4 — 공통 LSP 전송 계층
 
-- [ ] `vscode-jsonrpc` 기반 stdio transport를 구현한다.
-- [ ] `Content-Length` 프레이밍 parser를 구현한다.
-- [ ] stdout을 JSON-RPC 전용으로 처리한다.
-- [ ] stderr를 크기 제한 ring buffer로 분리한다.
-- [ ] LSP 요청 ID와 pending request map을 구현한다.
-- [ ] 요청별 timeout을 구현한다.
-- [ ] `$/cancelRequest` 전송을 구현한다.
-- [ ] `initialize` 요청과 `initialized` 알림을 구현한다.
-- [ ] `shutdown` 요청과 `exit` 알림을 구현한다.
-- [ ] 동적 capability 등록·해제를 구현한다.
-- [ ] `window/logMessage`, `window/showMessage`, `$/progress`를 수신한다.
-- [ ] UTF-16 position encoding capability를 명시한다.
-- [ ] 문서별 URI·languageId·version·hash 캐시를 구현한다.
-- [ ] `textDocument/didOpen`을 구현한다.
-- [ ] full-content `textDocument/didChange`를 구현한다.
-- [ ] `textDocument/didClose`를 구현한다.
-- [ ] 열린 문서 LRU와 서버 재시작 후 didOpen 복원을 구현한다.
-- [ ] LSP 상태 머신을 구현한다.
-- [ ] 1초·2초·5초의 최대 세 번 재시작 backoff를 구현한다.
-- [ ] 정상 종료 후 자식 LSP 프로세스가 남지 않게 한다.
-- [ ] 가짜 stdio LSP 서버를 테스트 fixture로 만든다.
-- [ ] 정상·지연·취소·프로토콜 오염·crash·재시작 테스트를 작성한다.
-- [ ] **단계 4 완료**
+- [x] `vscode-jsonrpc` 기반 stdio transport를 구현한다.
+- [x] `Content-Length` 프레이밍 parser를 구현한다.
+- [x] stdout을 JSON-RPC 전용으로 처리한다.
+- [x] stderr를 크기 제한 ring buffer로 분리한다.
+- [x] LSP 요청 ID와 pending request map을 구현한다.
+- [x] 요청별 timeout을 구현한다.
+- [x] `$/cancelRequest` 전송을 구현한다.
+- [x] `initialize` 요청과 `initialized` 알림을 구현한다.
+- [x] `shutdown` 요청과 `exit` 알림을 구현한다.
+- [x] 동적 capability 등록·해제를 구현한다.
+- [x] `window/logMessage`, `window/showMessage`, `$/progress`를 수신한다.
+- [x] UTF-16 position encoding capability를 명시한다.
+- [x] 문서별 URI·languageId·version·hash 캐시를 구현한다.
+- [x] `textDocument/didOpen`을 구현한다.
+- [x] full-content `textDocument/didChange`를 구현한다.
+- [x] `textDocument/didClose`를 구현한다.
+- [x] 열린 문서 LRU와 서버 재시작 후 didOpen 복원을 구현한다.
+- [x] LSP 상태 머신을 구현한다.
+- [x] 1초·2초·5초의 최대 세 번 재시작 backoff를 구현한다.
+- [x] 정상 종료 후 자식 LSP 프로세스가 남지 않게 한다.
+- [x] 가짜 stdio LSP 서버를 테스트 fixture로 만든다.
+- [x] 정상·지연·취소·프로토콜 오염·crash·재시작 테스트를 작성한다.
+- [x] **단계 4 완료**
 
 ### 0.6 단계 5 — 심볼 해석 서비스
 
-- [ ] LSP `DocumentSymbol` 평탄화를 구현한다.
-- [ ] LSP `SymbolInformation` 평탄화를 구현한다.
-- [ ] `narrower` 정렬 규칙을 이식한다.
-- [ ] `pickEnclosing`을 이식한다.
-- [ ] `pickEnclosingBody`를 이식한다.
-- [ ] `pickByDeclaration`을 이식한다.
-- [ ] Location과 LocationLink 정규화를 구현한다.
-- [ ] definition 요청을 연결한다.
-- [ ] definition 실패 시 typeDefinition 폴백을 구현한다.
-- [ ] documentSymbol 요청을 연결한다.
-- [ ] implementation 요청을 연결한다.
-- [ ] references를 구현 찾기 폴백으로 사용하지 않는지 검증한다.
-- [ ] 복수 정의 후보 선택 명령과 응답을 구현한다.
-- [ ] 한 줄 range의 targetRange 폴백을 구현한다.
-- [ ] 다음 심볼 경계 기반 본문 끝 추정을 구현한다.
-- [ ] `contextLines` 최종 폴백을 구현한다.
-- [ ] 노드당 4,000줄 하드 캡을 구현한다.
-- [ ] 선언만 판정을 별도 휴리스틱으로 격리한다.
-- [ ] 동일 부모 아래 동일 심볼 중복 방지를 구현한다.
-- [ ] 구현 후보가 하나일 때만 자동으로 붙인다.
-- [ ] 구현 후보가 여러 개면 자동 선택하지 않는지 검증한다.
-- [ ] 선언 노드가 구현 추적 후에도 남는지 검증한다.
-- [ ] Roslyn 심볼 이름의 `(` 앞 표시 이름 처리를 이식한다.
-- [ ] 탭·한글·이모지·surrogate pair 좌표 테스트를 작성한다.
-- [ ] **단계 5 완료**
+- [x] LSP `DocumentSymbol` 평탄화를 구현한다.
+- [x] LSP `SymbolInformation` 평탄화를 구현한다.
+- [x] `narrower` 정렬 규칙을 이식한다.
+- [x] `pickEnclosing`을 이식한다.
+- [x] `pickEnclosingBody`를 이식한다.
+- [x] `pickByDeclaration`을 이식한다.
+- [x] Location과 LocationLink 정규화를 구현한다.
+- [x] definition 요청을 연결한다.
+- [x] definition 실패 시 typeDefinition 폴백을 구현한다.
+- [x] documentSymbol 요청을 연결한다.
+- [x] implementation 요청을 연결한다.
+- [x] references를 구현 찾기 폴백으로 사용하지 않는지 검증한다.
+- [x] 복수 정의 후보 선택 명령과 응답을 구현한다.
+- [x] 한 줄 range의 targetRange 폴백을 구현한다.
+- [x] 다음 심볼 경계 기반 본문 끝 추정을 구현한다.
+- [x] `contextLines` 최종 폴백을 구현한다.
+- [x] 노드당 4,000줄 하드 캡을 구현한다.
+- [x] 선언만 판정을 별도 휴리스틱으로 격리한다.
+- [x] 동일 부모 아래 동일 심볼 중복 방지를 구현한다.
+- [x] 구현 후보가 하나일 때만 자동으로 붙인다.
+- [x] 구현 후보가 여러 개면 자동 선택하지 않는지 검증한다.
+- [x] 선언 노드가 구현 추적 후에도 남는지 검증한다.
+- [x] Roslyn 심볼 이름의 `(` 앞 표시 이름 처리를 이식한다.
+- [x] 탭·한글·이모지·surrogate pair 좌표 테스트를 작성한다.
+- [x] **단계 5 완료**
 
 ### 0.7 단계 6 — 언어별 LSP 어댑터
 
@@ -1066,6 +1066,7 @@ trail.addRootAt
 trail.addRootFromSymbol
 trail.resolve
 trail.resolveImplementations
+trail.chooseCandidate
 trail.removeNode
 trail.toggleNode
 trail.promoteToRoot
@@ -1080,6 +1081,8 @@ editor.openLocation
 settings.update
 lsp.restart
 ```
+
+`trail.chooseCandidate`는 단계 5에서 추가했다. 정의 후보가 여러 개일 때 서버가 하나를 고르지 않고 `trail.definitionChoice` 이벤트로 목록을 보내며, 사용자가 고르면 이 명령으로 돌아온다. 서버가 응답을 붙들고 사용자를 기다리면 그 사이 같은 트레일의 다른 명령이 전부 막히므로 왕복을 둘로 나눴다.
 
 트리 구조를 바꾸는 명령과 순수 UI 상태 명령을 타입으로 구분한다. `trail.setNodeUi`는 드래그 중 매 pointer event마다 보내지 않고 클라이언트에서 프레임 단위로 그린 뒤 drag end에 최종 좌표만 보낸다.
 

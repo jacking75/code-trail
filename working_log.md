@@ -1,5 +1,14 @@
 # 작업 로그
 
+## 2026-08-28 17:44 KST — 독립 프로그램 전환 단계 4·5 완료
+
+- `vscode-jsonrpc` 기반 stdio LSP 클라이언트를 붙였다. 요청별 timeout 과 `$/cancelRequest`, stdout 오염 판정, stderr 크기 제한 ring buffer, 동적 capability 등록·해제를 처리한다.
+- 문서 동기화(didOpen/didChange/didClose, LRU, 재시작 후 복원)와 상태 머신·재시작 backoff(1·2·5초, 최대 3회)를 구현했다.
+- 확장의 심볼 선택 규칙(narrower, pickEnclosing, pickEnclosingBody, pickByDeclaration)과 본문 범위 4단계 폴백, 4,000줄 하드 캡, 선언만 판정을 그대로 이식했다.
+- 정의 클릭 → 자식 노드 붙이기가 동작한다. 후보가 여럿이면 고르지 않고 `trail.definitionChoice` 로 사용자에게 넘긴다(명령 `trail.chooseCandidate` 추가).
+- 구현이 몸통 있는 것 정확히 하나일 때만 자동으로 이어 붙이고, 참조 검색 폴백은 만들지 않았다.
+- 나쁜 언어 서버를 흉내내는 `test/fake-lsp` 를 만들었다. 단위 116 + 통합 61 + E2E + 확장 회귀가 모두 통과한다.
+
 ## 2026-08-28 16:35 KST — 독립 프로그램 전환 단계 2·3 완료
 
 - `code-trail <경로>` CLI 가 로컬 서버를 띄우고 브라우저를 연다. 인자 해석, 빈 포트 선택, 같은 프로젝트 서버 재사용 감지, 종료 신호 처리를 구현했다.

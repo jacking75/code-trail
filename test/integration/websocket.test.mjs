@@ -325,7 +325,7 @@ test('여러 탭이 같은 이벤트를 받는다', async () => {
     }
 });
 
-test('아직 없는 기능은 조용히 넘어가지 않고 이유를 알린다', async () => {
+test('없는 트레일을 대상으로 한 해석은 이유를 알린다', async () => {
     const root = await makeProject(FILES);
     try {
         await withServer(root, async (running) => {
@@ -339,7 +339,30 @@ test('아직 없는 기능은 조용히 넘어가지 않고 이유를 알린다'
                 payload: { nodeId: randomUUID(), line: 0, char: 0, text: 'x' },
             });
             const error = await client.wait((e) => e.type === 'command.error');
-            assert.equal(error.payload.error.code, 'LSP_UNAVAILABLE');
+            assert.equal(error.payload.error.code, 'NOT_FOUND');
+            await client.close();
+        });
+    } finally {
+        await removeProject(root);
+    }
+});
+
+test('아직 없는 기능은 조용히 넘어가지 않고 이유를 알린다', async () => {
+    // 외부 에디터 열기는 단계 9의 몫이다. 아무 일도 안 일어나는 대신
+    // 아직 없다는 것을 분명히 알린다.
+    const root = await makeProject(FILES);
+    try {
+        await withServer(root, async (running) => {
+            const client = await openSocket(running);
+            client.send({
+                protocolVersion: 1,
+                type: 'editor.openLocation',
+                commandId: randomUUID(),
+                payload: { documentId: 'doc-1', line: 0, char: 0 },
+            });
+            const error = await client.wait((e) => e.type === 'command.error');
+            assert.equal(error.payload.error.code, 'NOT_FOUND');
+            assert.match(error.payload.error.message, /아직 구현되지 않았다/);
             await client.close();
         });
     } finally {

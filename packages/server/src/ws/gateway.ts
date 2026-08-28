@@ -13,6 +13,7 @@ import {
 } from '@code-trail/shared';
 
 import type { ServerContext } from '../context.js';
+import type { ResolveFlowResult } from '../trails/resolveFlow.js';
 
 /**
  * WebSocket 게이트웨이.
@@ -228,6 +229,134 @@ export class WebSocketGateway {
                 revision: trail.revision,
                 payload: this.snapshotPayload(trail),
             });
+        }
+    }
+
+    /**
+     * 해석 명령 하나를 돌린다.
+     *
+     * 셋 다 같은 모양이라 한곳에 모았다 — 노드에 진행 표시를 켜고, 결과에 따라
+     * 이벤트를 뿌리고, 무슨 일이 있어도 진행 표시를 끈다. `finally` 가 핵심이다.
+     * 여기서 빠뜨리면 실패한 노드가 영원히 도는 표시를 달고 남는다.
+     */
+    private async runResolve(
+        client: Client,
+        command: ClientCommand,
+        trailId: string,
+        busyNodeId: string | null,
+        run: () => Promise<ResolveFlowResult>,
+    ): Promise<void> {
+        if (busyNodeId !== null) {
+            this.broadcast('trail.nodeBusy', { nodeId: busyNodeId, on: true }, { trailId });
+        }
+        try {
+            const result = await run();
+
+            switch (result.kind) {
+                case 'error':
+                    if (result.error.code === 'STALE_REVISION') {
+                        this.sendStaleRecovery(client, trailId, result.error, command.commandId);
+                        return;
+                    }
+                    this.sendError(client, result.error, command.commandId);
+                    return;
+
+                case 'none':
+                    this.sendError(
+                        client,
+                        {
+                            code: 'NOT_FOUND',
+                            message: '정의를 찾지 못했다. 해당 언어의 언어 서버가 켜져 있는지 '
+                                + '확인한다.',
+                            retryable: true,
+                        },
+                        command.commandId,
+                    );
+                    return;
+
+                case 'existing':
+                    // 이미 붙어 있다. 새로 만들지 않고 그 노드로 보낸다.
+                    this.broadcast('trail.activeNodeChanged', { nodeId: result.nodeId }, {
+                        commandId: command.commandId,
+                        trailId,
+                    });
+                    return;
+
+                case 'choice':
+                    // **자동으로 고르지 않는다.** 사용자에게 넘긴다.
+                    this.broadcast('trail.definitionChoice', {
+                        choiceId: result.choiceId,
+                        nodeId: result.nodeId,
+                        candidates: result.candidates.map((candidate) => ({
+                            candidateId: candidate.candidateId,
+                            name: candidate.name,
+                            displayPath: candidate.displayPath,
+                            line: candidate.line,
+                            hasBody: candidate.hasBody,
+                        })),
+                    }, { commandId: command.commandId, trailId });
+                    return;
+
+                case 'added': {
+                    const eventType = result.parentId === ''
+                        ? 'trail.rootAdded'
+                        : 'trail.nodeAdded';
+                    const payload = result.parentId === ''
+                        ? { node: result.node }
+                        : { parentId: result.parentId, node: result.node };
+                    this.broadcast(eventType, payload, {
+                        commandId: command.commandId,
+                        trailId,
+                        revision: result.revision,
+                    });
+                    await this.afterNodeAdded(trailId, result.node.id, command.commandId);
+                    return;
+                }
+
+                default:
+                    return;
+            }
+        } finally {
+            if (busyNodeId !== null) {
+                this.broadcast('trail.nodeBusy', { nodeId: busyNodeId, on: false }, { trailId });
+            }
+        }
+    }
+
+    /**
+     * 붙인 노드가 선언뿐이면 구현을 한 단계 더 따라간다 (구현서 13.5 8~9단계).
+     *
+     * 몸통 있는 후보가 **정확히 하나**일 때만 붙는다. 여러 개면 붙이지 않고
+     * 그 사실만 알린다 — 화면은 `선언만` 배지와 `⚑` 를 그대로 둔다.
+     */
+    private async afterNodeAdded(
+        trailId: string,
+        nodeId: string,
+        commandId: string,
+    ): Promise<void> {
+        const trail = this.context.trails.get(trailId);
+        const node = trail?.get(nodeId);
+        if (!node?.symbol.declarationOnly) {
+            return;
+        }
+        const followed = await this.context.resolveFlow.autoFollowSingleImplementation({
+            trailId,
+            nodeId,
+        });
+        if (followed.node) {
+            this.broadcast('trail.nodeAdded', { parentId: nodeId, node: followed.node }, {
+                commandId,
+                trailId,
+                revision: this.context.trails.get(trailId)?.revision ?? 0,
+            });
+            return;
+        }
+        if (followed.candidateCount > 1) {
+            this.broadcast('trail.implementationChoice', {
+                nodeId,
+                truncated: false,
+                candidates: [],
+            }, { commandId, trailId });
         }
     }
 
@@ -489,24 +618,126 @@ export class WebSocketGateway {
                 return;
             }
 
-            // 아래는 언어 서버가 붙는 단계 4~6, 외부 에디터가 붙는 단계 9의 몫이다.
-            // 조용히 무시하지 않는다 — 클라이언트가 "왜 아무 일도 안 일어나지" 로
-            // 남지 않게 아직 없다는 것을 분명히 알린다.
-            case 'trail.addRootAt':
-            case 'trail.addRootFromSymbol':
-            case 'trail.resolve':
-            case 'trail.resolveImplementations':
-            case 'lsp.restart':
-                this.sendError(
-                    client,
-                    {
-                        code: 'LSP_UNAVAILABLE',
-                        message: '언어 서버 연결은 아직 구현되지 않았다.',
-                        retryable: false,
-                    },
-                    command.commandId,
-                );
+            case 'trail.resolve': {
+                const trailId = command.trailId as string;
+                const payload = command.payload as {
+                    nodeId: string;
+                    line: number;
+                    char: number;
+                    text: string;
+                };
+                await this.runResolve(client, command, trailId, payload.nodeId, () =>
+                    this.context.resolveFlow.resolveFromNode({
+                        trailId,
+                        baseRevision: command.baseRevision as number,
+                        nodeId: payload.nodeId,
+                        line: payload.line,
+                        char: payload.char,
+                        text: payload.text,
+                        mode: 'definition',
+                    }));
                 return;
+            }
+
+            case 'trail.chooseCandidate': {
+                const trailId = command.trailId as string;
+                const payload = command.payload as { choiceId: string; candidateId: string };
+                await this.runResolve(client, command, trailId, null, () =>
+                    this.context.resolveFlow.chooseCandidate({
+                        choiceId: payload.choiceId,
+                        candidateId: payload.candidateId,
+                        baseRevision: command.baseRevision as number,
+                    }));
+                return;
+            }
+
+            case 'trail.addRootAt':
+            case 'trail.addRootFromSymbol': {
+                const trailId = command.trailId as string;
+                const payload = command.payload as {
+                    documentId: string;
+                    line: number;
+                    char: number;
+                };
+                await this.runResolve(client, command, trailId, null, () =>
+                    this.context.resolveFlow.addRootAt({
+                        trailId,
+                        baseRevision: command.baseRevision as number,
+                        documentId: payload.documentId,
+                        line: payload.line,
+                        char: payload.char,
+                    }));
+                return;
+            }
+
+            case 'trail.resolveImplementations': {
+                const trailId = command.trailId as string;
+                const { nodeId } = command.payload as { nodeId: string };
+                this.broadcast('trail.nodeBusy', { nodeId, on: true }, { trailId });
+                try {
+                    const result = await this.context.resolveFlow.resolveImplementations({
+                        trailId,
+                        baseRevision: command.baseRevision as number,
+                        nodeId,
+                    });
+                    if (result.kind === 'error') {
+                        this.sendError(client, result.error, command.commandId);
+                        return;
+                    }
+                    if (result.kind === 'none') {
+                        this.sendError(
+                            client,
+                            {
+                                code: 'NOT_FOUND',
+                                message: '구현을 찾지 못했다. 언어 서버가 프로젝트 전체를 '
+                                    + '읽었는지 확인한다.',
+                                retryable: true,
+                            },
+                            command.commandId,
+                        );
+                        return;
+                    }
+                    for (const node of result.nodes) {
+                        this.broadcast('trail.nodeAdded', { parentId: nodeId, node }, {
+                            commandId: command.commandId,
+                            trailId,
+                            revision: result.revision,
+                        });
+                    }
+                    if (result.truncated) {
+                        this.broadcast('trail.implementationChoice', {
+                            nodeId,
+                            truncated: true,
+                            candidates: [],
+                        }, { commandId: command.commandId, trailId });
+                    }
+                } finally {
+                    this.broadcast('trail.nodeBusy', { nodeId, on: false }, { trailId });
+                }
+                return;
+            }
+
+            case 'lsp.restart': {
+                const { language } = command.payload as {
+                    language: 'cpp' | 'csharp' | 'go' | 'rust';
+                };
+                try {
+                    await this.context.lsp.restart(language);
+                } catch (error) {
+                    this.sendError(
+                        client,
+                        {
+                            code: 'LSP_UNAVAILABLE',
+                            message: error instanceof Error
+                                ? error.message
+                                : '언어 서버를 다시 시작하지 못했다.',
+                            retryable: false,
+                        },
+                        command.commandId,
+                    );
+                }
+                return;
+            }
 
             case 'editor.openLocation':
                 this.sendError(

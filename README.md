@@ -322,9 +322,13 @@ npm run test:e2e              # 독립 프로그램 전체 (playwright 필요)
 ```
 node test/tokenizer.test.js          # 토크나이저 (주석/문자열 오탐, 줄·컬럼 매핑)
 node test/shell.test.js              # panel.ts 셸 ↔ preview.html 동기화
-node --test "test/unit/*.test.mjs"          # 도메인·프로토콜·CLI 인자
-node --test "test/integration/*.test.mjs"   # 진짜 로컬 서버 (보안 경계·저장소·WebSocket)
+node --test "test/unit/*.test.mjs"          # 도메인·프로토콜·심볼 선택·CLI 인자
+node --test "test/integration/*.test.mjs"   # 진짜 로컬 서버 + 가짜 언어 서버
 ```
+
+`test/fake-lsp/server.mjs` 는 진짜 clangd·gopls 없이 LSP 계층을 시험하기 위한 가짜 서버다.
+정상 동작만이 아니라 **실제 언어 서버가 하는 나쁜 일들**(한 줄짜리 range, stdout 오염,
+요청 중 crash, 뒤늦은 capability 등록)을 시나리오로 재현한다.
 
 `test/unit` 과 `test/integration` 은 빌드된 `packages/*/dist` 를 불러온다.
 먼저 `npm run build` 를 돌린다.
@@ -357,8 +361,9 @@ npm run build
 npm run start -- <프로젝트 경로>
 ```
 
-로 띄우면 파일을 찾아 읽기 전용으로 볼 수 있다. **아직 심볼 해석이 없다** —
-식별자를 클릭해 정의를 펼치는 것은 다음 단계에서 붙는다.
+로 띄우면 파일을 찾아 읽기 전용으로 볼 수 있고, 언어 서버를 붙이면 심볼 해석까지 된다.
+다만 **언어 서버 실행 파일을 자동으로 찾지 않는다** — `.code-trail/settings.json` 에
+경로를 직접 적어야 한다. 트레일을 그리는 화면도 아직 없다(다음 단계).
 계획은 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md),
 확장 마지막 상태의 기준선은 [`docs/baseline.md`](docs/baseline.md) 에 있다.
 

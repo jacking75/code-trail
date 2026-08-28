@@ -156,6 +156,26 @@ export const implementationChoicePayloadSchema = z.object({
     })),
 });
 
+/**
+ * 정의 후보가 여럿이라 서버가 고르지 않았다.
+ *
+ * 구현 후보와 이유가 같다. 어느 것이 맞는지는 호출부의 정적 타입만으로 알 수
+ * 없고, 하나를 골라 붙이면 그게 정답이라고 오해하게 된다.
+ * 사용자가 고르면 `trail.chooseCandidate` 로 돌아온다.
+ */
+export const definitionChoicePayloadSchema = z.object({
+    choiceId: z.string().min(1),
+    /** 어느 노드에서 클릭했는지. 루트를 만드는 중이면 `null`. */
+    nodeId: uuidSchema.nullable(),
+    candidates: z.array(z.object({
+        candidateId: z.string().min(1),
+        name: z.string(),
+        displayPath: z.string(),
+        line: z.int().min(0),
+        hasBody: z.boolean(),
+    })),
+});
+
 export const commandErrorPayloadSchema = z.object({
     error: commandErrorSchema,
 });
@@ -178,6 +198,7 @@ export const EVENT_PAYLOADS = {
     'trail.listChanged': trailListChangedPayloadSchema,
     'trail.exportReady': exportReadyPayloadSchema,
     'trail.implementationChoice': implementationChoicePayloadSchema,
+    'trail.definitionChoice': definitionChoicePayloadSchema,
     'workspace.documentOpened': documentOpenedPayloadSchema,
     'workspace.searchResult': searchResultPayloadSchema,
     'workspace.filesChanged': filesChangedPayloadSchema,
