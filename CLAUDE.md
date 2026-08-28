@@ -36,18 +36,35 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 - **붙이다** — 트리에 노드를 새로 다는 것(`addChild`). 접기/펼치기와 구분해야 할 때만 쓴다.
 - **파고들다** — 한 단계 더 들어가는 사용자 행위. 문서에서만 쓰고 코드 이름에는 안 쓴다.
 
+## 지금 무엇을 하고 있나
+
+**독립 프로그램으로 전환하는 중이다.** 계획은 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md)
+이고 그 문서 0장의 체크리스트가 진행의 정본이다. 단계 0(기준선)과 단계 1(모노레포와 공유 도메인)이 끝났다.
+
+- `src/`, `media/` — **지금 동작하는 VS Code 확장.** 단계 10까지 그대로 둔다. 손대면 기준선이 흔들린다.
+- `packages/` — **새 독립 프로그램.** shared 도메인·프로토콜만 채워져 있고 서버·웹·CLI는 뼈대다.
+- 확장 마지막 상태는 tag `v0.6.0-vscode-extension` 이고 기준선 기록은 [`docs/baseline.md`](docs/baseline.md) 다.
+- 확장에서 되던 동작을 새 프로그램에서 무엇으로 확인할지는 [`docs/e2e-port-checklist.md`](docs/e2e-port-checklist.md) 에 있다.
+
 ## 명령
 
 ```
 npm install
+
+# 새 독립 프로그램 (packages/)
+npm run build                   # shared → server → cli
+npm run typecheck               # 확장 + 모든 workspace
+npm test                        # 토크나이저 + 셸 + test/unit (브라우저 불필요)
+
+# 지금 동작하는 확장 (src/, media/)
 npm run compile                 # tsc → out/
 npx @vscode/vsce package        # → code-trail-<version>.vsix
-node test/tokenizer.test.js     # 토크나이저
-node test/shell.test.js         # panel.ts 셸 ↔ preview.html 동기화 (브라우저 불필요)
-node test/ui.test.js            # 웹뷰 (playwright 필요)
+npm run test:ui                 # 웹뷰 (playwright 필요)
+npm run screenshot              # docs/baseline/*.png 다시 만들기
 ```
 
-`test/ui.test.js` 는 컨테이너의 프리설치 Chromium을 쓴다.
+`npm test` 의 `test/unit` 은 `packages/shared/dist` 를 불러온다. 먼저 `npm run build` 를 돌린다.
+`npm run test:ui` 와 `npm run screenshot` 은 컨테이너의 프리설치 Chromium을 쓴다.
 경로가 다르면 `CT_CHROME=/path/to/chrome` 로 넘긴다.
 
 ## 지켜야 할 것
@@ -88,6 +105,8 @@ A 안에서 B, C를 클릭하면 둘 다 A의 형제 자식이다. 이 규칙을
 
 ## 구조
 
+지금 동작하는 확장:
+
 ```
 src/symbols.ts    언어 서버 호출 → ResolvedSymbol (본문 코드 + 좌표 + declarationOnly 등)
 src/trail.ts      트리 모델, 재귀 감지, Markdown/JSON 직렬화
@@ -97,6 +116,21 @@ media/tokenizer.js  하이라이팅 + 식별자에 좌표 심기
 media/main.js       트리 렌더링, 클릭 처리, 툴바
 media/style.css     VS Code 테마 변수 기반 스타일
 ```
+
+전환 중인 독립 프로그램 (npm workspaces):
+
+```
+packages/shared/src/domain/     ResolvedSymbol, Trail, 설정, 저장 스키마, Markdown, UUID
+packages/shared/src/protocol/   명령·이벤트 타입과 Zod 런타임 스키마
+packages/server/src/            로컬 서버 (단계 2부터)
+packages/web/src/               브라우저 프론트엔드 (단계 2부터)
+packages/cli/src/               code-trail CLI (단계 2부터)
+test/unit/                      shared 단위 테스트 (node:test)
+test/fixtures/                  단계 0에서 굳힌 확장 시절 데이터
+```
+
+`packages/shared` 는 파일 시스템·네트워크·DOM·`vscode` 어디에도 의존하지 않는다.
+`test/unit/shared-independence.test.mjs` 가 이걸 검사한다.
 
 메시지는 `panel.ts` 의 `onMessage`(웹뷰→확장)와 `main.js` 의
 `window.addEventListener('message')`(확장→웹뷰) 두 곳에 한 쌍으로 추가한다.
@@ -121,6 +155,9 @@ media/style.css     VS Code 테마 변수 기반 스타일
 | `package.json` 에 설정 추가 | README `## 설정` 표. 웹뷰가 읽어야 하면 `readConfig` · `ClientConfig` · `main.js` 의 `config` 까지 |
 | 명령·키바인딩 추가 | README `## 사용법` 표 |
 | 사용자가 체감하는 동작 변경 | `CHANGELOG.md` 새 항목 + `package.json` 의 `version`, 그리고 `working_log.md` |
+| `packages/shared` 의 도메인 타입 | `packages/shared/src/protocol/schemas.ts` 의 같은 스키마 (`satisfies` 가 컴파일에서 잡는다), `test/unit/` |
+| 새 명령·이벤트 추가 | `protocol/commands.ts` 또는 `events.ts` 의 payload 스키마, 그리고 구현서 14.2·15.2 |
+| 전환 단계 하나를 끝냄 | 구현서 0장 체크리스트, `docs/e2e-port-checklist.md` 의 해당 줄, `working_log.md` |
 | 언어 서버 예외 처리 추가 | 아래 `## 언어 서버별 함정` |
 
 이 중 기계가 잡아주는 건 첫 줄(`node test/shell.test.js`)뿐이다. 나머지는 사람이 챙긴다.

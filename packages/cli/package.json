@@ -1,0 +1,20 @@
+{
+  "name": "@code-trail/cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "code-trail CLI. 인자를 읽고 프로젝트를 검증한 뒤 로컬 서버를 띄우고 브라우저를 연다.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "code-trail": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@code-trail/server": "0.0.0",
+    "@code-trail/shared": "0.0.0"
+  }
+}

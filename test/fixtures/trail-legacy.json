@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "roots": [
+    {
+      "id": "n1",
+      "parentId": null,
+      "symbol": {
+        "name": "HandlePacket",
+        "detail": "(Session*, Packet*) -> void",
+        "container": "",
+        "kind": 11,
+        "uri": "file:///w/src/net/dispatch.cpp",
+        "relPath": "gameserver/src/net/dispatch.cpp",
+        "fsPath": "/w/src/net/dispatch.cpp",
+        "languageId": "cpp",
+        "code": "void HandlePacket(Session* sess, Packet* pkt) {\n    auto* handler = g_registry.Find(pkt->opcode);\n    handler->Invoke(sess, pkt);\n}",
+        "startLine": 120,
+        "anchorLine": 120,
+        "anchorChar": 5,
+        "approximate": false,
+        "callable": true,
+        "declarationOnly": false
+      },
+      "origin": null,
+      "collapsed": false,
+      "recursive": false,
+      "children": [
+        {
+          "id": "n2",
+          "parentId": "n1",
+          "symbol": {
+            "name": "Find",
+            "detail": "(uint16_t) -> IHandler*",
+            "container": "HandlerRegistry",
+            "kind": 5,
+            "uri": "file:///w/src/net/registry.cpp",
+            "relPath": "gameserver/src/net/registry.cpp",
+            "fsPath": "/w/src/net/registry.cpp",
+            "languageId": "cpp",
+            "code": "IHandler* HandlerRegistry::Find(uint16_t opcode) const {\n    auto it = map_.find(opcode);\n    return it == map_.end() ? nullptr : it->second.get();\n}",
+            "startLine": 40,
+            "anchorLine": 41,
+            "anchorChar": 20,
+            "approximate": false,
+            "callable": true,
+            "declarationOnly": false
+          },
+          "origin": { "line": 121, "char": 31, "text": "Find" },
+          "collapsed": false,
+          "recursive": false,
+          "children": []
+        },
+        {
+          "id": "n3",
+          "parentId": "n1",
+          "symbol": {
+            "name": "HandlePacket",
+            "detail": "(Session*, Packet*) -> void",
+            "container": "",
+            "kind": 11,
+            "uri": "file:///w/src/net/dispatch.cpp",
+            "relPath": "gameserver/src/net/dispatch.cpp",
+            "fsPath": "/w/src/net/dispatch.cpp",
+            "languageId": "cpp",
+            "code": "void HandlePacket(Session* sess, Packet* pkt) {\n    auto* handler = g_registry.Find(pkt->opcode);\n    handler->Invoke(sess, pkt);\n}",
+            "startLine": 120,
+            "anchorLine": 120,
+            "anchorChar": 5,
+            "approximate": false,
+            "callable": true,
+            "declarationOnly": false
+          },
+          "origin": { "line": 122, "char": 13, "text": "HandlePacket" },
+          "collapsed": true,
+          "recursive": true,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

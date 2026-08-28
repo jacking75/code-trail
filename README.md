@@ -312,17 +312,26 @@ code --extensionDevelopmentPath=<이 폴더의 절대경로> <탐색할_프로�
 ## 테스트
 
 ```
-node test/tokenizer.test.js   # 토크나이저 (주석/문자열 오탐, 줄·컬럼 매핑)
-node test/shell.test.js       # panel.ts 셸 ↔ preview.html 동기화 (브라우저 불필요)
-node test/ui.test.js          # 웹뷰 렌더링·상호작용 (playwright 필요)
+npm test                      # 아래 셋 중 브라우저가 필요 없는 것 전부
+npm run test:ui               # 웹뷰 렌더링·상호작용 (playwright 필요)
 ```
+
+`npm test` 가 도는 것:
+
+```
+node test/tokenizer.test.js   # 토크나이저 (주석/문자열 오탐, 줄·컬럼 매핑)
+node test/shell.test.js       # panel.ts 셸 ↔ preview.html 동기화
+node --test "test/unit/*.test.mjs"   # packages/shared 도메인·프로토콜
+```
+
+`test/unit` 은 빌드된 `packages/shared/dist` 를 불러온다. 먼저 `npm run build` 를 돌린다.
 
 `shell.test.js` 는 `panel.ts` 의 HTML 셸과 `test/preview.html` 을 비교한다.
 id 집합이 양쪽에 똑같이 있는지, `main.js` 가 `getElementById` 로 찾는 것이 양쪽에 다 있는지,
 `panel.ts` 가 `asWebviewUri` 로 거는 `media/` 파일을 `preview.html` 도 로드하는지 셋을 본다.
 한쪽만 고치면 여기서 걸린다.
 
-UI 테스트는 `npm install --no-save playwright` 후 크로미움 경로를 잡아준다.
+UI 테스트는 `playwright` 를 쓴다 (`npm install` 이 함께 받는다). 브라우저는 컨테이너의 프리설치 크로미움을 기본으로 찾는다.
 `CT_CHROME` 환경변수로 실행 파일을 직접 지정할 수 있다.
 
 ## 구조
@@ -336,6 +345,11 @@ media/tokenizer.js  하이라이팅 + 식별자에 (줄, 컬럼) 심기
 media/main.js       트리 렌더링, 클릭 처리, 툴바
 media/style.css     VS Code 테마 변수 기반 스타일
 ```
+
+`packages/` 아래는 **VS Code 없이 도는 독립 프로그램으로 옮기는 중인 코드**다.
+아직 실행할 수 있는 것이 없고 확장 동작에도 영향을 주지 않는다.
+계획은 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md),
+확장 마지막 상태의 기준선은 [`docs/baseline.md`](docs/baseline.md) 에 있다.
 
 식별자 클릭 좌표는 토크나이저가 심어둔 원본 파일 기준 `(줄, 컬럼)`이고,
 그 좌표를 그대로 `executeDefinitionProvider`에 넘긴다. 즉 정확도는 토크나이저가 아니라

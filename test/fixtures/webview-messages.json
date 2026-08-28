@@ -1,0 +1,234 @@
+{
+  "note": "v0.6.0-vscode-extension 시점의 확장↔웹뷰 메시지. 독립 프로그램에서는 WebSocket 명령·이벤트(문서 14.2/15.2)로 대체된다. 각 항목의 replacedBy 가 대응 관계다.",
+  "webviewToExtension": [
+    {
+      "message": {
+        "type": "ready"
+      },
+      "replacedBy": "WebSocket 연결 + GET /api/bootstrap"
+    },
+    {
+      "message": {
+        "type": "resolve",
+        "nodeId": "n1",
+        "line": 121,
+        "char": 31,
+        "text": "Find",
+        "mode": "definition"
+      },
+      "replacedBy": "trail.resolve"
+    },
+    {
+      "message": {
+        "type": "resolve",
+        "nodeId": "n1",
+        "line": 121,
+        "char": 31,
+        "text": "Find",
+        "mode": "implementation"
+      },
+      "replacedBy": "trail.resolveImplementations"
+    },
+    {
+      "message": {
+        "type": "resolveImplementations",
+        "nodeId": "n2"
+      },
+      "replacedBy": "trail.resolveImplementations"
+    },
+    {
+      "message": {
+        "type": "openInEditor",
+        "uri": "file:///w/src/net/registry.cpp",
+        "line": 41,
+        "char": 20
+      },
+      "replacedBy": "editor.openLocation"
+    },
+    {
+      "message": {
+        "type": "remove",
+        "nodeId": "n3"
+      },
+      "replacedBy": "trail.removeNode"
+    },
+    {
+      "message": {
+        "type": "toggle",
+        "nodeId": "n2",
+        "collapsed": true
+      },
+      "replacedBy": "trail.toggleNode"
+    },
+    {
+      "message": {
+        "type": "promoteToRoot",
+        "nodeId": "n2"
+      },
+      "replacedBy": "trail.promoteToRoot"
+    },
+    {
+      "message": {
+        "type": "clear"
+      },
+      "replacedBy": "trail.clear"
+    },
+    {
+      "message": {
+        "type": "exportMarkdown"
+      },
+      "replacedBy": "GET /api/trails/:trailId/export.md"
+    },
+    {
+      "message": {
+        "type": "exportJson"
+      },
+      "replacedBy": "없음 — 자동 저장으로 대체(문서 15.1)"
+    },
+    {
+      "message": {
+        "type": "importJson"
+      },
+      "replacedBy": "없음 — 기존 JSON 가져오기를 제공하지 않음(문서 3.2)"
+    },
+    {
+      "message": {
+        "type": "moveToNewWindow"
+      },
+      "replacedBy": "없음 — 브라우저 창 분리로 대체"
+    },
+    {
+      "message": {
+        "type": "error",
+        "message": "표시할 텍스트"
+      },
+      "replacedBy": "CommandError 이벤트"
+    }
+  ],
+  "extensionToWebview": [
+    {
+      "message": {
+        "type": "setState",
+        "config": {
+          "clickTarget": "allSymbols",
+          "maxCodeLines": 250,
+          "showAbsolutePath": false,
+          "fontSize": 0,
+          "childOrder": "source",
+          "fitToWidth": true,
+          "minFontSize": 8
+        },
+        "roots": []
+      },
+      "replacedBy": "trail.snapshot 이벤트 + ProjectSettings(문서 9.2)"
+    },
+    {
+      "message": {
+        "type": "addRoot",
+        "node": {
+          "id": "n1",
+          "parentId": null,
+          "origin": null,
+          "collapsed": false,
+          "recursive": false,
+          "symbol": {
+            "name": "HandlePacket",
+            "detail": "(Session*, Packet*) -> void",
+            "container": "",
+            "kind": 11,
+            "kindName": "function",
+            "uri": "file:///w/src/net/dispatch.cpp",
+            "relPath": "gameserver/src/net/dispatch.cpp",
+            "fsPath": "/w/src/net/dispatch.cpp",
+            "languageId": "cpp",
+            "code": "void HandlePacket(Session* sess, Packet* pkt) {\n    auto* handler = g_registry.Find(pkt->opcode);\n    handler->Invoke(sess, pkt);\n}",
+            "startLine": 120,
+            "anchorLine": 120,
+            "anchorChar": 5,
+            "approximate": false,
+            "callable": true,
+            "declarationOnly": false
+          },
+          "children": []
+        }
+      },
+      "replacedBy": "trail.rootAdded 이벤트"
+    },
+    {
+      "message": {
+        "type": "addChild",
+        "parentId": "n1",
+        "node": {
+          "id": "n2",
+          "parentId": "n1",
+          "origin": {
+            "line": 121,
+            "char": 31,
+            "text": "Find"
+          },
+          "collapsed": false,
+          "recursive": false,
+          "symbol": {
+            "name": "Find",
+            "detail": "(uint16_t) -> IHandler*",
+            "container": "HandlerRegistry",
+            "kind": 5,
+            "kindName": "method",
+            "uri": "file:///w/src/net/registry.cpp",
+            "relPath": "gameserver/src/net/registry.cpp",
+            "fsPath": "/w/src/net/registry.cpp",
+            "languageId": "cpp",
+            "code": "IHandler* HandlerRegistry::Find(uint16_t opcode) const {\n    return nullptr;\n}",
+            "startLine": 40,
+            "anchorLine": 41,
+            "anchorChar": 20,
+            "approximate": false,
+            "callable": true,
+            "declarationOnly": false
+          },
+          "children": []
+        }
+      },
+      "replacedBy": "trail.nodeAdded 이벤트"
+    },
+    {
+      "message": {
+        "type": "busy",
+        "nodeId": "n1",
+        "on": true
+      },
+      "replacedBy": "trail.nodeBusy 이벤트"
+    },
+    {
+      "message": {
+        "type": "focus",
+        "nodeId": "n2",
+        "quiet": true
+      },
+      "replacedBy": "trail.setActiveNode 결과 이벤트"
+    },
+    {
+      "message": {
+        "type": "toast",
+        "level": "warn",
+        "message": "'Find' 의 정의를 찾지 못했다. 해당 언어의 언어 서버가 켜져 있는지 확인 필요."
+      },
+      "replacedBy": "CommandError 또는 진단 이벤트"
+    },
+    {
+      "message": {
+        "type": "config",
+        "config": {
+          "clickTarget": "callsOnly",
+          "maxCodeLines": 250,
+          "showAbsolutePath": true,
+          "fontSize": 12,
+          "childOrder": "click",
+          "fitToWidth": false,
+          "minFontSize": 8
+        }
+      },
+      "replacedBy": "settings.update 결과 이벤트"
+    }
+  ]
+}

@@ -3,6 +3,9 @@
   "displayName": "Code Trail",
   "description": "함수를 클릭하면 코드를 인라인으로 펼쳐 보여주고, 그 안에서 또 클릭하면 계속 이어붙는 코드 탐색 트리",
   "version": "0.6.0",
+  "workspaces": [
+    "packages/*"
+  ],
   "publisher": "local",
   "license": "MIT",
   "repository": {
@@ -176,11 +179,17 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "build": "npm run build -w @code-trail/shared && npm run build -w @code-trail/server && npm run build -w @code-trail/cli",
+    "typecheck": "tsc -p ./ --noEmit && npm run typecheck --workspaces --if-present",
+    "test": "node test/tokenizer.test.js && node test/shell.test.js && node --test \"test/unit/*.test.mjs\"",
+    "test:ui": "node test/ui.test.js",
+    "screenshot": "node test/screenshot.js"
   },
   "devDependencies": {
     "@types/node": "20.x",
     "@types/vscode": "^1.80.0",
+    "playwright": "^1.62.1",
     "typescript": "^5.4.0"
   }
 }

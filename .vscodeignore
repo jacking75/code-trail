@@ -9,3 +9,6 @@ tsconfig.json
 **/*.ts
 node_modules/**
 AGENTS.md
+packages/**
+docs/**
+tsconfig.base.json

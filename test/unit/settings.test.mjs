@@ -1,0 +1,103 @@
+/* 확장 설정이 새 ProjectSettings 로 옮겨졌는지 — node --test "test/unit/*.test.mjs" */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { shared } from './helpers.mjs';
+
+const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
+
+/**
+ * 확장 `codeTrail.*` → 새 `ui.*`.
+ *
+ * 대응표는 `docs/e2e-port-checklist.md` 9절과 같아야 한다. 여기서 검사하는 것은
+ * "이름이 바뀌었어도 기본값이 그대로인가" 다 — 기본값이 조용히 달라지면 같은
+ * 프로젝트를 열었을 때 화면이 다르게 보인다.
+ */
+const PORTED = {
+    contextLines: 'contextLines',
+    maxCodeLines: 'maxCodeLines',
+    clickTarget: 'clickTarget',
+    autoFollowSingleImplementation: 'autoFollowSingleImplementation',
+    childOrder: 'childOrder',
+    revealInEditorOnAdd: 'revealInExternalEditorOnAdd',
+    fontSize: 'fontSize',
+    fitToWidth: 'fitToWidth',
+    minFontSize: 'minFontSize',
+};
+
+/** 옮기지 않기로 한 것. 이유는 체크리스트 9절에 적혀 있다. */
+const DROPPED = ['showAbsolutePath', 'autoCollapseSiblings'];
+
+function extensionDefaults() {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+    const props = pkg.contributes.configuration.properties;
+    const out = {};
+    for (const [key, value] of Object.entries(props)) {
+        out[key.replace(/^codeTrail\./, '')] = value.default;
+    }
+    return out;
+}
+
+test('확장 설정이 하나도 빠짐없이 분류돼 있다', () => {
+    const legacy = Object.keys(extensionDefaults()).sort();
+    const accounted = [...Object.keys(PORTED), ...DROPPED].sort();
+    assert.deepEqual(legacy, accounted);
+});
+
+test('옮긴 설정은 기본값이 그대로다', () => {
+    const legacy = extensionDefaults();
+    const { ui } = shared.defaultSettings();
+
+    for (const [before, after] of Object.entries(PORTED)) {
+        assert.equal(ui[after], legacy[before], `${before} → ui.${after}`);
+    }
+});
+
+test('버린 설정은 새 설정에 이름이 남아 있지 않다', () => {
+    const settings = shared.defaultSettings();
+    const dumped = JSON.stringify(settings);
+    for (const key of DROPPED) {
+        assert.equal(dumped.includes(key), false, `${key} 가 아직 있다`);
+    }
+});
+
+test('새로 생긴 항목이 기본값을 갖는다', () => {
+    const settings = shared.defaultSettings();
+
+    assert.equal(settings.schemaVersion, 1);
+    assert.equal(settings.ui.theme, 'system');
+    assert.equal(settings.editor.executable, null);
+    assert.deepEqual(settings.editor.args, []);
+
+    for (const language of ['cpp', 'csharp', 'go', 'rust']) {
+        const ls = settings.languages[language];
+        assert.equal(ls.enabled, true, language);
+        // 실행 파일은 PATH 에서 자동 탐지한다. 경로를 미리 박아두지 않는다.
+        assert.equal(ls.executable, null, language);
+        assert.deepEqual(ls.args, [], language);
+        assert.deepEqual(ls.env, {}, language);
+    }
+});
+
+test('본문 줄 수 상한은 설정으로 열지 않는다', () => {
+    // maxCodeLines 는 "보여줄 줄 수", 하드 캡은 "읽어들일 줄 수" 다.
+    // 언어 서버가 파일 전체를 한 심볼의 범위로 주는 사고를 막는 마지막 방어선이라
+    // 설정보다 항상 크고 설정 스키마에도 없다.
+    assert.equal(shared.MAX_TOTAL_LINES_HARD_CAP, 4000);
+    assert.ok(shared.MAX_TOTAL_LINES_HARD_CAP > shared.defaultSettings().ui.maxCodeLines);
+    assert.equal(JSON.stringify(shared.defaultSettings()).includes('4000'), false);
+});
+
+test('defaultSettings 는 호출할 때마다 새 객체를 준다', () => {
+    // 하나를 고치면 다른 프로젝트 설정까지 따라 바뀌는 사고를 막는다
+    const a = shared.defaultSettings();
+    const b = shared.defaultSettings();
+    a.ui.fontSize = 99;
+    a.languages.cpp.args.push('--깨짐');
+
+    assert.equal(b.ui.fontSize, 0);
+    assert.deepEqual(b.languages.cpp.args, []);
+});

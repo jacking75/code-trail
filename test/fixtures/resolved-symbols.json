@@ -1,0 +1,139 @@
+{
+  "note": "v0.6.0-vscode-extension 시점의 src/symbols.ts ResolvedSymbol 모양. 독립 프로그램의 새 ResolvedSymbol 이 같은 정보를 담는지 대조하는 기준이다.",
+  "kindNote": "kind 는 vscode.SymbolKind 숫자값이다. 4=namespace 5=class(원문 기준 method 로 쓰이는 값 포함) 11=function 은 아래 각 항목의 kindName 을 참고한다.",
+  "symbols": [
+    {
+      "case": "cpp-function-exact",
+      "why": "언어 서버가 다중 행 range 를 준 정상 함수. approximate=false, declarationOnly=false",
+      "symbol": {
+        "name": "HandlePacket",
+        "detail": "(Session*, Packet*) -> void",
+        "container": "",
+        "kind": 11,
+        "kindName": "function",
+        "uri": "file:///w/src/net/dispatch.cpp",
+        "relPath": "gameserver/src/net/dispatch.cpp",
+        "fsPath": "/w/src/net/dispatch.cpp",
+        "languageId": "cpp",
+        "startLine": 118,
+        "anchorLine": 120,
+        "anchorChar": 5,
+        "approximate": false,
+        "callable": true,
+        "declarationOnly": false,
+        "code": "// 클라이언트 패킷 진입점\n// (주석 안의 Dispatch 는 클릭 대상이 아니다)\nvoid HandlePacket(Session* sess, Packet* pkt) {\n    if (!sess->IsAuthed()) {\n        sess->Close(\"unauthenticated\");\n        return;\n    }\n\n    auto* handler = g_registry.Find(pkt->opcode);\n    if (handler == nullptr) {\n        LOG_WARN(\"unknown opcode {}\", pkt->opcode);\n        return;\n    }\n    handler->Invoke(sess, pkt);\n}"
+      }
+    },
+    {
+      "case": "cpp-method-approximate",
+      "why": "일부 C++ 서버가 range 를 한 줄만 준 경우. contextLines 로 보정하고 approximate=true",
+      "symbol": {
+        "name": "find",
+        "detail": "",
+        "container": "",
+        "kind": 5,
+        "kindName": "method",
+        "uri": "file:///w/src/base/map.h",
+        "relPath": "gameserver/src/base/map.h",
+        "fsPath": "/w/src/base/map.h",
+        "languageId": "cpp",
+        "startLine": 88,
+        "anchorLine": 88,
+        "anchorChar": 12,
+        "approximate": true,
+        "callable": true,
+        "declarationOnly": false,
+        "code": "iterator find(const Key& k) { return Lookup(Hash(k)); }"
+      }
+    },
+    {
+      "case": "go-method-tab-indent",
+      "why": "탭 들여쓰기와 백틱 문자열. 원본을 변형하지 않는다는 규칙의 회귀 대상",
+      "symbol": {
+        "name": "Invoke",
+        "detail": "",
+        "container": "LoginHandler",
+        "kind": 5,
+        "kindName": "method",
+        "uri": "file:///w/src/handlers/login.go",
+        "relPath": "gameserver/src/handlers/login.go",
+        "fsPath": "/w/src/handlers/login.go",
+        "languageId": "go",
+        "startLine": 12,
+        "anchorLine": 12,
+        "anchorChar": 17,
+        "approximate": false,
+        "callable": true,
+        "declarationOnly": false,
+        "code": "func (h *LoginHandler) Invoke(s *Session, p *Packet) {\n\tconst q = `SELECT id FROM users WHERE token = $1`\n\trow := h.db.QueryRow(q, p.Token)\n\tif err := row.Scan(&s.UserID); err != nil {\n\t\ts.Close(\"bad token\")\n\t\treturn\n\t}\n}"
+      }
+    },
+    {
+      "case": "csharp-interface-declaration-only",
+      "why": "Roslyn 이 이름에 시그니처를 통째로 넣는 경우와 몸통 없는 선언. shortName 처리와 declarationOnly 판정의 기준",
+      "rawLspName": "SendAsync(Packet, CancellationToken) : Task<bool>",
+      "symbol": {
+        "name": "SendAsync",
+        "detail": "(Packet, CancellationToken) : Task<bool>",
+        "container": "ISession",
+        "kind": 5,
+        "kindName": "method",
+        "uri": "file:///w/src/Net/ISession.cs",
+        "relPath": "gameserver/src/Net/ISession.cs",
+        "fsPath": "/w/src/Net/ISession.cs",
+        "languageId": "csharp",
+        "startLine": 9,
+        "anchorLine": 9,
+        "anchorChar": 21,
+        "approximate": false,
+        "callable": true,
+        "declarationOnly": true,
+        "code": "    Task<bool> SendAsync(Packet packet, CancellationToken ct);"
+      }
+    },
+    {
+      "case": "rust-impl-non-ascii",
+      "why": "비ASCII 문자와 surrogate pair 가 섞인 줄. UTF-16 컬럼 좌표 회귀 대상",
+      "symbol": {
+        "name": "handle",
+        "detail": "",
+        "container": "LoginHandler",
+        "kind": 5,
+        "kindName": "method",
+        "uri": "file:///w/src/net/login.rs",
+        "relPath": "gameserver/src/net/login.rs",
+        "fsPath": "/w/src/net/login.rs",
+        "languageId": "rust",
+        "startLine": 30,
+        "anchorLine": 31,
+        "anchorChar": 7,
+        "approximate": false,
+        "callable": true,
+        "declarationOnly": false,
+        "code": "impl Handler for LoginHandler {\n    fn handle(&self, s: &mut Session) -> Result<()> {\n        // 로그인 처리 🚀 (주석 안 handle 은 클릭 대상 아님)\n        let token = s.take_token()?;\n        self.verify(&token)\n    }\n}"
+      }
+    },
+    {
+      "case": "outside-workspace",
+      "why": "워크스페이스 밖 파일. relPath 가 절대경로로 남는다. 독립 프로그램에서는 프로젝트 외부 심볼 규칙(9.4)의 대상",
+      "symbol": {
+        "name": "shared_lock",
+        "detail": "",
+        "container": "std",
+        "kind": 5,
+        "kindName": "class",
+        "uri": "file:///usr/include/c%2B%2B/13/shared_mutex",
+        "relPath": "/usr/include/c++/13/shared_mutex",
+        "fsPath": "/usr/include/c++/13/shared_mutex",
+        "languageId": "cpp",
+        "startLine": 640,
+        "anchorLine": 641,
+        "anchorChar": 12,
+        "approximate": true,
+        "callable": false,
+        "declarationOnly": false,
+        "code": "  template<typename _Mutex>\n    class shared_lock\n    {\n    public:\n      typedef _Mutex mutex_type;"
+      }
+    }
+  ]
+}

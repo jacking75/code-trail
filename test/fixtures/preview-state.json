@@ -1,0 +1,132 @@
+{
+  "type": "setState",
+  "config": {
+    "clickTarget": "allSymbols",
+    "maxCodeLines": 250,
+    "showAbsolutePath": false,
+    "fontSize": 0,
+    "childOrder": "source",
+    "fitToWidth": true,
+    "minFontSize": 8
+  },
+  "roots": [
+    {
+      "id": "n1",
+      "parentId": null,
+      "origin": null,
+      "collapsed": false,
+      "recursive": false,
+      "symbol": {
+        "name": "HandlePacket",
+        "detail": "(Session*, Packet*) -> void",
+        "kind": 11,
+        "container": "",
+        "kindName": "function",
+        "uri": "file:///w/src/net/dispatch.cpp",
+        "relPath": "gameserver/src/net/dispatch.cpp",
+        "fsPath": "/w/src/net/dispatch.cpp",
+        "languageId": "cpp",
+        "startLine": 118,
+        "anchorLine": 120,
+        "anchorChar": 5,
+        "approximate": false,
+        "callable": true,
+        "declarationOnly": false,
+        "code": "// 클라이언트 패킷 진입점\n// (주석 안의 Dispatch 는 클릭 대상이 아니다)\nvoid HandlePacket(Session* sess, Packet* pkt) {\n    if (!sess->IsAuthed()) {\n        sess->Close(\"unauthenticated\");\n        return;\n    }\n\n    auto* handler = g_registry.Find(pkt->opcode);\n    if (handler == nullptr) {\n        LOG_WARN(\"unknown opcode {}\", pkt->opcode);\n        return;\n    }\n    handler->Invoke(sess, pkt);\n}"
+      },
+      "children": [
+        {
+          "id": "n2",
+          "parentId": "n1",
+          "origin": {
+            "line": 126,
+            "char": 31,
+            "text": "Find"
+          },
+          "collapsed": false,
+          "recursive": false,
+          "symbol": {
+            "name": "Find",
+            "detail": "(uint16_t) -> IHandler*",
+            "kind": 5,
+            "container": "HandlerRegistry",
+            "kindName": "method",
+            "uri": "file:///w/src/net/registry.cpp",
+            "relPath": "gameserver/src/net/registry.cpp",
+            "fsPath": "/w/src/net/registry.cpp",
+            "languageId": "cpp",
+            "startLine": 40,
+            "anchorLine": 41,
+            "anchorChar": 20,
+            "approximate": false,
+            "callable": true,
+            "declarationOnly": false,
+            "code": "IHandler* HandlerRegistry::Find(uint16_t opcode) const {\n    std::shared_lock lock(mutex_);\n    auto it = map_.find(opcode);\n    return it == map_.end() ? nullptr : it->second.get();\n}"
+          },
+          "children": [
+            {
+              "id": "n3",
+              "parentId": "n2",
+              "origin": {
+                "line": 42,
+                "char": 19,
+                "text": "find"
+              },
+              "collapsed": false,
+              "recursive": true,
+              "symbol": {
+                "name": "find",
+                "detail": "",
+                "container": "",
+                "kind": 5,
+                "kindName": "method",
+                "uri": "file:///w/src/base/map.h",
+                "relPath": "gameserver/src/base/map.h",
+                "fsPath": "/w/src/base/map.h",
+                "languageId": "cpp",
+                "startLine": 88,
+                "anchorLine": 88,
+                "anchorChar": 12,
+                "approximate": true,
+                "callable": true,
+                "declarationOnly": false,
+                "code": "iterator find(const Key& k) { return Lookup(Hash(k)); }"
+              },
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "n4",
+          "parentId": "n1",
+          "origin": {
+            "line": 131,
+            "char": 13,
+            "text": "Invoke"
+          },
+          "collapsed": false,
+          "recursive": false,
+          "symbol": {
+            "name": "Invoke",
+            "detail": "",
+            "container": "LoginHandler",
+            "kind": 5,
+            "kindName": "method",
+            "uri": "file:///w/src/handlers/login.go",
+            "relPath": "gameserver/src/handlers/login.go",
+            "fsPath": "/w/src/handlers/login.go",
+            "languageId": "go",
+            "startLine": 12,
+            "anchorLine": 12,
+            "anchorChar": 17,
+            "approximate": false,
+            "callable": true,
+            "declarationOnly": false,
+            "code": "func (h *LoginHandler) Invoke(s *Session, p *Packet) {\n\tconst q = `SELECT id FROM users WHERE token = $1`\n\trow := h.db.QueryRow(q, p.Token)\n\tif err := row.Scan(&s.UserID); err != nil {\n\t\ts.Close(\"bad token\")\n\t\treturn\n\t}\n}"
+          },
+          "children": []
+        }
+      ]
+    }
+  ]
+}

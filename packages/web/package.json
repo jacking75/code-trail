@@ -1,0 +1,15 @@
+{
+  "name": "@code-trail/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Code Trail 브라우저 프론트엔드. 파일 탐색기, 읽기 전용 코드 화면, 트레일·보드 화면.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@code-trail/shared": "0.0.0"
+  }
+}
