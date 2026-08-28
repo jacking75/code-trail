@@ -20,6 +20,9 @@ import { searchFiles } from '../workspace/search.js';
 
 const SUPPORTED_LANGUAGES: readonly string[] = ['cpp', 'csharp', 'go', 'rust'];
 
+/** 이 둘이 실제 문서에서 응답해야 `지원됨` 이다. */
+const VERIFY_METHODS = ['textDocument/documentSymbol', 'textDocument/definition'] as const;
+
 function denyStatus(reason: PathDeniedError['reason']): number {
     return reason === 'notFound' ? 404 : 403;
 }
@@ -37,8 +40,7 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
         trails: context.trails.list(),
         activeTrailId: context.trails.getActiveTrailId(),
         capabilities: {
-            // 외부 에디터 열기는 단계 9에서 붙는다.
-            externalEditor: context.store.getSettings().editor.executable !== null,
+            externalEditor: context.editor.isConfigured(),
             // 실행 파일을 찾은 언어만 알린다. 실제로 뜨는지는 열어봐야 안다.
             languages: await context.lsp.availableLanguages(),
         },
@@ -156,8 +158,36 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
                 restartCount: info.restartCount,
                 missingCapabilities: info.missingCapabilities,
                 healthChecks: info.healthChecks,
+                pid: info.pid,
+                capabilities: info.capabilities,
+                initializeMs: info.initializeMs,
+                lastRequest: info.lastRequest,
+                lastExit: info.lastExit,
+                /**
+                 * `지원됨` 은 프로세스가 떴다는 뜻이 아니라 실제 샘플 문서에서
+                 * `documentSymbol` 과 `definition` 이 응답했다는 뜻이다(구현서 18).
+                 */
+                verified: VERIFY_METHODS.every(
+                    (method) => info.verifiedMethods.includes(method),
+                ),
+                verifiedMethods: info.verifiedMethods,
             })),
             recoveryCandidates: context.store.getRecoveryCandidates(),
+        };
+    });
+
+    /**
+     * 외부 에디터 후보와 지금 설정 (구현서 17.2).
+     *
+     * **제안만 한다.** 사용자가 설정으로 확정하기 전에는 아무것도 실행하지 않는다.
+     * 후보는 실행 파일 **이름**만 담는다 — 전체 경로는 브라우저로 내보내지 않는다.
+     */
+    app.get('/api/diagnostics/editor', async () => {
+        const settings = context.store.getSettings().editor;
+        return {
+            candidates: await context.editor.candidates(),
+            configured: settings.executable,
+            args: settings.args,
         };
     });
 

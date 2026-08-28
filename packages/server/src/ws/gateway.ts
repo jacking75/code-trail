@@ -10,9 +10,12 @@ import {
     type CommandError,
     type EventType,
     type Trail,
+    type TrailNode,
 } from '@code-trail/shared';
 
 import type { ServerContext } from '../context.js';
+import { EditorDeniedError } from '../editor/service.js';
+import type { SupportedLanguage } from '../workspace/languages.js';
 import type { ResolveFlowResult } from '../trails/resolveFlow.js';
 
 /**
@@ -65,7 +68,7 @@ export class WebSocketGateway {
             this.clients.delete(client);
         });
 
-        this.sendSnapshots(client);
+        void this.sendSnapshots(client);
     }
 
     /** 모든 연결을 닫는다. 종료 절차가 부른다. */
@@ -114,6 +117,42 @@ export class WebSocketGateway {
         });
     }
 
+    /**
+     * `revealInExternalEditorOnAdd` 가 켜져 있으면 새 노드의 위치를 외부
+     * 에디터에서도 연다. 설정이 꺼져 있거나 에디터가 없으면 아무 일도 안 한다 —
+     * 사용자가 정하기 전에는 실행하지 않는다(구현서 17.2 3단계).
+     */
+    private async revealIfAsked(
+        symbol: { documentId: string | null; anchorLine: number; anchorChar: number } | undefined,
+        commandId: string,
+    ): Promise<void> {
+        if (symbol === undefined || symbol.documentId === null) {
+            return;
+        }
+        if (!this.context.store.getSettings().ui.revealInExternalEditorOnAdd) {
+            return;
+        }
+        if (!this.context.editor.isConfigured()) {
+            return;
+        }
+        try {
+            const opened = await this.context.editor.open(
+                symbol.documentId,
+                symbol.anchorLine,
+                symbol.anchorChar,
+            );
+            this.broadcast('editor.opened', {
+                displayPath: opened.displayPath,
+                line: opened.line,
+                column: opened.column,
+                launched: opened.launched,
+                reason: opened.reason,
+            }, { commandId });
+        } catch {
+            // 노드를 붙이는 일이 에디터 때문에 실패하면 안 된다.
+        }
+    }
+
     private snapshotPayload(trail: Trail): unknown {
         const stored = toStoredTrail(trail);
         return {
@@ -127,8 +166,64 @@ export class WebSocketGateway {
         };
     }
 
+    /**
+     * 저장에서 불러온 노드에 문서 권한을 다시 발급한다 (구현서 8.2).
+     *
+     * `documentId` 는 세션 전용이라 저장하지 않는다. 다시 채워주지 않으면 `↗`
+     * 와 Ctrl+클릭이 재시작 뒤에 조용히 아무 일도 안 한다.
+     *
+     * **프로젝트 밖 파일은 다시 열어주지 않는다.** 그건 언어 서버가 결과로
+     * 돌려줬을 때만 얻는 권한이고, 재시작하면 사라지는 것이 맞다.
+     * 같은 파일이 여러 노드에 나오므로 경로별로 한 번만 발급한다.
+     */
+    private async grantMapFor(roots: readonly TrailNode[]): Promise<Map<string, string>> {
+        const wanted = new Set<string>();
+        const walk = (nodes: readonly TrailNode[]): void => {
+            for (const node of nodes) {
+                const { symbol } = node;
+                if (symbol.documentId === null && symbol.relPath !== null && !symbol.external) {
+                    wanted.add(symbol.relPath);
+                }
+                walk(node.children);
+            }
+        };
+        walk(roots);
+
+        const map = new Map<string, string>();
+        for (const relPath of wanted) {
+            const grant = await this.context.documents
+                .grantInsideProject(relPath)
+                .catch(() => null);
+            if (grant !== null) {
+                map.set(relPath, grant.documentId);
+            }
+        }
+        return map;
+    }
+
+    private static applyGrants(
+        nodes: readonly TrailNode[],
+        grants: ReadonlyMap<string, string>,
+    ): TrailNode[] {
+        return nodes.map((node) => {
+            const documentId = node.symbol.documentId
+                ?? (node.symbol.relPath === null ? null : grants.get(node.symbol.relPath) ?? null);
+            return {
+                ...node,
+                symbol: { ...node.symbol, documentId },
+                children: WebSocketGateway.applyGrants(node.children, grants),
+            };
+        });
+    }
+
+    private async snapshotPayloadWithGrants(trail: Trail): Promise<unknown> {
+        const grants = await this.grantMapFor(trail.roots);
+        const payload = this.snapshotPayload(trail) as { roots: TrailNode[] };
+        return { ...payload, roots: WebSocketGateway.applyGrants(trail.roots, grants) };
+    }
+
     /** 붙자마자 지금 상태를 통째로 보낸다. 재연결 복구도 같은 길을 쓴다. */
-    private sendSnapshots(client: Client): void {
+    private async sendSnapshots(client: Client): Promise<void> {
         this.send(client, {
             protocolVersion: PROTOCOL_VERSION,
             type: 'trail.listChanged',
@@ -147,7 +242,7 @@ export class WebSocketGateway {
                 eventId: newEventId(),
                 trailId: active.id,
                 revision: active.revision,
-                payload: this.snapshotPayload(active),
+                payload: await this.snapshotPayloadWithGrants(active),
             });
         }
     }
@@ -336,6 +431,7 @@ export class WebSocketGateway {
     ): Promise<void> {
         const trail = this.context.trails.get(trailId);
         const node = trail?.get(nodeId);
+        await this.revealIfAsked(node?.symbol, commandId);
         if (!node?.symbol.declarationOnly) {
             return;
         }
@@ -438,7 +534,7 @@ export class WebSocketGateway {
                     return;
                 }
                 const trail = trails.get(trailId) as Trail;
-                this.broadcast('trail.snapshot', this.snapshotPayload(trail), {
+                this.broadcast('trail.snapshot', await this.snapshotPayloadWithGrants(trail), {
                     commandId: command.commandId,
                     trailId,
                     revision: trail.revision,
@@ -738,17 +834,61 @@ export class WebSocketGateway {
                 return;
             }
 
-            case 'editor.openLocation':
-                this.sendError(
-                    client,
-                    {
-                        code: 'NOT_FOUND',
-                        message: '외부 에디터 열기는 아직 구현되지 않았다.',
-                        retryable: false,
-                    },
-                    command.commandId,
-                );
+            case 'editor.openLocation': {
+                const { documentId, line, char } = command.payload as {
+                    documentId: string;
+                    line: number;
+                    char: number;
+                };
+                try {
+                    // **브라우저가 보낸 경로를 쓰지 않는다.** 서버가 발급한 문서
+                    // ID 에서 실제 경로를 역조회한다(구현서 17.2 5단계).
+                    const opened = await this.context.editor.open(documentId, line, char);
+                    this.broadcast('editor.opened', {
+                        displayPath: opened.displayPath,
+                        line: opened.line,
+                        column: opened.column,
+                        launched: opened.launched,
+                        reason: opened.reason,
+                    }, { commandId: command.commandId });
+                } catch (error) {
+                    this.sendError(
+                        client,
+                        {
+                            code: 'PATH_DENIED',
+                            message: error instanceof EditorDeniedError
+                                ? error.message
+                                : '외부 에디터를 열지 못했다.',
+                            retryable: false,
+                        },
+                        command.commandId,
+                    );
+                }
                 return;
+            }
+
+            case 'lsp.verify': {
+                const { language } = command.payload as { language: SupportedLanguage };
+                try {
+                    // `지원됨` 은 프로세스가 떴다는 뜻이 아니라 실제 요청이
+                    // 응답했다는 뜻이다(구현서 18).
+                    await this.context.lsp.verify(language);
+                    this.broadcast('lsp.stateChanged', {
+                        language,
+                        state: 'ready',
+                        message: null,
+                    }, { commandId: command.commandId });
+                } catch (error) {
+                    this.broadcast('lsp.stateChanged', {
+                        language,
+                        state: 'failed',
+                        message: error instanceof Error
+                            ? error.message.slice(0, 300)
+                            : '샘플 요청이 실패했다.',
+                    }, { commandId: command.commandId });
+                }
+                return;
+            }
 
             case 'workspace.openDocument':
             case 'workspace.searchFiles':

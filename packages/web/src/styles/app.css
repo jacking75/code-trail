@@ -4,6 +4,10 @@
  */
 
 :root {
+    /* 트리 모드에서 노드 한 칸의 폭. 코드 본문이 이 안에서 접힌다. */
+    --ct-tree-node-width: 520px;
+    /* 보드 모드에서 노드 한 칸의 폭. 트리와 같게 둬야 전환해도 안 흔들린다. */
+    --ct-board-width: 520px;
     --ct-bg: #1f2335;
     --ct-bg-raised: #1a1b26;
     --ct-bg-input: #16161e;
@@ -286,4 +290,204 @@ body {
 
 .stale:hover {
     background: rgba(224, 175, 104, 0.3);
+}
+
+/* ── 진단 화면 ───────────────────────────────────────────────────────── */
+
+.diagnostics {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.diagnostics .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.diag-card {
+    border: 1px solid var(--ct-border);
+    border-radius: 6px;
+    background: var(--ct-bg-raised);
+    padding: 8px 10px 10px;
+}
+
+.diag-card h2 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 6px;
+    font-size: 13px;
+    flex-wrap: wrap;
+}
+
+.diag-name {
+    font-weight: 600;
+}
+
+.diag-state {
+    font-size: 11px;
+    padding: 1px 6px;
+    border: 1px solid var(--ct-border);
+    border-radius: 8px;
+}
+
+.diag-state.s-ready { color: var(--ct-accent); }
+.diag-state.s-failed { color: var(--ct-danger); }
+
+.diag-row {
+    display: flex;
+    gap: 8px;
+    font-size: 12px;
+    padding: 1px 0;
+}
+
+.diag-label {
+    flex: 0 0 140px;
+    color: var(--ct-fg-muted);
+}
+
+.diag-value {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.diag-value .warn {
+    color: var(--ct-danger);
+}
+
+.diag-checks {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.diag-check {
+    display: flex;
+    gap: 8px;
+    font-size: 12px;
+    border-inline-start: 2px solid var(--ct-border);
+    padding-inline-start: 6px;
+}
+
+.diag-check.l-warn { border-color: #e0af68; }
+.diag-check.l-error { border-color: var(--ct-danger); }
+
+.diag-check-label {
+    flex: 0 0 140px;
+    color: var(--ct-fg-muted);
+}
+
+.diag-check-detail {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.diag-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.diag-log {
+    margin: 8px 0 0;
+    max-block-size: 260px;
+    overflow: auto;
+    background: var(--ct-bg-input);
+    border: 1px solid var(--ct-border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-family: var(--ct-code-font);
+    font-size: 11px;
+    white-space: pre-wrap;
+}
+
+.diag-editors,
+.diag-solutions ul {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+}
+
+.diag-editors li,
+.diag-solutions li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.diagnostics button.picked {
+    border-color: var(--ct-accent);
+    color: var(--ct-accent);
+}
+
+.diag-notice {
+    align-self: flex-start;
+    background: var(--ct-bg-input);
+    color: var(--ct-fg);
+    border: 1px solid var(--ct-accent);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font: inherit;
+    cursor: pointer;
+}
+
+/* ── 외부 에디터 실패 안내 ───────────────────────────────────────────── */
+
+/*
+ * 에디터를 못 띄웠다고 막다른 길이 되면 안 된다. 경로와 줄을 복사해 주면
+ * 사용자가 손으로 찾아갈 수 있다.
+ */
+.editor-fallback {
+    position: fixed;
+    inset-block-end: 14px;
+    inset-inline-start: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-inline-size: min(90vw, 760px);
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    background: var(--ct-bg-raised);
+    color: var(--ct-fg);
+    border: 1px solid var(--ct-danger);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgb(0 0 0 / 35%);
+    font-size: 12px;
+    z-index: 20;
+}
+
+.editor-fallback code {
+    font-family: var(--ct-code-font);
+    background: var(--ct-bg-input);
+    border-radius: 3px;
+    padding: 1px 6px;
+    overflow-wrap: anywhere;
+}
+
+.editor-fallback button {
+    padding: 2px 8px;
+    background: var(--ct-bg-input);
+    color: var(--ct-fg);
+    border: 1px solid var(--ct-border);
+    border-radius: 3px;
+    font: inherit;
+    cursor: pointer;
+}
+
+.editor-fallback button.danger {
+    color: var(--ct-danger);
 }

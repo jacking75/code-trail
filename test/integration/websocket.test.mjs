@@ -347,9 +347,9 @@ test('없는 트레일을 대상으로 한 해석은 이유를 알린다', async
     }
 });
 
-test('아직 없는 기능은 조용히 넘어가지 않고 이유를 알린다', async () => {
-    // 외부 에디터 열기는 단계 9의 몫이다. 아무 일도 안 일어나는 대신
-    // 아직 없다는 것을 분명히 알린다.
+test('권한 없는 문서 ID 로는 에디터를 열지 못한다', async () => {
+    // 브라우저가 만들어낸 ID 로는 아무 파일도 열 수 없다. 실제 경로는 서버가
+    // 문서 권한 목록에서만 역조회한다(구현서 17.2 5단계).
     const root = await makeProject(FILES);
     try {
         await withServer(root, async (running) => {
@@ -361,8 +361,31 @@ test('아직 없는 기능은 조용히 넘어가지 않고 이유를 알린다'
                 payload: { documentId: 'doc-1', line: 0, char: 0 },
             });
             const error = await client.wait((e) => e.type === 'command.error');
-            assert.equal(error.payload.error.code, 'NOT_FOUND');
-            assert.match(error.payload.error.message, /아직 구현되지 않았다/);
+            assert.equal(error.payload.error.code, 'PATH_DENIED');
+            assert.match(error.payload.error.message, /권한이 없는 문서/);
+            await client.close();
+        });
+    } finally {
+        await removeProject(root);
+    }
+});
+
+test('경로 모양의 문서 ID 도 그냥 거부한다', async () => {
+    // "프로젝트 밖 임의 경로를 열어라" 를 문서 ID 자리에 넣어봐도 통하지 않는다.
+    const root = await makeProject(FILES);
+    try {
+        await withServer(root, async (running) => {
+            const client = await openSocket(running);
+            for (const documentId of ['../../etc/passwd', 'C:\Windows\win.ini', '/etc/hosts']) {
+                client.send({
+                    protocolVersion: 1,
+                    type: 'editor.openLocation',
+                    commandId: randomUUID(),
+                    payload: { documentId, line: 0, char: 0 },
+                });
+                const error = await client.wait((e) => e.type === 'command.error');
+                assert.equal(error.payload.error.code, 'PATH_DENIED');
+            }
             await client.close();
         });
     } finally {

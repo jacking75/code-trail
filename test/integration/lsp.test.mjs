@@ -12,6 +12,7 @@ import { authFetch, makeProject, removeProject, server } from './helpers.mjs';
 
 const { WS_PROTOCOL } = server;
 const FAKE_LSP = fileURLToPath(new URL('../fake-lsp/server.mjs', import.meta.url));
+const NL = String.fromCharCode(10);
 
 /**
  * `dispatch.cpp` 에서 `Find` 를 클릭하면 `registry.cpp` 의 `Find` 로 간다.
@@ -966,5 +967,113 @@ test('자동 추적을 끄면 선언 노드에서 멈춘다', async () => {
         });
     } finally {
         await removeProject(project.root);
+    }
+});
+
+test('lsp.verify 는 실제 샘플 요청이 응답해야 지원됨을 세운다', async () => {
+    const project = await makeLspProject('normal');
+    try {
+        await startWithFakeLsp(project, async (running) => {
+            const client = await connect(running);
+
+            // 아무것도 안 했으면 `지원됨` 이 아니다. 프로세스가 떴는지와 별개다.
+            const before = await (await authFetch(running, '/api/diagnostics')).json();
+            const cppBefore = before.languages.find((l) => l.language === 'cpp');
+            assert.equal(cppBefore.verified, false);
+
+            // 세션 상태 변화도 같은 이벤트로 온다. 내 명령의 답만 본다.
+            const verifyId = randomUUID();
+            client.send({
+                protocolVersion: 1,
+                type: 'lsp.verify',
+                commandId: verifyId,
+                payload: { language: 'cpp' },
+            });
+            const changed = await client.wait(
+                (e) => e.type === 'lsp.stateChanged' && e.commandId === verifyId,
+                12000,
+            );
+            assert.equal(changed.payload.state, 'ready', JSON.stringify(changed.payload));
+
+            const after = await (await authFetch(running, '/api/diagnostics')).json();
+            const cpp = after.languages.find((l) => l.language === 'cpp');
+            assert.equal(cpp.verified, true, JSON.stringify(cpp.verifiedMethods));
+            assert.deepEqual(cpp.verifiedMethods.sort(), [
+                'textDocument/definition',
+                'textDocument/documentSymbol',
+            ]);
+            assert.equal(typeof cpp.pid, 'number');
+            assert.equal(typeof cpp.initializeMs, 'number');
+            assert.equal(cpp.capabilities.definition, true);
+            assert.equal(cpp.lastRequest.method, 'textDocument/definition');
+            await client.close();
+        });
+    } finally {
+        await removeProject(project.root);
+    }
+});
+
+test('죽은 서버를 확인하면 실패로 알린다', async () => {
+    const project = await makeLspProject('crashOnRequest', ['--crash-once=documentSymbol']);
+    try {
+        await startWithFakeLsp(project, async (running) => {
+            const client = await connect(running);
+            const verifyId = randomUUID();
+            client.send({
+                protocolVersion: 1,
+                type: 'lsp.verify',
+                commandId: verifyId,
+                payload: { language: 'cpp' },
+            });
+            const changed = await client.wait(
+                (e) => e.type === 'lsp.stateChanged' && e.commandId === verifyId,
+                12000,
+            );
+            assert.equal(changed.payload.state, 'failed', JSON.stringify(changed.payload));
+            assert.equal(typeof changed.payload.message, 'string');
+            await client.close();
+        });
+    } finally {
+        await removeProject(project.root);
+    }
+});
+
+test('진단 로그에 환경 변수·토큰·코드 본문이 안 남는다', async () => {
+    const root = await makeProject(FILES);
+    const SECRET = 'super-secret-value-1234';
+    try {
+        const base = {
+            projectDirectory: root,
+            logLevel: 'debug',
+            logWrite: () => {},
+            lspRequestTimeoutMs: 4000,
+        };
+        const first = await server.startServer(base);
+        const settingsPath = path.join(root, '.code-trail', 'settings.json');
+        const settings = JSON.parse(await readFile(settingsPath, 'utf8'));
+        settings.languages.cpp.executable = process.execPath;
+        settings.languages.cpp.args = [FAKE_LSP, '--scenario=noisyStderr'];
+        // 비밀값을 환경에 넣는다. 로그에 그대로 나오면 안 된다.
+        settings.languages.cpp.env = { CT_TEST_SECRET: SECRET };
+        await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}` + NL, 'utf8');
+        await first.close();
+
+        const running = await server.startServer(base);
+        try {
+            const client = await connect(running);
+            await seedTrailWithRoot(running, client).catch(() => undefined);
+
+            const log = await (await authFetch(running, '/api/diagnostics/cpp/log')).json();
+            const joined = log.lines.join(NL);
+            assert.equal(joined.includes(SECRET), false, '환경 변수 값이 로그에 남았다');
+            assert.equal(joined.includes(running.token), false, '세션 토큰이 로그에 남았다');
+            // 코드 본문 한 줄이 그대로 실려 나가면 안 된다.
+            assert.equal(joined.includes('g_registry.Find'), false, '코드 본문이 로그에 남았다');
+            await client.close();
+        } finally {
+            await running.close();
+        }
+    } finally {
+        await removeProject(root);
     }
 });

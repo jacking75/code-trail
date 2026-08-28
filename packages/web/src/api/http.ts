@@ -83,7 +83,21 @@ export interface TrailSummary {
     rootCount: number;
 }
 
-/** 화면이 쓰는 설정. 서버 타입 전체를 가져오지 않고 필요한 것만 적는다. */
+export interface LanguageServerView {
+    enabled: boolean;
+    executable: string | null;
+    args: string[];
+    env: Record<string, string>;
+    initializationOptions: unknown;
+}
+
+/**
+ * 화면이 쓰는 설정.
+ *
+ * 서버가 준 객체를 그대로 들고 있다가 고쳐서 되돌려 보낸다. 그래서 여기 안 적은
+ * 필드(`schemaVersion` 등)도 값에는 남아 있다 — 통째로 펼쳐 보내야 서버 스키마를
+ * 통과한다.
+ */
 export interface ProjectSettingsView {
     ui: {
         theme: 'system' | 'light' | 'dark';
@@ -96,6 +110,17 @@ export interface ProjectSettingsView {
         fontSize: number;
         autoFollowSingleImplementation: boolean;
         revealInExternalEditorOnAdd: boolean;
+    };
+    editor: {
+        executable: string | null;
+        /** `{path}`, `{line}`, `{column}`, `{project}` 만 쓸 수 있다. */
+        args: string[];
+    };
+    languages: {
+        cpp: LanguageServerView;
+        csharp: LanguageServerView & { solutionPath: string | null };
+        go: LanguageServerView;
+        rust: LanguageServerView;
     };
 }
 
@@ -125,6 +150,41 @@ export interface LanguageDiagnostics {
     restartCount: number;
     missingCapabilities: string[];
     healthChecks: HealthCheckView[];
+    /** 자식 프로세스 PID. 안 떠 있으면 `null`. */
+    pid: number | null;
+    /** 서버가 **광고한** 네 capability. 광고와 실제 응답은 다를 수 있다. */
+    capabilities: {
+        definition: boolean;
+        documentSymbol: boolean;
+        implementation: boolean;
+        typeDefinition: boolean;
+    };
+    initializeMs: number | null;
+    lastRequest: { method: string; durationMs: number; at: string } | null;
+    lastExit: { code: number | null; signal: string | null; at: string } | null;
+    /** 실제 샘플 문서에서 요청이 응답했는지. `지원됨` 표시의 근거다. */
+    verified: boolean;
+    verifiedMethods: string[];
+}
+
+export interface EditorCandidateView {
+    name: string;
+    displayName: string;
+    args: string[];
+    executable: string;
+}
+
+export interface EditorDiagnostics {
+    candidates: EditorCandidateView[];
+    /** 지금 설정된 실행 파일. `null` 이면 열기 기능이 꺼져 있다. */
+    configured: string | null;
+    args: string[];
+}
+
+export interface SolutionDiagnostics {
+    candidates: string[];
+    suggested: string | null;
+    selected: string | null;
 }
 
 export const api = {
@@ -150,5 +210,20 @@ export const api = {
     diagnostics: () =>
         request<{ languages: LanguageDiagnostics[]; recoveryCandidates: unknown[] }>(
             '/api/diagnostics',
+        ),
+
+    editorDiagnostics: () => request<EditorDiagnostics>('/api/diagnostics/editor'),
+
+    solutions: () => request<SolutionDiagnostics>('/api/diagnostics/csharp/solutions'),
+
+    /**
+     * 언어 서버의 최근 stderr.
+     *
+     * 코드 본문이 섞여 들어올 수 있어 기본 진단 화면에는 넣지 않고 사용자가
+     * 따로 열게 한다(구현서 11.6).
+     */
+    lspLog: (language: string) =>
+        request<{ language: string; lines: string[] }>(
+            `/api/diagnostics/${encodeURIComponent(language)}/log`,
         ),
 };

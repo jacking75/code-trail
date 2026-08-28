@@ -56,7 +56,7 @@ test('구현서 14.2 의 명령이 전부 있다', () => {
         'trail.promoteToRoot', 'trail.setMode', 'trail.setNodeUi',
         'trail.setActiveNode', 'trail.clear', 'trail.exportMarkdown',
         'workspace.openDocument', 'workspace.searchFiles', 'editor.openLocation',
-        'settings.update', 'lsp.restart',
+        'settings.update', 'lsp.restart', 'lsp.verify',
     ];
     assert.deepEqual(Object.keys(COMMAND_PAYLOADS).sort(), [...documented].sort());
 });

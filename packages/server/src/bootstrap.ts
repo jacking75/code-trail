@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { createApp, defaultWebRoot, type CodeTrailApp } from './app.js';
 import { createLogger, type LogLevel, type Logger } from './config/logger.js';
 import type { ServerContext } from './context.js';
+import { EditorService } from './editor/service.js';
 import { pathToUri } from './lsp/documents.js';
 import { LspManager } from './lsp/manager.js';
 import { toPublicState, type LspSessionInfo } from './lsp/types.js';
@@ -114,6 +115,13 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         getSettings: () => store.getSettings(),
     });
 
+    const editor = new EditorService({
+        projectRoot,
+        documents,
+        logger,
+        getSettings: () => store.getSettings(),
+    });
+
     const context: ServerContext = {
         projectRoot,
         projectName,
@@ -124,6 +132,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         documents,
         lsp,
         resolveFlow,
+        editor,
     };
 
     // 설정을 바꾸면 실행 파일을 다시 찾는다. 안 그러면 경로를 고쳐도

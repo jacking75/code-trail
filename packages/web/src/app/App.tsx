@@ -10,6 +10,7 @@ import {
 } from '../api/http.js';
 import { commands, type CommandContext } from '../api/commands.js';
 import { TrailSocket, type ConnectionState, type ServerEventMessage } from '../api/socket.js';
+import { DiagnosticsView } from '../features/diagnostics/DiagnosticsView.js';
 import { CodeView } from '../features/source/CodeView.js';
 import { TrailBar } from '../features/trail/TrailBar.js';
 import { TrailView } from '../features/trail/TrailView.js';
@@ -40,7 +41,7 @@ const STATE_LABEL: Record<ConnectionState, string> = {
     closed: '끊김',
 };
 
-type Pane = 'code' | 'trail';
+type Pane = 'code' | 'trail' | 'diagnostics';
 
 export function App(): JSX.Element {
     const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
@@ -51,6 +52,16 @@ export function App(): JSX.Element {
     const [error, setError] = useState<string | null>(null);
     const [pane, setPane] = useState<Pane>('code');
     const [diagnostics, setDiagnostics] = useState<LanguageDiagnostics[]>([]);
+    const [recoveryCandidates, setRecoveryCandidates] = useState<unknown[]>([]);
+    /**
+     * 외부 에디터를 못 띄웠을 때 보여줄 경로와 줄.
+     *
+     * 실행 실패가 곧 막다른 길이 되면 안 된다. 경로와 줄을 복사해 주면 에디터가
+     * 없어도 사용자가 손으로 찾아갈 수 있다(구현서 17.2 6단계).
+     */
+    const [editorFallback, setEditorFallback] = useState<
+        { displayPath: string; line: number; column: number; reason: string } | null
+    >(null);
 
     const [socket, setSocket] = useState<TrailSocket | null>(null);
     const documentRef = useRef<DocumentContent | null>(null);
@@ -83,7 +94,10 @@ export function App(): JSX.Element {
     const refreshDiagnostics = useCallback(() => {
         void api
             .diagnostics()
-            .then((data) => setDiagnostics(data.languages))
+            .then((data) => {
+                setDiagnostics(data.languages);
+                setRecoveryCandidates(data.recoveryCandidates);
+            })
             .catch(() => undefined);
     }, []);
 
@@ -112,6 +126,22 @@ export function App(): JSX.Element {
                 }
                 if (event.type === 'lsp.stateChanged') {
                     refreshDiagnosticsRef.current();
+                }
+                if (event.type === 'editor.opened') {
+                    const opened = event.payload as {
+                        displayPath: string;
+                        line: number;
+                        column: number;
+                        launched: boolean;
+                        reason: string | null;
+                    };
+                    setEditorFallback(opened.launched ? null : {
+                        displayPath: opened.displayPath,
+                        line: opened.line,
+                        column: opened.column,
+                        reason: opened.reason ?? '에디터를 띄우지 못했다.',
+                    });
+                    return;
                 }
                 handleEventRef.current(event);
             },
@@ -192,7 +222,8 @@ export function App(): JSX.Element {
             return;
         }
         if (modifiers.ctrl) {
-            // Ctrl/Cmd+클릭 — 외부 에디터에서 연다. 서버 쪽은 단계 9다.
+            // Ctrl/Cmd+클릭 — 외부 에디터에서 연다. 경로는 서버가 documentId 로
+            // 역조회한다 — 브라우저는 경로를 모른다.
             if (node.symbol.documentId !== null) {
                 commands.openInEditor(context, node.symbol.documentId, line, char);
             }
@@ -293,13 +324,63 @@ export function App(): JSX.Element {
                         >
                             {`트레일${trailState.trail ? ` — ${trailState.trail.title}` : ''}`}
                         </button>
+                        <button
+                            type="button"
+                            className={pane === 'diagnostics' ? 'tab active' : 'tab'}
+                            onClick={() => {
+                                refreshDiagnostics();
+                                setPane('diagnostics');
+                            }}
+                        >
+                            진단
+                        </button>
                     </div>
 
-                    {pane === 'code' ? renderCodePane() : renderTrailPane()}
+                    {pane === 'code'
+                        ? renderCodePane()
+                        : pane === 'trail'
+                            ? renderTrailPane()
+                            : renderDiagnosticsPane()}
 
                     {error !== null ? <p className="panel-error">{error}</p> : null}
                 </main>
             </div>
+
+            {editorFallback === null ? null : (
+                <div className="editor-fallback" role="status">
+                    <span>{editorFallback.reason}</span>
+                    <code>
+                        {`${editorFallback.displayPath}:${editorFallback.line}`
+                            + `:${editorFallback.column}`}
+                    </code>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const text = `${editorFallback.displayPath}:${editorFallback.line}`
+                                + `:${editorFallback.column}`;
+                            void navigator.clipboard?.writeText(text);
+                        }}
+                    >
+                        경로·줄 복사
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setEditorFallback(null);
+                            setPane('diagnostics');
+                        }}
+                    >
+                        에디터 정하기
+                    </button>
+                    <button
+                        type="button"
+                        className="danger"
+                        onClick={() => setEditorFallback(null)}
+                    >
+                        닫기
+                    </button>
+                </div>
+            )}
 
             {trailState.notice === null ? null : (
                 <button
@@ -350,6 +431,32 @@ export function App(): JSX.Element {
         );
     }
 
+    function renderDiagnosticsPane(): JSX.Element {
+        return (
+            <DiagnosticsView
+                languages={diagnostics}
+                settings={settings}
+                recoveryCandidates={recoveryCandidates}
+                onRefresh={refreshDiagnostics}
+                onRestart={(language) => {
+                    if (context !== null) {
+                        commands.restartLsp(context, language);
+                    }
+                }}
+                onVerify={(language) => {
+                    if (context !== null) {
+                        commands.verifyLsp(context, language);
+                    }
+                }}
+                onUpdateSettings={(next) => {
+                    if (context !== null) {
+                        commands.updateSettings(context, next);
+                    }
+                }}
+            />
+        );
+    }
+
     function renderTrailPane(): JSX.Element {
         if (trailState.trail === null || context === null) {
             return (
@@ -365,6 +472,9 @@ export function App(): JSX.Element {
                 busyNodeIds={trailState.busyNodeIds}
                 clickTarget={ui?.clickTarget ?? 'allSymbols'}
                 maxCodeLines={ui?.maxCodeLines ?? 250}
+                fontSize={ui?.fontSize ?? 0}
+                fitToWidth={ui?.fitToWidth ?? true}
+                minFontSize={ui?.minFontSize ?? 8}
                 implementationSupported={implementationSupported}
                 choice={trailState.choice}
                 onToggle={(node) => commands.toggleNode(context, node.id, !node.collapsed)}
@@ -391,6 +501,8 @@ export function App(): JSX.Element {
                     trailState.dismissChoice();
                 }}
                 onDismissChoice={trailState.dismissChoice}
+                onSetMode={(mode) => commands.setMode(context, mode)}
+                onNodeUi={(nodeId, patch) => commands.setNodeUi(context, nodeId, patch)}
             />
         );
     }

@@ -62,6 +62,12 @@ export class LspSession {
     private startPromise: Promise<void> | undefined;
     private disposed = false;
     private serverName: string | null = null;
+    /** `initialize` 왕복 시간. 진단 화면이 쓴다. */
+    private initializeMs: number | null = null;
+    private lastRequest: { method: string; durationMs: number; at: string } | null = null;
+    private lastExit: { code: number | null; signal: string | null; at: string } | null = null;
+    /** 실제 응답을 받아본 메서드. `지원됨` 표시의 근거다. */
+    private readonly verifiedMethods = new Set<string>();
 
     private readonly logger: Logger;
     private readonly restartDelays: readonly number[];
@@ -112,6 +118,12 @@ export class LspSession {
             lastError: this.lastError,
             restartCount: this.restartCount,
             missingCapabilities: missing,
+            pid: this.client?.pid ?? null,
+            capabilities,
+            initializeMs: this.initializeMs,
+            lastRequest: this.lastRequest,
+            lastExit: this.lastExit,
+            verifiedMethods: [...this.verifiedMethods],
         };
     }
 
@@ -194,8 +206,10 @@ export class LspSession {
         this.documents = new DocumentSync({ client, readFile: this.options.readFile });
         this.setState('initializing');
 
+        const startedAt = Date.now();
         try {
             const result = await client.initialize(this.buildInitializeParams());
+            this.initializeMs = Date.now() - startedAt;
             this.serverName = result.serverName;
             this.lastError = null;
             // 뜨는 데 성공했다. 다음 사고는 다시 1초부터 센다.
@@ -266,6 +280,7 @@ export class LspSession {
             return;
         }
         const tail = this.client?.stderr.tail(3).join(' ') ?? '';
+        this.lastExit = { code, signal, at: new Date().toISOString() };
         this.client?.dispose();
         this.client = undefined;
         this.documents?.forgetAll();
@@ -318,6 +333,11 @@ export class LspSession {
         this.backoffAttempt = 0;
         this.lastError = null;
         this.disposed = false;
+        this.initializeMs = null;
+        // 다시 띄웠으면 확인도 다시 해야 한다. 예전 서버가 답했던 것을
+        // 새 서버의 증거로 쓰면 안 된다.
+        this.verifiedMethods.clear();
+        this.lastRequest = null;
         this.setState('stopped');
         await this.ensureReady();
     }
@@ -345,8 +365,17 @@ export class LspSession {
         if (!client) {
             throw new LspUnavailableError(this.options.language, '언어 서버 연결이 없다.');
         }
+        const startedAt = Date.now();
         try {
-            return await client.request<T>(method, params, timeoutMs);
+            const result = await client.request<T>(method, params, timeoutMs);
+            // 성공한 요청만 남긴다. 실패한 요청은 서버가 답하고 있다는 증거가 아니다.
+            this.lastRequest = {
+                method,
+                durationMs: Date.now() - startedAt,
+                at: new Date().toISOString(),
+            };
+            this.verifiedMethods.add(method);
+            return result;
         } catch (error) {
             // 요청 도중 서버가 죽으면 JSON-RPC 연결 오류가 온다. 그대로 위로
             // 올리면 화면에 "알 수 없는 오류" 가 뜬다. 무슨 일이 있었는지 말한다.

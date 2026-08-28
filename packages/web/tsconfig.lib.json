@@ -11,5 +11,9 @@
     "declarationMap": false,
     "sourceMap": false
   },
-  "include": ["src/tokenizer/**/*.ts", "src/features/trail/types.ts"]
+  "include": [
+    "src/tokenizer/**/*.ts",
+    "src/features/trail/types.ts",
+    "src/features/trail/board.ts"
+  ]
 }

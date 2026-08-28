@@ -1,6 +1,7 @@
-import { useMemo, type JSX } from 'react';
+import { useEffect, useMemo, useRef, type JSX } from 'react';
 
 import type { ClickTarget } from '../../tokenizer/tokenize.js';
+import { sortChildren, type BoardPoint } from './board.js';
 import { CodeBody, callSiteKey } from './CodeBody.js';
 import {
     circled,
@@ -8,6 +9,7 @@ import {
     locationLabel,
     showsContainer,
     splitName,
+    type NodeUiView,
     type TrailNodeView,
 } from './types.js';
 
@@ -20,6 +22,10 @@ import {
  *
  * 트리 모드에서는 **부모가 위, 자식이 그 아래 같은 행**에 좌우로 놓인다.
  * 이 배치는 CSS 가 만든다 — 자식을 부모 안에 중첩해 두고 `.kids` 를 가로로 편다.
+ *
+ * 보드 모드에서는 자식을 여기서 그리지 않는다. 모든 노드가 캔버스 바로 아래에
+ * 평평하게 놓이고, 부모-자식은 `.board-lines` 의 곡선으로만 이어진다.
+ * 중첩된 채로 절대 배치를 하면 자식 좌표가 부모 기준이 되어 엉킨다.
  */
 
 export interface TrailNodeProps {
@@ -37,6 +43,12 @@ export interface TrailNodeProps {
     /** 필터에 걸린 노드 ID. `null` 이면 필터가 꺼진 것이다. */
     visibleIds: ReadonlySet<string> | null;
     parentName: string;
+    /** `board` 면 자식을 여기서 그리지 않고 `position` 자리에 놓는다. */
+    layout: 'tree' | 'board';
+    /** 보드 모드에서 노드가 놓일 자리. 노드 ID 로 찾는다. */
+    positions: Readonly<Record<string, BoardPoint>>;
+    /** 노드별로 저장된 본문 높이·코드 글자 크기. */
+    nodeUi: Readonly<Record<string, NodeUiView>>;
 
     onToggle: (node: TrailNodeView) => void;
     onRemove: (node: TrailNodeView) => void;
@@ -51,48 +63,86 @@ export interface TrailNodeProps {
         text: string,
         modifiers: { alt: boolean; ctrl: boolean },
     ) => void;
+    /** 본문 높이를 사용자가 바꿨을 때. 값은 서버에 저장된다. */
+    onNodeUi: (nodeId: string, patch: { bodyHeight?: number | null }) => void;
 }
 
-/**
- * 형제 정렬.
- *
- * `source` 는 부모 코드에 나온 순서(= 호출 순서), `click` 은 내가 클릭한 순서다.
- * 클릭 순서는 서버가 붙인 순서 그대로라 정렬하지 않는다.
- */
-function sortChildren(
-    children: readonly TrailNodeView[],
-    order: 'source' | 'click',
-): TrailNodeView[] {
-    if (order === 'click') {
-        return [...children];
-    }
-    return [...children].sort((a, b) => {
-        const al = a.origin?.line ?? 0;
-        const bl = b.origin?.line ?? 0;
-        if (al !== bl) {
-            return al - bl;
-        }
-        return (a.origin?.char ?? 0) - (b.origin?.char ?? 0);
-    });
-}
+/** 본문 높이 저장을 몰아 보내는 간격. 끄는 동안 매 프레임 보내지 않는다. */
+const RESIZE_SAVE_MS = 200;
 
 export function TrailNode(props: TrailNodeProps): JSX.Element | null {
     const { node } = props;
+    const bodyRef = useRef<HTMLDivElement | null>(null);
+    const ui = props.nodeUi[node.id];
+    const bodyHeight = ui?.bodyHeight;
+    const onNodeUi = props.onNodeUi;
 
-    if (props.visibleIds !== null && !props.visibleIds.has(node.id)) {
-        return null;
-    }
+    /*
+     * 저장해 둔 높이를 다시 입힌다.
+     *
+     * React 의 `style` 로 넣지 않는다 — 사용자가 CSS `resize` 로 끌면 브라우저가
+     * 같은 inline 속성을 덮어쓰고, 그러면 React 가 아는 값과 실제 값이 어긋난다.
+     * 우리가 직접 세우고 직접 지운다.
+     */
+    useEffect(() => {
+        const el = bodyRef.current;
+        if (el === null) {
+            return;
+        }
+        if (bodyHeight === undefined) {
+            el.style.removeProperty('height');
+        } else {
+            el.style.height = `${bodyHeight}px`;
+        }
+    }, [bodyHeight]);
 
-    const children = sortChildren(node.children, props.childOrder);
-    const parts = splitName(node.symbol);
-    const kind = kindName(node.symbol.kind);
-    const busy = props.busyNodeIds.has(node.id);
+    /*
+     * 본문 모서리를 끌어 높이를 바꾸면 그 값을 서버에 저장한다.
+     *
+     * `resize` 에는 이벤트가 없어서 관찰자로 잡는다. 사용자가 끌었을 때만
+     * 브라우저가 `style.height` 를 직접 박으므로, 그게 있을 때만 기억한다.
+     * 폭 맞춤이 글자 크기를 바꿔 높이가 달라진 경우와 이렇게 구분된다.
+     */
+    useEffect(() => {
+        const el = bodyRef.current;
+        if (el === null || typeof ResizeObserver === 'undefined') {
+            return undefined;
+        }
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const observer = new ResizeObserver(() => {
+            const inline = el.style.height;
+            if (inline === '') {
+                return;
+            }
+            const px = Math.round(Number.parseFloat(inline));
+            if (!Number.isFinite(px) || px === Math.round(bodyHeight ?? -1)) {
+                return;
+            }
+            if (timer !== undefined) {
+                clearTimeout(timer);
+            }
+            timer = setTimeout(() => onNodeUi(node.id, { bodyHeight: px }), RESIZE_SAVE_MS);
+        });
+        observer.observe(el);
+        return () => {
+            if (timer !== undefined) {
+                clearTimeout(timer);
+            }
+            observer.disconnect();
+        };
+    }, [node.id, bodyHeight, onNodeUi]);
+
+    const children = useMemo(
+        () => sortChildren(node.children, props.childOrder),
+        [node.children, props.childOrder],
+    );
 
     /**
      * 펼쳐본 호출부에 순번을 붙인다.
      *
      * 부모 본문의 ①과 자식 노드 헤더의 ①이 한 짝이다. 자식이 어느 줄에서
-     * 갈라졌는지 눈으로 잇는 유일한 단서다.
+     * 갈라졌는지 눈으로 잇는 유일한 단서다. 보드 모드에서 자식이 멀리 떨어져
+     * 놓여도 이 짝은 그대로다 — 자식을 모델에서 세기 때문이다.
      */
     const visited = useMemo(() => {
         const map = new Map<string, number>();
@@ -104,6 +154,19 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
         return map;
     }, [children]);
 
+    if (props.visibleIds !== null && !props.visibleIds.has(node.id)) {
+        return null;
+    }
+
+    const parts = splitName(node.symbol);
+    const kind = kindName(node.symbol.kind);
+    const busy = props.busyNodeIds.has(node.id);
+    const board = props.layout === 'board';
+    const spot = props.positions[node.id];
+    const style = board && spot !== undefined
+        ? { left: `${Math.round(spot.x)}px`, top: `${Math.round(spot.y)}px` }
+        : undefined;
+
     return (
         <div
             className={`node${node.collapsed ? ' collapsed' : ''}${
@@ -111,6 +174,7 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
             data-id={node.id}
             data-parent={node.parentId ?? ''}
             data-depth={props.depth}
+            {...(style === undefined ? {} : { style })}
         >
             <div
                 className="hd"
@@ -229,29 +293,34 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
                 </div>
             ) : null}
 
-            <div className="body">
+            <div className="body" ref={bodyRef}>
                 <CodeBody
                     symbol={node.symbol}
                     clickTarget={props.clickTarget}
                     maxCodeLines={props.maxCodeLines}
                     visited={visited}
+                    {...(ui?.codeFontSize === undefined
+                        ? {}
+                        : { fontSize: ui.codeFontSize })}
                     onIdentifierClick={(line, char, text, modifiers) =>
                         props.onIdentifierClick(node, line, char, text, modifiers)}
                 />
             </div>
 
-            <div className="kids">
-                {children.map((child, index) => (
-                    <TrailNode
-                        {...props}
-                        key={child.id}
-                        node={child}
-                        ordinal={index + 1}
-                        depth={props.depth + 1}
-                        parentName={parts.name}
-                    />
-                ))}
-            </div>
+            {board ? null : (
+                <div className="kids">
+                    {children.map((child, index) => (
+                        <TrailNode
+                            {...props}
+                            key={child.id}
+                            node={child}
+                            ordinal={index + 1}
+                            depth={props.depth + 1}
+                            parentName={parts.name}
+                        />
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

@@ -20,6 +20,11 @@ export interface CodeBodyProps {
     maxCodeLines: number;
     /** 이미 펼쳐본 호출부. 순번을 붙여 자식 노드와 짝을 만든다. */
     visited: ReadonlyMap<string, number>;
+    /**
+     * 이 노드만의 코드 글자 크기(px). `Ctrl+휠` 로 사용자가 맞춘 값이다.
+     * 세워 두면 폭 맞춤이 이 노드를 건너뛴다 — 손으로 맞춘 것을 되돌리지 않는다.
+     */
+    fontSize?: number;
     onIdentifierClick: (
         line: number,
         char: number,
@@ -62,7 +67,12 @@ export function CodeBody(props: CodeBodyProps): JSX.Element {
     };
 
     return (
-        <div className="code">
+        <div
+            className="code"
+            {...(props.fontSize === undefined
+                ? {}
+                : { style: { fontSize: `${props.fontSize}px` }, 'data-fs': '1' })}
+        >
             {lines.slice(0, shown).map((tokens, index) => (
                 // 줄은 순서가 고정이고 재배열되지 않는다. 인덱스 키로 충분하다.
                 // eslint-disable-next-line react/no-array-index-key

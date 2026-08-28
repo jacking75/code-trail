@@ -143,6 +143,16 @@ export const lspRestartPayloadSchema = z.object({
     language: z.enum(['cpp', 'csharp', 'go', 'rust']),
 });
 
+/**
+ * 실제 샘플 요청으로 이 언어 서버가 정말 도는지 확인한다.
+ *
+ * 프로세스가 떴다는 것과 `documentSymbol`·`definition` 이 응답한다는 것은 다른
+ * 말이다. 진단 화면의 `지원됨` 은 뒤쪽을 뜻하고, 그 확인이 이 명령이다.
+ */
+export const lspVerifyPayloadSchema = z.object({
+    language: z.enum(['cpp', 'csharp', 'go', 'rust']),
+});
+
 // ── 명령 목록 ───────────────────────────────────────────────────────────────
 
 /** 트리 모양을 바꾸는 명령. 반드시 `baseRevision` 을 싣는다. */
@@ -176,6 +186,7 @@ export const UI_COMMAND_TYPES = [
     'editor.openLocation',
     'settings.update',
     'lsp.restart',
+    'lsp.verify',
 ] as const;
 
 export type StructureCommandType = (typeof STRUCTURE_COMMAND_TYPES)[number];
@@ -206,6 +217,7 @@ export const COMMAND_PAYLOADS = {
     'editor.openLocation': openLocationPayloadSchema,
     'settings.update': settingsUpdatePayloadSchema,
     'lsp.restart': lspRestartPayloadSchema,
+    'lsp.verify': lspVerifyPayloadSchema,
 } as const satisfies Record<CommandType, z.ZodType>;
 
 export type CommandPayload<T extends CommandType> = z.infer<(typeof COMMAND_PAYLOADS)[T]>;

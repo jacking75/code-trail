@@ -29,6 +29,16 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 | **심볼** | `ResolvedSymbol` | 언어 서버가 준 정의 하나 + 본문 코드 + 좌표. 노드가 감싸고 있는 알맹이 |
 | **클릭 후보** | `.tok.clickable` | 토크나이저가 좌표를 심어둔 식별자 span. 주석·문자열 안의 단어는 후보가 아니다 |
 
+독립 프로그램에만 있는 화면은 아래 이름으로 부른다. 확장 패널에는 없던 것이라
+위 표와 `docs/terms.svg` 에는 안 나온다.
+
+| 용어 | 코드 / DOM | 뜻 |
+| --- | --- | --- |
+| **파일 탐색기** | `FileTree`, `.sidebar` | 왼쪽의 프로젝트 파일 목록과 이름 검색 |
+| **코드 화면** | `CodeView`, `.code-view` | Monaco 로 파일 전체를 보여주는 읽기 전용 탭. 여기서 `Ctrl+Alt+T` 를 누른다 |
+| **진단 화면** | `DiagnosticsView`, `#diagnostics` | 언어 서버 상태·점검 결과·로그와 외부 에디터 설정을 보여주는 탭 |
+| **폭 맞춤** | `useFitToWidth`, `--ct-code-font-size` | 가장 빠듯한 노드에 맞춰 **코드 본문** 글자만 줄이는 것. 헤더는 안 줄인다 |
+
 동사는 이렇게 쓴다.
 
 - **펼치다 / 접다** — 본문을 보이게 / 감추게 하는 것(`collapsed`). 새 자식이 생기는
@@ -39,14 +49,15 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 ## 지금 무엇을 하고 있나
 
 **독립 프로그램으로 전환하는 중이다.** 계획은 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md)
-이고 그 문서 0장의 체크리스트가 진행의 정본이다. 단계 0~7이 끝났다.
-**다음은 단계 8(보드 모드와 UI 영속성)이다.**
+이고 그 문서 0장의 체크리스트가 진행의 정본이다. 단계 0~9가 끝났다.
+**다음은 단계 10(전체 보안과 회복성 검증)이다.**
 
 - `src/`, `media/` — **지금 동작하는 VS Code 확장.** 단계 10까지 그대로 둔다. 손대면 기준선이 흔들린다.
 - `packages/` — **새 독립 프로그램.** 파일을 찾아 읽고, `Ctrl+Alt+T` 로 트레일을 시작하고,
-  식별자를 클릭해 정의를 자식 노드로 펼치는 것까지 브라우저에서 된다.
+  식별자를 클릭해 정의를 자식 노드로 펼치고, 보드 모드로 늘어놓고, 외부 에디터로 열고,
+  언어 서버 상태를 진단 화면에서 보는 것까지 브라우저에서 된다.
 - 언어 서버는 어댑터가 찾는다(설정 → PATH → 플랫폼별·GOBIN·rustup). **자동으로 내려받지 않는다.**
-- 아직 없는 것: **보드 모드**(단계 8), **외부 에디터 열기·진단 화면**(단계 9).
+- 아직 없는 것: **전체 보안·회복성 검증**(단계 10), **확장 제거**(단계 11).
 - **실제 언어 서버로 검증하지 못한 것이 있다.** 이 기계에 clangd·gopls·roslyn 이 없고
   rust-analyzer 는 rustup proxy 만 있다. `npm run test:lsp` 이 fixture 를 들고 있으니
   해당 서버가 있는 기계에서 돌리면 확인된다. 구현서 0.7 에 어느 줄인지 표시해 뒀다.
@@ -73,6 +84,7 @@ npm run typecheck               # 확장 + 모든 workspace
 npm test                        # test/unit + test/integration (브라우저 불필요)
 npm run test:e2e                # 진짜 서버 + 진짜 브라우저 (playwright 필요)
 npm run test:lsp                # 실제 언어 서버 스모크. 설치된 언어만 돈다
+npm run test:perf               # 1,000개 노드 성능 측정 → docs/perf-1000-nodes.md
 
 # 지금 동작하는 확장 (src/, media/)
 npm run compile                 # tsc → out/
@@ -127,8 +139,19 @@ A 안에서 B, C를 클릭하면 둘 다 A의 형제 자식이다. 이 규칙을
 
 **보드 모드에서는 노드를 `#root` 바로 아래에 평평하게 늘어놓는다.**
 중첩된 채로 절대 배치를 하면 자식 좌표가 부모 기준이 되어 엉킨다.
-그래서 자식을 DOM 이 아니라 모델(`nodes[id].children`)에서 찾는다 —
-`childBoxes` 를 DOM 순회로 되돌리지 않는다. 두 모드 모두에서 깨진다.
+그래서 자식을 DOM 이 아니라 모델에서 찾는다 — 확장은 `nodes[id].children`(`childBoxes`),
+독립 프로그램은 `features/trail/board.ts` 의 `flattenTree`·`connectors` 다.
+어느 쪽도 DOM 순회로 되돌리지 않는다. 두 모드 모두에서 깨진다.
+
+**외부 에디터는 브라우저가 보낸 경로로 열지 않는다.** 브라우저는 `documentId` 만
+보내고 실제 경로는 서버가 문서 권한 목록에서 역조회한다. 실행은 `shell: false` 로
+실행 파일과 argv 배열을 그대로 넘긴다 — 파일 이름에 `;` 가 있어도 인자 하나로 간다.
+자리표시자는 `{path}`, `{line}`, `{column}`, `{project}` 넷뿐이고 모르는 것이 있으면
+실행하지 않고 이유를 알린다. 못 열었을 때는 경로와 줄을 돌려줘 복사할 수 있게 한다.
+
+**진단 화면의 `지원됨` 은 프로세스가 떴다는 뜻이 아니다.** 실제 샘플 문서에서
+`documentSymbol` 과 `definition` 이 응답했다는 뜻이고, 그 확인은 `lsp.verify` 명령이
+사용자가 눌렀을 때만 돈다. 진단 화면을 여는 것만으로 네 언어 서버를 다 띄우지 않는다.
 
 ## 구조
 
@@ -159,10 +182,12 @@ packages/server/src/ws/         명령 수신과 이벤트 방송
 packages/server/src/lsp/        JSON-RPC 전송, 문서 동기화, 상태 머신·재시작
 packages/server/src/lsp/adapters/  언어별 탐지·진단. 언어를 아는 유일한 자리다
 packages/server/src/symbols/    평탄화, 심볼 선택, 본문 범위, 선언만 판정
+packages/server/src/editor/     외부 에디터 탐지와 실행 (shell 없이, documentId 역조회)
 
 packages/web/src/api/           토큰 부트스트랩, HTTP, WebSocket, 명령 보내기
 packages/web/src/tokenizer/     하이라이팅 + 식별자에 좌표 심기 (순수 함수)
-packages/web/src/features/      파일 탐색기, 검색, Monaco 코드 화면, 트레일 화면
+packages/web/src/features/      파일 탐색기, 검색, Monaco 코드 화면, 트레일 화면, 진단 화면
+packages/web/src/features/trail/board.ts  보드 배치 계산 (순수 함수. 브라우저 없이 테스트한다)
 packages/cli/src/               인자 해석, 서버 재사용 감지, 브라우저 열기
 
 test/unit/                      도메인·프로토콜·심볼 선택·CLI 인자 (node:test)
@@ -170,6 +195,7 @@ test/integration/               진짜 서버 + 가짜 언어 서버 (node:test)
 test/e2e/                       진짜 브라우저까지 (playwright)
 test/fake-lsp/                  나쁜 언어 서버를 흉내내는 stdio fixture
 test/smoke/                     실제 언어 서버 스모크 (설치된 언어만)
+test/perf/                      1,000개 노드 성능 측정 (결과는 docs/perf-1000-nodes.md)
 test/fixtures/                  단계 0에서 굳힌 확장 시절 데이터
 ```
 
@@ -209,6 +235,9 @@ test/fixtures/                  단계 0에서 굳힌 확장 시절 데이터
 | 노드 헤더·배지·본문 (`features/trail/`) | `test/e2e/trail.e2e.mjs`, README `### 헤더에 표시되는 것` · `### 표시되는 배지` |
 | `packages/web/src/tokenizer/` | `test/unit/tokenizer-port.test.mjs`. 주석·문자열 제외가 깨지면 여기서 걸린다 |
 | 언어별 탐지·진단 | 그 어댑터 파일 하나 안에서만. 공통 계층에 `if (language === ...)` 를 넣지 않는다 |
+| 보드 배치 규칙 (`features/trail/board.ts`) | `test/unit/board.test.mjs`, `test/e2e/trail.e2e.mjs` 의 `[보드 모드]`, 무거워졌으면 `docs/perf-1000-nodes.md` |
+| 외부 에디터 실행 경로 (`server/src/editor/`) | `test/integration/editor.test.mjs` 에 셸 특수문자 한 줄. 자리표시자를 늘리면 README `## 설정` 과 구현서 17.1 |
+| 진단 화면에 항목 추가 | `LspSessionInfo` → `/api/diagnostics` → `LanguageDiagnostics` → `DiagnosticsView` 넷을 한 벌로, 그리고 구현서 18 |
 | `.code-trail/settings.json` 항목 추가 | `shared/domain/settings.ts`, `protocol/schemas.ts`, README `### 독립 프로그램의 설정` |
 | 언어 서버 예외 처리 추가 | 아래 `## 언어 서버별 함정` |
 

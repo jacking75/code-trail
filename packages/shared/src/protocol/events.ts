@@ -176,6 +176,22 @@ export const definitionChoicePayloadSchema = z.object({
     })),
 });
 
+/**
+ * 외부 에디터 열기 결과 (구현서 17.2).
+ *
+ * 성공과 실패를 한 이벤트로 알린다. 못 열었을 때도 경로와 줄을 함께 주는데,
+ * 화면이 그걸 복사할 수 있게 해서 에디터가 없어도 손으로 찾아갈 수 있게 한다.
+ * **절대경로가 아니라 화면에 찍는 경로다.**
+ */
+export const editorOpenedPayloadSchema = z.object({
+    displayPath: z.string(),
+    /** 외부 에디터 관례에 맞춘 1-based 줄과 컬럼. */
+    line: z.int().min(1),
+    column: z.int().min(1),
+    launched: z.boolean(),
+    reason: z.string().nullable(),
+});
+
 export const commandErrorPayloadSchema = z.object({
     error: commandErrorSchema,
 });
@@ -204,6 +220,7 @@ export const EVENT_PAYLOADS = {
     'workspace.filesChanged': filesChangedPayloadSchema,
     'settings.changed': settingsChangedPayloadSchema,
     'lsp.stateChanged': lspStateChangedPayloadSchema,
+    'editor.opened': editorOpenedPayloadSchema,
     'command.error': commandErrorPayloadSchema,
 } as const;
 

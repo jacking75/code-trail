@@ -128,6 +128,11 @@ export class LspClient {
      * **`shell: false` 로 부른다.** 설정에서 온 실행 파일 경로와 인자가 셸 문법으로
      * 해석되면, 프로젝트 설정 파일 하나로 임의 명령이 돌게 된다(구현서 8.1).
      */
+    /** 자식 프로세스 PID. 안 떠 있으면 `null`. 진단 화면이 쓴다. */
+    get pid(): number | null {
+        return this.child?.pid ?? null;
+    }
+
     start(): void {
         if (this.child) {
             throw new Error('이미 시작한 클라이언트다.');

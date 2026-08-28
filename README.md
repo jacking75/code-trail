@@ -223,7 +223,17 @@ VS Code 1.85 이상이 필요하고, 탭 드래그가 안 되는 환경에서도
 | `languages.csharp.solutionPath` | `null` | 열 솔루션. **프로젝트 상대경로.** 후보가 여럿이면 우리가 고르지 않는다 |
 
 `<언어>` 는 `cpp`, `csharp`, `go`, `rust` 넷이다.
-탐지 순서와 진단 항목은 `npm run start` 로 띄운 뒤 `GET /api/diagnostics` 가 보여준다.
+탐지 순서와 진단 항목은 `npm run start` 로 띄운 뒤 **`진단` 탭**에서 본다
+(원본은 `GET /api/diagnostics`).
+
+`editor.executable` 을 직접 적지 않아도 된다. `진단` 탭의 **외부 에디터** 칸이
+PATH 에서 찾은 후보(VS Code, Cursor, Zed, Sublime, JetBrains, Helix, Emacs, Vim …)를
+인자 틀과 함께 보여주고, 고르면 그 값이 설정에 적힌다. **고르기 전에는 아무것도
+실행하지 않는다.**
+
+`진단` 탭의 `지원됨` 배지는 프로세스가 떴다는 뜻이 아니다. `✓ 확인` 을 누르면
+프로젝트 안의 실제 파일 하나로 `documentSymbol` 과 `definition` 을 보내보고,
+둘 다 응답했을 때만 붙는다.
 
 ## 설치
 
@@ -336,6 +346,7 @@ npm test                      # 브라우저가 필요 없는 것 전부
 npm run test:ui               # 웹뷰 렌더링·상호작용 (playwright 필요)
 npm run test:e2e              # 독립 프로그램 전체 (playwright 필요)
 npm run test:lsp              # 실제 언어 서버 스모크. 설치된 언어만 돌고 나머지는 건너뛴다
+npm run test:perf             # 1,000개 노드 성능 측정 (playwright 있으면 화면까지)
 ```
 
 `npm test` 가 도는 것:
@@ -343,9 +354,16 @@ npm run test:lsp              # 실제 언어 서버 스모크. 설치된 언어
 ```
 node test/tokenizer.test.js          # 토크나이저 (주석/문자열 오탐, 줄·컬럼 매핑)
 node test/shell.test.js              # panel.ts 셸 ↔ preview.html 동기화
-node --test "test/unit/*.test.mjs"          # 도메인·프로토콜·심볼 선택·CLI 인자
-node --test "test/integration/*.test.mjs"   # 진짜 로컬 서버 + 가짜 언어 서버
+node --test "test/unit/*.test.mjs"          # 도메인·프로토콜·심볼 선택·보드 배치·CLI 인자
+node --test "test/integration/*.test.mjs"   # 진짜 로컬 서버 + 가짜 언어 서버 + 외부 에디터
 ```
+
+`test/integration/editor.test.mjs` 는 외부 에디터를 **셸 없이** 띄우는지 본다.
+파일 이름에 `; touch pwned &&` 를 넣어 두고, 그것이 인자 하나로만 가는지와
+셸이 돌았다면 생겼을 파일이 없는지를 확인한다.
+
+`test/perf/board-1000.mjs` 는 언어 서버를 1,000번 부르는 대신 저장 파일을 직접 만들어
+넣고 **불러오기와 그리기**만 잰다. 결과와 병목은 [`docs/perf-1000-nodes.md`](docs/perf-1000-nodes.md) 에 있다.
 
 `test/fake-lsp/server.mjs` 는 진짜 clangd·gopls 없이 LSP 계층을 시험하기 위한 가짜 서버다.
 정상 동작만이 아니라 **실제 언어 서버가 하는 나쁜 일들**(한 줄짜리 range, stdout 오염,
@@ -383,9 +401,11 @@ npm run start -- <프로젝트 경로>
 ```
 
 로 띄우면 파일을 찾아 읽고, 함수 위에서 `Ctrl+Alt+T` 로 트레일을 시작하고,
-식별자를 클릭해 정의를 자식 노드로 펼칠 수 있다. clangd·gopls·rust-analyzer·
-roslyn-language-server 를 설치해 두면 자동으로 찾는다.
-아직 없는 것은 **보드 모드**(단계 8)와 **외부 에디터 열기·진단 화면**(단계 9)이다.
+식별자를 클릭해 정의를 자식 노드로 펼치고, `⬚ 보드` 로 노드를 자유롭게 늘어놓고,
+`↗` 로 외부 에디터에서 열 수 있다. clangd·gopls·rust-analyzer·
+roslyn-language-server 를 설치해 두면 자동으로 찾고, `진단` 탭이 어느 실행 파일을
+어떻게 찾았는지·프로세스와 capability 상태가 어떤지·최근 로그가 무엇인지 보여준다.
+아직 남은 것은 **전체 보안·회복성 검증**(단계 10)과 **확장 제거**(단계 11)다.
 계획은 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md),
 확장 마지막 상태의 기준선은 [`docs/baseline.md`](docs/baseline.md) 에 있다.
 

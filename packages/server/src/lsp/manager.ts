@@ -6,8 +6,9 @@ import type { ProjectSettings } from '@code-trail/shared';
 import type { Logger } from '../config/logger.js';
 import { languageIdFor, supportedLanguageFor, type SupportedLanguage } from '../workspace/languages.js';
 import { adapterFor, SUPPORTED_LANGUAGES } from './adapters/index.js';
+import { findByExtension } from './adapters/detect.js';
 import type { DetectionResult, HealthCheck, WorkspaceInfo } from './adapters/types.js';
-import { uriToPath } from './documents.js';
+import { pathToUri, uriToPath } from './documents.js';
 import { LspSession } from './session.js';
 import { LspUnavailableError, type LspSessionInfo } from './types.js';
 
@@ -20,6 +21,33 @@ import { LspUnavailableError, type LspSessionInfo } from './types.js';
  * - 실행 파일을 찾고 명령을 만드는 것은 **어댑터**가 한다. 여기에는 언어별
  *   분기가 없다 — `if (language === 'cpp')` 가 생기면 어댑터로 옮길 코드다.
  */
+
+/** 확인용 샘플 파일을 고를 때 보는 확장자. 언어마다 흔한 것 하나면 된다. */
+const SAMPLE_EXTENSIONS: Record<SupportedLanguage, readonly string[]> = {
+    cpp: ['.cpp', '.cc', '.cxx', '.c', '.hpp', '.h'],
+    csharp: ['.cs'],
+    go: ['.go'],
+    rust: ['.rs'],
+};
+
+/**
+ * 심볼 목록에서 첫 심볼의 자리.
+ *
+ * `DocumentSymbol` 과 `SymbolInformation` 두 모양을 모두 받는다. 못 찾으면
+ * 파일 첫 줄을 쓴다 — 요청이 응답하는지 보는 것이 목적이라 자리 자체는 덜 중요하다.
+ */
+function firstSymbolPosition(symbols: unknown): { line: number; character: number } {
+    const list = Array.isArray(symbols) ? symbols : [];
+    const first = list[0] as
+        | { selectionRange?: { start?: { line?: number; character?: number } };
+            range?: { start?: { line?: number; character?: number } };
+            location?: { range?: { start?: { line?: number; character?: number } } } }
+        | undefined;
+    const start = first?.selectionRange?.start
+        ?? first?.range?.start
+        ?? first?.location?.range?.start;
+    return { line: start?.line ?? 0, character: start?.character ?? 0 };
+}
 
 /** 진단 화면 한 줄. 세션 상태에 어댑터의 점검 결과를 얹은 것이다. */
 export interface LspDiagnosticsEntry extends LspSessionInfo {
@@ -193,6 +221,17 @@ export class LspManager {
                 lastError: null,
                 restartCount: 0,
                 missingCapabilities: [],
+                pid: null,
+                capabilities: {
+                    definition: false,
+                    documentSymbol: false,
+                    implementation: false,
+                    typeDefinition: false,
+                },
+                initializeMs: null,
+                lastRequest: null,
+                lastExit: null,
+                verifiedMethods: [],
             };
 
             return {
@@ -220,6 +259,45 @@ export class LspManager {
             }
         }
         return found;
+    }
+
+    /**
+     * 실제 샘플 문서로 이 언어 서버가 정말 도는지 확인한다 (구현서 18).
+     *
+     * 프로세스가 떴다는 것과 요청이 응답한다는 것은 다른 말이다. 진단 화면의
+     * `지원됨` 은 여기서 응답을 받아본 메서드만 근거로 삼는다.
+     * 문서를 열기만 하고 고치지 않는다 — 확인 때문에 파일이 바뀌면 안 된다.
+     */
+    async verify(language: SupportedLanguage): Promise<void> {
+        const sample = await this.sampleDocument(language);
+        if (sample === null) {
+            throw new Error('이 언어의 파일을 프로젝트에서 찾지 못했다. 파일을 하나 열고 다시 한다.');
+        }
+        const session = await this.sessionFor(language);
+        const uri = pathToUri(sample);
+        await session.openDocument(uri);
+
+        // 1) documentSymbol — 이 파일의 심볼 목록.
+        const symbols = await session.request<unknown>('textDocument/documentSymbol', {
+            textDocument: { uri },
+        });
+
+        // 2) definition — 첫 심볼 자리에서. 결과가 비어도 "응답했다" 는 확인된다.
+        const at = firstSymbolPosition(symbols);
+        await session.request<unknown>('textDocument/definition', {
+            textDocument: { uri },
+            position: at,
+        });
+    }
+
+    /** 이 언어의 파일 하나. 확인용 샘플이라 아무거나 하나면 된다. */
+    private async sampleDocument(language: SupportedLanguage): Promise<string | null> {
+        const found = await findByExtension(
+            this.options.projectRoot,
+            SAMPLE_EXTENSIONS[language],
+            { maxDepth: 4, maxResults: 1 },
+        );
+        return found[0] ?? null;
     }
 
     recentLog(language: SupportedLanguage, lines = 100): string[] {

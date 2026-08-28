@@ -1,4 +1,5 @@
 import type { Logger } from './config/logger.js';
+import type { EditorService } from './editor/service.js';
 import type { LspManager } from './lsp/manager.js';
 import type { ProjectStore } from './persistence/store.js';
 import type { ResolveFlow } from './trails/resolveFlow.js';
@@ -26,4 +27,6 @@ export interface ServerContext {
     lsp: LspManager;
     /** 정의 클릭 한 번이 일으키는 일. 게이트웨이와 도메인 사이에 있다. */
     resolveFlow: ResolveFlow;
+    /** 외부 에디터 열기. 경로는 문서 권한에서 역조회한다. */
+    editor: EditorService;
 }

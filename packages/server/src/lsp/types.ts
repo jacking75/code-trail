@@ -64,6 +64,23 @@ export interface LspSessionInfo {
     restartCount: number;
     /** 필수 capability 가 없어 기능이 줄어든 상태인지. */
     missingCapabilities: string[];
+    /** 자식 프로세스 PID. 안 떠 있으면 `null`. */
+    pid: number | null;
+    /** 서버가 광고한 네 capability. 광고와 실제는 다를 수 있다. */
+    capabilities: ServerCapabilitySummary;
+    /** `initialize` 왕복에 걸린 시간(ms). 아직 안 떴으면 `null`. */
+    initializeMs: number | null;
+    /** 마지막으로 **성공한** 요청. 서버가 실제로 답하고 있다는 증거다. */
+    lastRequest: { method: string; durationMs: number; at: string } | null;
+    /** 마지막 비정상 종료. 정상 종료는 남기지 않는다. */
+    lastExit: { code: number | null; signal: string | null; at: string } | null;
+    /**
+     * 실제 샘플 문서에서 응답을 받아본 메서드.
+     *
+     * 진단 화면의 `지원됨` 은 이 목록을 근거로 한다. 프로세스가 떴다는 것과
+     * 요청이 응답한다는 것은 다른 말이다(구현서 18).
+     */
+    verifiedMethods: string[];
 }
 
 /** 실행할 명령. shell 을 거치지 않는다. */

@@ -189,6 +189,7 @@
     "test:integration": "node --test \"test/integration/*.test.mjs\"",
     "test:e2e": "node test/e2e/shell.e2e.mjs && node test/e2e/trail.e2e.mjs",
     "test:lsp": "node test/smoke/real-lsp.mjs",
+    "test:perf": "node test/perf/board-1000.mjs",
     "test:ui": "node test/ui.test.js",
     "screenshot": "node test/screenshot.js"
   },

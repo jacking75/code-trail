@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ServerEventMessage, TrailSocket } from '../../api/socket.js';
 import type {
     DefinitionChoice,
+    NodeUiView,
     TrailNodeView,
     TrailSnapshot,
     TrailSummaryView,
@@ -162,6 +163,35 @@ export function useTrail(socket: TrailSocket | null): TrailState & {
                         next.delete(nodeId);
                     }
                     return next;
+                });
+                return;
+            }
+
+            case 'trail.modeChanged': {
+                // 트리 ↔ 보드도 화면 상태다. revision 을 올리지 않는다.
+                const { mode } = event.payload as { mode: 'tree' | 'board' };
+                setTrail((prev) => (prev === null ? prev : { ...prev, mode }));
+                return;
+            }
+
+            case 'trail.nodeUiChanged': {
+                // 보드 좌표·본문 높이·코드 글자 크기. `state` 가 `null` 이면
+                // 그 노드의 손조절을 전부 지운 것이다(줄 번호 더블클릭).
+                const { nodeId, state } = event.payload as {
+                    nodeId: string;
+                    state: NodeUiView | null;
+                };
+                setTrail((prev) => {
+                    if (prev === null) {
+                        return prev;
+                    }
+                    const nodeUi = { ...prev.nodeUi };
+                    if (state === null) {
+                        delete nodeUi[nodeId];
+                    } else {
+                        nodeUi[nodeId] = state;
+                    }
+                    return { ...prev, nodeUi };
                 });
                 return;
             }

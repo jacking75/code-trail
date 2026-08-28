@@ -94,10 +94,38 @@ export const commands = {
     setActiveNode: (context: CommandContext, nodeId: string | null) =>
         send(context, 'trail.setActiveNode', { nodeId }, { withRevision: false }),
 
+    /**
+     * 트리 ↔ 보드 전환. 화면 상태라 revision 을 실지 않는다 —
+     * 모드를 바꿨다고 날아가던 구조 명령이 거절되면 안 된다.
+     */
+    setMode: (context: CommandContext, mode: 'tree' | 'board') =>
+        send(context, 'trail.setMode', { mode }, { withRevision: false }),
+
+    /**
+     * 노드 하나의 화면 상태(보드 좌표, 본문 높이, 코드 글자 크기).
+     *
+     * `null` 을 넣으면 그 항목을 지우고 기본값으로 돌린다.
+     */
+    setNodeUi: (
+        context: CommandContext,
+        nodeId: string,
+        patch: {
+            boardX?: number | null;
+            boardY?: number | null;
+            bodyHeight?: number | null;
+            codeFontSize?: number | null;
+        },
+    ) => send(context, 'trail.setNodeUi', { nodeId, patch }, { withRevision: false }),
+
     exportMarkdown: (context: CommandContext) =>
         send(context, 'trail.exportMarkdown', {}, { withRevision: false }),
 
-    /** 외부 에디터에서 열기. 단계 9에서 서버 쪽이 붙는다. */
+    /**
+     * 외부 에디터에서 열기.
+     *
+     * **경로를 보내지 않는다.** 서버가 발급한 `documentId` 만 보내고, 실제 경로는
+     * 서버가 문서 권한 목록에서 역조회한다(구현서 17.2 5단계).
+     */
     openInEditor: (context: CommandContext, documentId: string, line: number, char: number) =>
         send(context, 'editor.openLocation', { documentId, line, char }, {
             withRevision: false,
@@ -106,6 +134,24 @@ export const commands = {
 
     updateSettings: (context: CommandContext, settings: unknown) =>
         send(context, 'settings.update', { settings }, {
+            withRevision: false,
+            withTrail: false,
+        }),
+
+    restartLsp: (context: CommandContext, language: string) =>
+        send(context, 'lsp.restart', { language }, {
+            withRevision: false,
+            withTrail: false,
+        }),
+
+    /**
+     * 실제 샘플 요청으로 언어 서버를 확인한다.
+     *
+     * 프로세스가 떴다는 것과 요청이 응답한다는 것은 다른 말이다. 진단 화면의
+     * `지원됨` 은 이 확인을 거친 것만 뜻한다(구현서 18).
+     */
+    verifyLsp: (context: CommandContext, language: string) =>
+        send(context, 'lsp.verify', { language }, {
             withRevision: false,
             withTrail: false,
         }),
