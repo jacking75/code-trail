@@ -1,0 +1,513 @@
+/*
+ * 트레일 화면.
+ *
+ * 확장의 `media/style.css` 에서 트리·노드 부분을 옮겼다. VS Code 테마 변수
+ * (`--vscode-*`) 의존을 걷어내고 `app.css` 가 정한 우리 변수만 쓴다.
+ *
+ * **트리 배치는 부모 위, 자식 아래다.** 부모 노드가 한 줄을 차지하고 그 자식들이
+ * 바로 아래 같은 행에 좌우로 놓인다. `.kids` 를 가로 flex 로 펴서 만든다 —
+ * 자식이 부모 안에 중첩돼 있으니 부모-자식 관계가 DOM 에 그대로 남는다.
+ */
+
+.trail {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+/* ── 툴바 ─────────────────────────────────────────────────────────────── */
+
+#toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--ct-border);
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+}
+
+#toolbar button,
+.trail-bar button {
+    padding: 3px 9px;
+    background: var(--ct-bg-input);
+    color: var(--ct-fg);
+    border: 1px solid var(--ct-border);
+    border-radius: 3px;
+    font: inherit;
+    cursor: pointer;
+}
+
+#toolbar button:hover,
+.trail-bar button:hover {
+    border-color: var(--ct-accent);
+}
+
+#toolbar button.danger,
+.trail-bar button.danger {
+    color: var(--ct-danger);
+}
+
+#toolbar input,
+.trail-bar input {
+    padding: 3px 6px;
+    background: var(--ct-bg-input);
+    color: var(--ct-fg);
+    border: 1px solid var(--ct-border);
+    border-radius: 3px;
+    font: inherit;
+    min-width: 160px;
+}
+
+#toolbar .sep {
+    width: 1px;
+    height: 18px;
+    background: var(--ct-border);
+    margin-inline: 4px;
+}
+
+#toolbar .spacer,
+.hd .spacer {
+    flex: 1;
+}
+
+/* ── 트레일 목록 ─────────────────────────────────────────────────────── */
+
+.trail-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.trail-pick {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.trail-bar select {
+    padding: 2px 6px;
+    background: var(--ct-bg-input);
+    color: var(--ct-fg);
+    border: 1px solid var(--ct-border);
+    border-radius: 3px;
+    font: inherit;
+    max-width: 220px;
+}
+
+.rename {
+    display: flex;
+    gap: 4px;
+}
+
+/* ── 브레드크럼 ──────────────────────────────────────────────────────── */
+
+#breadcrumb {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 4px 10px;
+    border-bottom: 1px solid var(--ct-border);
+    font-size: 12px;
+    flex: 0 0 auto;
+}
+
+.crumb {
+    background: none;
+    border: 0;
+    color: var(--ct-accent);
+    font: inherit;
+    cursor: pointer;
+    padding: 0 2px;
+}
+
+.crumb:hover {
+    text-decoration: underline;
+}
+
+.crumb-sep {
+    color: var(--ct-fg-muted);
+}
+
+/* ── 트리 ────────────────────────────────────────────────────────────── */
+
+.tree {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 10px;
+}
+
+.node {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: stretch;
+    vertical-align: top;
+    margin: 0 6px 10px;
+}
+
+/*
+ * 자식은 부모 바로 아래 같은 행에 좌우로 놓인다.
+ * 위쪽 여백에 가이드선을 그려 어느 부모에서 갈라졌는지 보이게 한다.
+ */
+.kids {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    padding-top: 12px;
+    position: relative;
+}
+
+.kids:not(:empty)::before {
+    content: '';
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 20px;
+    inline-size: 1px;
+    block-size: 12px;
+    background: var(--ct-border);
+}
+
+.node.collapsed > .body,
+.node.collapsed > .kids,
+.node.collapsed > .origin {
+    display: none;
+}
+
+/* ── 헤더 ────────────────────────────────────────────────────────────── */
+
+.hd {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 3px 8px;
+    background: var(--ct-bg-raised);
+    border: 1px solid var(--ct-border);
+    border-radius: 4px 4px 0 0;
+    cursor: pointer;
+    flex-wrap: wrap;
+    /* 헤더 글자는 폭 맞춤이 줄이지 않는다. 트리 구조가 안 읽히기 때문이다. */
+    font-size: var(--ct-font-size);
+}
+
+.node.collapsed > .hd {
+    border-radius: 4px;
+}
+
+.node.active > .hd {
+    border-color: var(--ct-accent);
+    box-shadow: 0 0 0 1px var(--ct-accent);
+}
+
+.hd .chev {
+    color: var(--ct-fg-muted);
+    width: 10px;
+}
+
+.hd .idx {
+    color: var(--ct-accent);
+}
+
+.hd .kind {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    padding: 0 5px;
+    border-radius: 8px;
+    background: rgba(122, 162, 247, 0.16);
+    color: var(--ct-accent);
+}
+
+.hd .container {
+    color: var(--ct-fg-muted);
+}
+
+.hd .name {
+    font-weight: 600;
+    font-family: var(--ct-code-font);
+}
+
+.hd .cnt {
+    color: var(--ct-fg-muted);
+    font-size: 11px;
+}
+
+/* 자리가 모자라면 시그니처가 먼저 줄어든다. 경로는 끝까지 남는다. */
+.hd .sig {
+    color: var(--ct-fg-muted);
+    font-family: var(--ct-code-font);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 40ch;
+    min-width: 0;
+}
+
+.hd .loc {
+    color: var(--ct-fg-muted);
+    font-family: var(--ct-code-font);
+    font-size: 11px;
+}
+
+.badge {
+    font-size: 10px;
+    padding: 0 5px;
+    border-radius: 8px;
+}
+
+.badge.rec {
+    background: rgba(247, 118, 142, 0.2);
+    color: var(--ct-danger);
+}
+
+.badge.decl {
+    background: rgba(224, 175, 104, 0.2);
+    color: #e0af68;
+}
+
+.badge.approx {
+    background: rgba(127, 136, 176, 0.2);
+    color: var(--ct-fg-muted);
+}
+
+.badge.busy {
+    background: rgba(122, 162, 247, 0.2);
+    color: var(--ct-accent);
+}
+
+.hd .act {
+    background: none;
+    border: 0;
+    color: var(--ct-fg-muted);
+    font: inherit;
+    cursor: pointer;
+    padding: 0 3px;
+}
+
+.hd .act:hover {
+    color: var(--ct-fg);
+}
+
+/* 선언만인 노드의 ⚑ 는 눈에 띄어야 한다. 다음에 눌러야 할 것이기 때문이다. */
+.hd .act.impl.hot {
+    color: #e0af68;
+}
+
+/* ── 진입 링크 ───────────────────────────────────────────────────────── */
+
+.origin {
+    padding: 2px 8px;
+    background: var(--ct-bg-raised);
+    border-inline: 1px solid var(--ct-border);
+    font-size: 11px;
+}
+
+.origin-link {
+    background: none;
+    border: 0;
+    color: var(--ct-fg-muted);
+    font: inherit;
+    cursor: pointer;
+    padding: 0;
+}
+
+.origin-link:hover {
+    color: var(--ct-accent);
+}
+
+.origin-link code {
+    font-family: var(--ct-code-font);
+    background: var(--ct-bg-input);
+    padding: 0 3px;
+    border-radius: 2px;
+}
+
+/* ── 본문 ────────────────────────────────────────────────────────────── */
+
+.body {
+    border: 1px solid var(--ct-border);
+    border-block-start: 0;
+    border-radius: 0 0 4px 4px;
+    background: var(--ct-bg-input);
+    overflow: auto;
+    resize: vertical;
+    max-block-size: 70vh;
+}
+
+.code {
+    font-family: var(--ct-code-font);
+    /* 코드 본문만 이 변수를 쓴다. 헤더는 --ct-font-size 를 쓴다. */
+    font-size: var(--ct-code-font-size, 12px);
+    line-height: 1.5;
+    padding: 4px 0;
+    white-space: pre;
+    min-inline-size: max-content;
+}
+
+.cl {
+    display: flex;
+}
+
+.cl .no {
+    color: var(--ct-fg-muted);
+    padding-inline: 8px 10px;
+    user-select: none;
+    text-align: end;
+    white-space: pre;
+}
+
+.cl .ct {
+    white-space: pre;
+}
+
+.more {
+    display: block;
+    margin: 4px 10px;
+    background: none;
+    border: 1px dashed var(--ct-border);
+    border-radius: 3px;
+    color: var(--ct-fg-muted);
+    font: inherit;
+    cursor: pointer;
+    padding: 2px 8px;
+}
+
+/* ── 토큰 ────────────────────────────────────────────────────────────── */
+
+.tok.kw { color: #bb9af7; }
+.tok.cm { color: #565f89; font-style: italic; }
+.tok.st { color: #9ece6a; }
+.tok.nu { color: #ff9e64; }
+.tok.pp { color: #7dcfff; }
+.tok.lt { color: #f7768e; }
+.tok.fn { color: #7aa2f7; }
+.tok.ty { color: #2ac3de; }
+.tok.id { color: var(--ct-fg); }
+.tok.pu { color: #89ddff; }
+
+.tok.clickable {
+    cursor: pointer;
+    border-radius: 2px;
+}
+
+.tok.clickable:hover {
+    background: rgba(122, 162, 247, 0.25);
+    text-decoration: underline;
+}
+
+/* 이미 펼쳐본 호출부. 자식 노드 헤더의 같은 번호와 한 짝이다. */
+.tok.clickable.visited {
+    background: rgba(122, 162, 247, 0.14);
+}
+
+.idx-mark {
+    color: var(--ct-accent);
+    font-size: 0.85em;
+}
+
+/* ── 후보 고르기 ─────────────────────────────────────────────────────── */
+
+.choice {
+    margin: 8px 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--ct-accent);
+    border-radius: 4px;
+    background: var(--ct-bg-raised);
+}
+
+.choice p {
+    margin: 0 0 8px;
+}
+
+.choice ul {
+    list-style: none;
+    margin: 0 0 8px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.choice li button {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    width: 100%;
+    text-align: start;
+    background: var(--ct-bg-input);
+    border: 1px solid var(--ct-border);
+    border-radius: 3px;
+    color: var(--ct-fg);
+    font: inherit;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
+.choice li button:hover {
+    border-color: var(--ct-accent);
+}
+
+.cand-name {
+    font-family: var(--ct-code-font);
+    font-weight: 600;
+}
+
+.cand-path {
+    color: var(--ct-fg-muted);
+    font-family: var(--ct-code-font);
+    font-size: 11px;
+}
+
+/* ── 탭과 토스트 ─────────────────────────────────────────────────────── */
+
+.pane-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 4px 10px 0;
+    border-bottom: 1px solid var(--ct-border);
+    flex: 0 0 auto;
+}
+
+.pane-tabs .tab {
+    background: none;
+    border: 1px solid transparent;
+    border-block-end: 0;
+    border-radius: 4px 4px 0 0;
+    color: var(--ct-fg-muted);
+    font: inherit;
+    cursor: pointer;
+    padding: 3px 12px;
+}
+
+.pane-tabs .tab.active {
+    background: var(--ct-bg-raised);
+    border-color: var(--ct-border);
+    color: var(--ct-fg);
+}
+
+.toast {
+    position: fixed;
+    inset-block-end: 16px;
+    inset-inline-end: 16px;
+    max-inline-size: 460px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--ct-border);
+    background: var(--ct-bg-raised);
+    color: var(--ct-fg);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.toast-warn {
+    border-color: #e0af68;
+}
+
+.toast-error {
+    border-color: var(--ct-danger);
+}

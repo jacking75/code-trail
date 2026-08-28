@@ -247,7 +247,8 @@ export class Trail {
             return false;
         }
         node.collapsed = collapsed;
-        this.touch();
+        // 화면 상태다. 접었다고 남의 구조 명령이 거절되면 안 된다.
+        this.touch(false);
         return true;
     }
 
@@ -256,7 +257,7 @@ export class Trail {
             return false;
         }
         this.mode = mode;
-        this.touch();
+        this.touch(false);
         return true;
     }
 
@@ -268,7 +269,7 @@ export class Trail {
             return false;
         }
         this.activeNodeId = id;
-        this.touch();
+        this.touch(false);
         return true;
     }
 
@@ -314,7 +315,7 @@ export class Trail {
         } else {
             this.ui.set(id, next);
         }
-        this.touch();
+        this.touch(false);
         return true;
     }
 
@@ -366,8 +367,20 @@ export class Trail {
         walk(from);
     }
 
-    private touch(): void {
-        this.revisionValue += 1;
+    /**
+     * 바뀌었다고 표시한다.
+     *
+     * `structural` 이 참일 때만 revision 이 오른다. revision 은 "내가 본 트리가
+     * 아직 그대로인가" 를 재는 값이고, 구조 명령이 그것을 근거로 거절된다.
+     * 배치·크기·활성 노드 같은 화면 상태까지 revision 을 올리면, 노드를 하나
+     * 클릭해 활성으로 만드는 것만으로 그 순간 날아가던 정의 요청이 거절된다.
+     *
+     * 화면 상태도 저장은 해야 하므로 `updatedAt` 은 양쪽 다 갱신한다.
+     */
+    private touch(structural = true): void {
+        if (structural) {
+            this.revisionValue += 1;
+        }
         this.updatedAt = this.now();
     }
 

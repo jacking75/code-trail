@@ -20,6 +20,17 @@ export interface LanguageServerSettings {
     initializationOptions: unknown;
 }
 
+/**
+ * C# 만 추가로 필요한 것.
+ *
+ * Roslyn 은 어느 솔루션을 열지 알아야 한다. 후보가 여럿이면 우리가 고르지 않고
+ * 사용자가 진단 화면에서 정한 값을 여기 저장한다(구현서 12.2 5~8단계).
+ * **프로젝트 상대경로로 저장한다** — 절대경로는 형상 관리에 들어가면 안 된다.
+ */
+export interface CSharpServerSettings extends LanguageServerSettings {
+    solutionPath: string | null;
+}
+
 export type ThemeSetting = 'system' | 'light' | 'dark';
 export type ClickTargetSetting = 'allSymbols' | 'callsOnly';
 export type ChildOrderSetting = 'source' | 'click';
@@ -55,7 +66,7 @@ export interface EditorSettings {
 
 export interface LanguageSettings {
     cpp: LanguageServerSettings;
-    csharp: LanguageServerSettings;
+    csharp: CSharpServerSettings;
     go: LanguageServerSettings;
     rust: LanguageServerSettings;
 }
@@ -110,7 +121,7 @@ export function defaultSettings(): ProjectSettings {
         },
         languages: {
             cpp: defaultLanguageServer(),
-            csharp: defaultLanguageServer(),
+            csharp: { ...defaultLanguageServer(), solutionPath: null },
             go: defaultLanguageServer(),
             rust: defaultLanguageServer(),
         },

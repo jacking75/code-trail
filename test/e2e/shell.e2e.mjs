@@ -75,6 +75,12 @@ try {
     await page.waitForSelector('.app-bar', { timeout: 15000 });
 
     check('페이지 에러 없음', errors.length === 0, errors.join(' | '));
+    // 부트스트랩 응답이 오기 전에는 `…` 이 보인다. 이름이 채워질 때까지 기다린다.
+    await page.waitForFunction(
+        (expected) => document.querySelector('.project')?.textContent === expected,
+        path.basename(root),
+        { timeout: 10000 },
+    );
     check('프로젝트 이름 표시', (await page.locator('.project').textContent()) === path.basename(root));
 
     const url = page.url();

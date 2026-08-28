@@ -69,6 +69,7 @@ export class ProjectStore {
     private readonly settingsPath: string;
     private settings: ProjectSettings = defaultSettings();
     private recovery: RecoveryCandidate[] = [];
+    private readonly settingsListeners: Array<(settings: ProjectSettings) => void> = [];
 
     constructor(options: ProjectStoreOptions) {
         this.root = options.projectRoot;
@@ -126,6 +127,19 @@ export class ProjectStore {
     async saveSettings(next: ProjectSettings): Promise<void> {
         this.settings = next;
         await writeFileAtomic(this.settingsPath, `${JSON.stringify(next, null, 2)}\n`);
+        for (const listener of this.settingsListeners) {
+            listener(next);
+        }
+    }
+
+    /**
+     * 설정이 바뀌면 알린다.
+     *
+     * 언어 서버 탐지 캐시를 비우는 쪽이 듣는다. 이게 없으면 사용자가 실행 파일
+     * 경로를 고쳐도 서버를 다시 띄우기 전까지 예전 탐지 결과가 남는다.
+     */
+    onSettingsChanged(listener: (settings: ProjectSettings) => void): void {
+        this.settingsListeners.push(listener);
     }
 
     // ── 트레일 ──────────────────────────────────────────────────────────────

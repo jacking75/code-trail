@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './app/App.js';
 import { bootstrapSession } from './api/session.js';
 import './styles/app.css';
+import './styles/trail.css';
 
 /**
  * 브라우저 진입점.

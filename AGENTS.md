@@ -39,16 +39,17 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 ## 지금 무엇을 하고 있나
 
 **독립 프로그램으로 전환하는 중이다.** 계획은 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md)
-이고 그 문서 0장의 체크리스트가 진행의 정본이다. 단계 0~5가 끝났다.
-**다음은 단계 6(언어별 LSP 어댑터)다.**
+이고 그 문서 0장의 체크리스트가 진행의 정본이다. 단계 0~7이 끝났다.
+**다음은 단계 8(보드 모드와 UI 영속성)이다.**
 
 - `src/`, `media/` — **지금 동작하는 VS Code 확장.** 단계 10까지 그대로 둔다. 손대면 기준선이 흔들린다.
-- `packages/` — **새 독립 프로그램.** 파일 탐색, 읽기 전용 코드 화면, 그리고 심볼 해석까지 된다.
-  식별자를 클릭하면 정의가 자식 노드로 붙는다.
-- **아직 언어 서버를 자동으로 찾지 않는다.** `.code-trail/settings.json` 의
-  `languages.<언어>.executable` 에 경로를 직접 적어야 뜬다. 탐지와 언어별 진단이 단계 6이다.
-- 트레일 화면(트리·보드)은 아직 없다. 지금 브라우저에 보이는 것은 파일 탐색기와 코드 화면뿐이고,
-  트레일은 WebSocket 명령으로만 만질 수 있다. 화면은 단계 7~8에서 붙는다.
+- `packages/` — **새 독립 프로그램.** 파일을 찾아 읽고, `Ctrl+Alt+T` 로 트레일을 시작하고,
+  식별자를 클릭해 정의를 자식 노드로 펼치는 것까지 브라우저에서 된다.
+- 언어 서버는 어댑터가 찾는다(설정 → PATH → 플랫폼별·GOBIN·rustup). **자동으로 내려받지 않는다.**
+- 아직 없는 것: **보드 모드**(단계 8), **외부 에디터 열기·진단 화면**(단계 9).
+- **실제 언어 서버로 검증하지 못한 것이 있다.** 이 기계에 clangd·gopls·roslyn 이 없고
+  rust-analyzer 는 rustup proxy 만 있다. `npm run test:lsp` 이 fixture 를 들고 있으니
+  해당 서버가 있는 기계에서 돌리면 확인된다. 구현서 0.7 에 어느 줄인지 표시해 뒀다.
 - 확장 마지막 상태는 tag `v0.6.0-vscode-extension` 이고 기준선 기록은 [`docs/baseline.md`](docs/baseline.md) 다.
 - 확장에서 되던 동작을 새 프로그램에서 무엇으로 확인할지는 [`docs/e2e-port-checklist.md`](docs/e2e-port-checklist.md) 에 있다.
 
@@ -71,6 +72,7 @@ npm run dev                     # Vite 개발 서버 (웹만 고칠 때)
 npm run typecheck               # 확장 + 모든 workspace
 npm test                        # test/unit + test/integration (브라우저 불필요)
 npm run test:e2e                # 진짜 서버 + 진짜 브라우저 (playwright 필요)
+npm run test:lsp                # 실제 언어 서버 스모크. 설치된 언어만 돈다
 
 # 지금 동작하는 확장 (src/, media/)
 npm run compile                 # tsc → out/
@@ -155,16 +157,19 @@ packages/server/src/trails/     트레일 정본과 mutation queue
 packages/server/src/http/       읽기 전용 API
 packages/server/src/ws/         명령 수신과 이벤트 방송
 packages/server/src/lsp/        JSON-RPC 전송, 문서 동기화, 상태 머신·재시작
+packages/server/src/lsp/adapters/  언어별 탐지·진단. 언어를 아는 유일한 자리다
 packages/server/src/symbols/    평탄화, 심볼 선택, 본문 범위, 선언만 판정
 
-packages/web/src/api/           토큰 부트스트랩, HTTP, WebSocket
-packages/web/src/features/      파일 탐색기, 검색, Monaco 코드 화면
+packages/web/src/api/           토큰 부트스트랩, HTTP, WebSocket, 명령 보내기
+packages/web/src/tokenizer/     하이라이팅 + 식별자에 좌표 심기 (순수 함수)
+packages/web/src/features/      파일 탐색기, 검색, Monaco 코드 화면, 트레일 화면
 packages/cli/src/               인자 해석, 서버 재사용 감지, 브라우저 열기
 
 test/unit/                      도메인·프로토콜·심볼 선택·CLI 인자 (node:test)
 test/integration/               진짜 서버 + 가짜 언어 서버 (node:test)
 test/e2e/                       진짜 브라우저까지 (playwright)
 test/fake-lsp/                  나쁜 언어 서버를 흉내내는 stdio fixture
+test/smoke/                     실제 언어 서버 스모크 (설치된 언어만)
 test/fixtures/                  단계 0에서 굳힌 확장 시절 데이터
 ```
 
@@ -201,6 +206,10 @@ test/fixtures/                  단계 0에서 굳힌 확장 시절 데이터
 | 경로를 받는 새 API | `security/paths.ts` 를 반드시 통과시키고 `test/integration/security.test.mjs` 에 탈출 시도 한 줄 |
 | LSP 요청·응답 처리 변경 | `test/fake-lsp/server.mjs` 에 그 상황을 재현하는 시나리오와 `test/integration/lsp.test.mjs` 한 줄 |
 | 심볼 선택·본문 범위 규칙 | `test/unit/symbols.test.mjs`, 그리고 구현서 13장 |
+| 노드 헤더·배지·본문 (`features/trail/`) | `test/e2e/trail.e2e.mjs`, README `### 헤더에 표시되는 것` · `### 표시되는 배지` |
+| `packages/web/src/tokenizer/` | `test/unit/tokenizer-port.test.mjs`. 주석·문자열 제외가 깨지면 여기서 걸린다 |
+| 언어별 탐지·진단 | 그 어댑터 파일 하나 안에서만. 공통 계층에 `if (language === ...)` 를 넣지 않는다 |
+| `.code-trail/settings.json` 항목 추가 | `shared/domain/settings.ts`, `protocol/schemas.ts`, README `### 독립 프로그램의 설정` |
 | 언어 서버 예외 처리 추가 | 아래 `## 언어 서버별 함정` |
 
 이 중 기계가 잡아주는 건 첫 줄(`node test/shell.test.js`)뿐이다. 나머지는 사람이 챙긴다.

@@ -155,7 +155,6 @@ export const STRUCTURE_COMMAND_TYPES = [
     'trail.resolve',
     'trail.resolveImplementations',
     'trail.removeNode',
-    'trail.toggleNode',
     'trail.promoteToRoot',
     'trail.clear',
     'trail.chooseCandidate',
@@ -164,6 +163,10 @@ export const STRUCTURE_COMMAND_TYPES = [
 /** 트리 모양을 건드리지 않는 명령. */
 export const UI_COMMAND_TYPES = [
     'trail.select',
+    // 접기는 트리 모양을 바꾸지 않는다. 보이고 안 보이고의 문제다.
+    // 구조 명령으로 두면 "전체 접기" 가 노드마다 명령을 보내면서 두 번째부터
+    // 전부 오래된 revision 으로 거절된다.
+    'trail.toggleNode',
     'trail.setMode',
     'trail.setNodeUi',
     'trail.setActiveNode',

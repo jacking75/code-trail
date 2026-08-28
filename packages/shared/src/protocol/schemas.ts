@@ -147,7 +147,10 @@ export const projectSettingsSchema = z.object({
     }),
     languages: z.object({
         cpp: languageServerSettingsSchema,
-        csharp: languageServerSettingsSchema,
+        // C# 만 솔루션 경로를 더 갖는다. 프로젝트 상대경로다.
+        csharp: languageServerSettingsSchema.extend({
+            solutionPath: z.string().nullable(),
+        }),
         go: languageServerSettingsSchema,
         rust: languageServerSettingsSchema,
     }),

@@ -1,8 +1,20 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 
-import { api, ApiError, type Bootstrap, type DocumentContent, type TrailSummary } from '../api/http.js';
+import {
+    api,
+    ApiError,
+    type Bootstrap,
+    type DocumentContent,
+    type LanguageDiagnostics,
+    type ProjectSettingsView,
+} from '../api/http.js';
+import { commands, type CommandContext } from '../api/commands.js';
 import { TrailSocket, type ConnectionState, type ServerEventMessage } from '../api/socket.js';
 import { CodeView } from '../features/source/CodeView.js';
+import { TrailBar } from '../features/trail/TrailBar.js';
+import { TrailView } from '../features/trail/TrailView.js';
+import { useTrail } from '../features/trail/useTrail.js';
+import type { TrailNodeView } from '../features/trail/types.js';
 import { FileSearch } from '../features/workspace/FileSearch.js';
 import { FileTree } from '../features/workspace/FileTree.js';
 
@@ -10,15 +22,16 @@ import { FileTree } from '../features/workspace/FileTree.js';
  * 화면 뼈대 (구현서 16.1).
  *
  * ```text
- * ┌───────────────────────────────────────────────┐
- * │ 상단 앱 바: 프로젝트 · 트레일 · 연결 상태     │
- * ├───────────────┬───────────────────────────────┤
- * │ 파일 탐색기   │ 코드 화면                     │
- * │ 검색          │ (단계 7에서 트레일 화면 추가) │
- * └───────────────┴───────────────────────────────┘
+ * ┌──────────────────────────────────────────────────────┐
+ * │ 앱 바: 프로젝트 · 트레일 고르기 · 연결 상태          │
+ * ├───────────────┬──────────────────────────────────────┤
+ * │ 파일 탐색기   │ [코드] [트레일] 탭                   │
+ * │ 검색          │ 코드 화면 또는 트레일 화면           │
+ * └───────────────┴──────────────────────────────────────┘
  * ```
  *
- * 지금은 코드 화면까지다. 트레일·보드 캔버스는 단계 7~8에서 이 자리에 들어온다.
+ * 코드 화면과 트레일 화면을 탭으로 바꾼다. 작은 화면에서 둘을 나란히 놓으면
+ * 코드도 트리도 못 읽는다.
  */
 
 const STATE_LABEL: Record<ConnectionState, string> = {
@@ -27,25 +40,34 @@ const STATE_LABEL: Record<ConnectionState, string> = {
     closed: '끊김',
 };
 
+type Pane = 'code' | 'trail';
+
 export function App(): JSX.Element {
     const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
-    const [trails, setTrails] = useState<TrailSummary[]>([]);
+    const [settings, setSettings] = useState<ProjectSettingsView | null>(null);
     const [connection, setConnection] = useState<ConnectionState>('connecting');
     const [document, setDocument] = useState<DocumentContent | null>(null);
-    const [error, setError] = useState<string | null>(null);
     const [staleDocument, setStaleDocument] = useState(false);
-    const socketRef = useRef<TrailSocket | null>(null);
-    // 이벤트 처리기가 항상 최신 문서를 보게 한다. 상태를 의존성에 넣으면
-    // 문서를 열 때마다 소켓이 다시 붙는다.
+    const [error, setError] = useState<string | null>(null);
+    const [pane, setPane] = useState<Pane>('code');
+    const [diagnostics, setDiagnostics] = useState<LanguageDiagnostics[]>([]);
+
+    const [socket, setSocket] = useState<TrailSocket | null>(null);
     const documentRef = useRef<DocumentContent | null>(null);
     documentRef.current = document;
+
+    const trailState = useTrail(socket);
+    // 이벤트 처리기가 항상 최신이어야 한다. 의존성에 넣으면 소켓이 다시 붙는다.
+    const handleEventRef = useRef(trailState.handleEvent);
+    handleEventRef.current = trailState.handleEvent;
+    const refreshDiagnosticsRef = useRef<() => void>(() => undefined);
 
     useEffect(() => {
         void api
             .bootstrap()
             .then((data) => {
                 setBootstrap(data);
-                setTrails(data.trails);
+                setSettings(data.settings);
             })
             .catch((cause: unknown) => {
                 setError(
@@ -56,15 +78,25 @@ export function App(): JSX.Element {
             });
     }, []);
 
+    // 언어 서버 상태가 바뀔 때마다 다시 읽는다. capability 를 못 갖춘 기능은
+    // UI 에서 아예 눌리지 않게 해야 한다.
+    const refreshDiagnostics = useCallback(() => {
+        void api
+            .diagnostics()
+            .then((data) => setDiagnostics(data.languages))
+            .catch(() => undefined);
+    }, []);
+
+    refreshDiagnosticsRef.current = refreshDiagnostics;
+
     useEffect(() => {
-        const socket = new TrailSocket({
+        refreshDiagnostics();
+    }, [refreshDiagnostics]);
+
+    useEffect(() => {
+        const created = new TrailSocket({
             onState: setConnection,
             onEvent: (event: ServerEventMessage) => {
-                if (event.type === 'trail.listChanged') {
-                    const payload = event.payload as { trails: TrailSummary[] };
-                    setTrails(payload.trails);
-                    return;
-                }
                 if (event.type === 'workspace.filesChanged') {
                     // 열어둔 파일이 바뀌었으면 표시만 한다. 자동으로 다시 읽지
                     // 않는다 — 보고 있던 코드가 발밑에서 바뀌면 흐름이 끊긴다.
@@ -73,16 +105,36 @@ export function App(): JSX.Element {
                     if (open !== null && payload.relPaths.includes(open.relPath)) {
                         setStaleDocument(true);
                     }
+                    return;
                 }
+                if (event.type === 'settings.changed') {
+                    setSettings((event.payload as { settings: ProjectSettingsView }).settings);
+                }
+                if (event.type === 'lsp.stateChanged') {
+                    refreshDiagnosticsRef.current();
+                }
+                handleEventRef.current(event);
             },
         });
-        socketRef.current = socket;
-        socket.connect();
+        setSocket(created);
+        created.connect();
         return () => {
-            socket.close();
-            socketRef.current = null;
+            created.close();
+            setSocket(null);
         };
     }, []);
+
+    /** 명령을 보낼 때 쓰는 지금 상태. revision 이 어긋나면 서버가 거절한다. */
+    const context: CommandContext | null = useMemo(() => {
+        if (socket === null) {
+            return null;
+        }
+        return {
+            socket,
+            trailId: trailState.trail?.id ?? trailState.activeTrailId,
+            revision: trailState.trail?.revision ?? 0,
+        };
+    }, [socket, trailState.trail, trailState.activeTrailId]);
 
     const openFile = useCallback((relPath: string) => {
         void api
@@ -91,11 +143,93 @@ export function App(): JSX.Element {
                 setDocument(content);
                 setStaleDocument(false);
                 setError(null);
+                setPane('code');
             })
             .catch((cause: unknown) => {
                 setError(cause instanceof ApiError ? cause.message : '파일을 열지 못했다.');
             });
     }, []);
+
+    /** 코드 화면에서 루트를 만든다. 트레일이 없으면 먼저 하나 만든다. */
+    const addRootHere = useCallback((line: number, char: number) => {
+        if (context === null || documentRef.current === null) {
+            return;
+        }
+        if (context.trailId === null) {
+            commands.createTrail(context);
+            setError('트레일을 새로 만들었다. 한 번 더 누른다.');
+            return;
+        }
+        commands.addRootAt(context, documentRef.current.documentId, line, char);
+        setPane('trail');
+    }, [context]);
+
+    // `Ctrl+Alt+T` — 확장과 같은 키다.
+    const cursorRef = useRef<{ line: number; char: number }>({ line: 0, char: 0 });
+    useEffect(() => {
+        const onKey = (event: KeyboardEvent): void => {
+            if (!(event.ctrlKey || event.metaKey) || !event.altKey) {
+                return;
+            }
+            if (event.key.toLowerCase() !== 't') {
+                return;
+            }
+            event.preventDefault();
+            addRootHere(cursorRef.current.line, cursorRef.current.char);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [addRootHere]);
+
+    const onIdentifierClick = useCallback((
+        node: TrailNodeView,
+        line: number,
+        char: number,
+        text: string,
+        modifiers: { alt: boolean; ctrl: boolean },
+    ) => {
+        if (context === null) {
+            return;
+        }
+        if (modifiers.ctrl) {
+            // Ctrl/Cmd+클릭 — 외부 에디터에서 연다. 서버 쪽은 단계 9다.
+            if (node.symbol.documentId !== null) {
+                commands.openInEditor(context, node.symbol.documentId, line, char);
+            }
+            return;
+        }
+        commands.setActiveNode(context, node.id);
+        // Alt+클릭도 같은 명령으로 간다. 서버가 implementation 을 먼저 묻고
+        // 없으면 정의로 되돌아간다 — 어느 쪽이든 사용자는 갈 곳을 얻는다.
+        commands.resolve(context, node.id, line, char, text);
+    }, [context]);
+
+    /** 전체 펼치기·접기. 이미 그 상태인 노드는 건너뛴다. */
+    const toggleAll = useCallback((collapsed: boolean) => {
+        if (context === null || trailState.trail === null) {
+            return;
+        }
+        const walk = (nodes: readonly TrailNodeView[]): void => {
+            for (const node of nodes) {
+                if (node.collapsed !== collapsed) {
+                    commands.toggleNode(context, node.id, collapsed);
+                }
+                walk(node.children);
+            }
+        };
+        walk(trailState.trail.roots);
+    }, [context, trailState.trail]);
+
+    // 테마. `system` 이면 아무것도 세우지 않고 브라우저 설정을 따른다.
+    useEffect(() => {
+        const theme = settings?.ui.theme ?? 'system';
+        const root = window.document.documentElement;
+        if (theme === 'system') {
+            root.removeAttribute('data-theme');
+        } else {
+            root.setAttribute('data-theme', theme);
+        }
+    }, [settings?.ui.theme]);
 
     if (error !== null && bootstrap === null) {
         return (
@@ -106,13 +240,34 @@ export function App(): JSX.Element {
         );
     }
 
+    const ui = settings?.ui;
+
+    /**
+     * 지금 열어둔 트레일에서 구현 찾기를 쓸 수 있는지.
+     *
+     * 언어 서버가 준비되지 않았으면 판단할 근거가 없으므로 켜 둔다 — 눌러보면
+     * 서버가 이유를 알려준다. 준비된 뒤에 `implementation` 이 빠져 있다면 그때 끈다.
+     */
+    const implementationSupported = diagnostics
+        .filter((info) => info.state === 'ready')
+        .every((info) => !info.missingCapabilities.includes('implementation'));
+
     return (
         <div className="app">
             <header className="app-bar">
                 <span className="app-name">Code Trail</span>
                 <span className="project">{bootstrap?.project.name ?? '…'}</span>
+                {context === null ? null : (
+                    <TrailBar
+                        trails={trailState.trails}
+                        activeTrailId={trailState.activeTrailId}
+                        onSelect={(trailId) => commands.selectTrail(context, trailId)}
+                        onCreate={() => commands.createTrail(context)}
+                        onRename={(title) => commands.renameTrail(context, title)}
+                        onDelete={() => commands.deleteTrail(context)}
+                    />
+                )}
                 <span className="spacer" />
-                <span className="trail-count">트레일 {trails.length}</span>
                 <span className={`conn conn-${connection}`}>{STATE_LABEL[connection]}</span>
             </header>
 
@@ -123,34 +278,120 @@ export function App(): JSX.Element {
                 </aside>
 
                 <main className="main">
-                    {document === null ? (
-                        <div className="placeholder">
-                            <p>왼쪽에서 파일을 고르면 여기에 코드가 열린다.</p>
-                            <p className="muted">
-                                식별자를 클릭해 정의를 펼치는 트레일 화면은 다음 단계에서 붙는다.
-                            </p>
-                        </div>
-                    ) : (
-                        <>
-                            <div className="doc-bar">
-                                <span className="doc-path">{document.displayPath}</span>
-                                <span className="muted">{document.languageId}</span>
-                                {staleDocument ? (
-                                    <button
-                                        type="button"
-                                        className="stale"
-                                        onClick={() => openFile(document.relPath)}
-                                    >
-                                        파일이 바뀌었다 — 다시 읽기
-                                    </button>
-                                ) : null}
-                            </div>
-                            <CodeView document={document} />
-                        </>
-                    )}
+                    <div className="pane-tabs">
+                        <button
+                            type="button"
+                            className={pane === 'code' ? 'tab active' : 'tab'}
+                            onClick={() => setPane('code')}
+                        >
+                            코드
+                        </button>
+                        <button
+                            type="button"
+                            className={pane === 'trail' ? 'tab active' : 'tab'}
+                            onClick={() => setPane('trail')}
+                        >
+                            {`트레일${trailState.trail ? ` — ${trailState.trail.title}` : ''}`}
+                        </button>
+                    </div>
+
+                    {pane === 'code' ? renderCodePane() : renderTrailPane()}
+
                     {error !== null ? <p className="panel-error">{error}</p> : null}
                 </main>
             </div>
+
+            {trailState.notice === null ? null : (
+                <button
+                    type="button"
+                    className={`toast toast-${trailState.notice.level}`}
+                    onClick={trailState.dismissNotice}
+                >
+                    {trailState.notice.message}
+                </button>
+            )}
         </div>
     );
+
+    function renderCodePane(): JSX.Element {
+        if (document === null) {
+            return (
+                <div className="placeholder">
+                    <p>왼쪽에서 파일을 고르면 여기에 코드가 열린다.</p>
+                    <p className="muted">
+                        함수 위를 누르고 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> 를 누르면
+                        트레일이 시작된다.
+                    </p>
+                </div>
+            );
+        }
+        return (
+            <>
+                <div className="doc-bar">
+                    <span className="doc-path">{document.displayPath}</span>
+                    <span className="muted">{document.languageId}</span>
+                    {staleDocument ? (
+                        <button
+                            type="button"
+                            className="stale"
+                            onClick={() => openFile(document.relPath)}
+                        >
+                            파일이 바뀌었다 — 다시 읽기
+                        </button>
+                    ) : null}
+                </div>
+                <CodeView
+                    document={document}
+                    onPositionClick={(position) => {
+                        cursorRef.current = { line: position.line, char: position.char };
+                    }}
+                />
+            </>
+        );
+    }
+
+    function renderTrailPane(): JSX.Element {
+        if (trailState.trail === null || context === null) {
+            return (
+                <div className="placeholder">
+                    <p>아직 트레일이 없다.</p>
+                    <p className="muted">위의 <b>＋ 새 트레일</b> 로 하나 만든다.</p>
+                </div>
+            );
+        }
+        return (
+            <TrailView
+                trail={trailState.trail}
+                busyNodeIds={trailState.busyNodeIds}
+                clickTarget={ui?.clickTarget ?? 'allSymbols'}
+                maxCodeLines={ui?.maxCodeLines ?? 250}
+                implementationSupported={implementationSupported}
+                choice={trailState.choice}
+                onToggle={(node) => commands.toggleNode(context, node.id, !node.collapsed)}
+                onToggleAll={toggleAll}
+                onRemove={(node) => commands.removeNode(context, node.id)}
+                onPromote={(node) => commands.promoteToRoot(context, node.id)}
+                onImplementations={(node) => commands.resolveImplementations(context, node.id)}
+                onOpenInEditor={(node) => {
+                    if (node.symbol.documentId !== null) {
+                        commands.openInEditor(
+                            context,
+                            node.symbol.documentId,
+                            node.symbol.anchorLine,
+                            node.symbol.anchorChar,
+                        );
+                    }
+                }}
+                onIdentifierClick={onIdentifierClick}
+                onFocusNode={(nodeId) => commands.setActiveNode(context, nodeId)}
+                onClear={() => commands.clear(context)}
+                onExportMarkdown={() => commands.exportMarkdown(context)}
+                onChooseCandidate={(choiceId, candidateId) => {
+                    commands.chooseCandidate(context, choiceId, candidateId);
+                    trailState.dismissChoice();
+                }}
+                onDismissChoice={trailState.dismissChoice}
+            />
+        );
+    }
 }

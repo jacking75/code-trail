@@ -32,19 +32,43 @@ test('구조를 바꾼 만큼만 revision 이 오른다', () => {
     const root = trail.addRoot(makeSymbol());
     assert.equal(trail.revision, 1);
 
-    trail.addChild(root.id, makeSymbol(), makeOrigin());
+    const child = trail.addChild(root.id, makeSymbol(), makeOrigin());
     assert.equal(trail.revision, 2);
 
-    // 이미 그 상태면 올리지 않는다 — 안 바뀐 것을 다른 탭이 다시 그릴 이유가 없다
-    assert.equal(trail.setCollapsed(root.id, false), false);
-    assert.equal(trail.revision, 2);
-
-    assert.equal(trail.setCollapsed(root.id, true), true);
+    trail.remove(child.id);
     assert.equal(trail.revision, 3);
 
     // 없는 노드에 대한 명령은 아무 일도 하지 않는다
-    assert.equal(trail.setCollapsed('00000000-0000-4000-8000-000000000000', true), false);
+    assert.equal(trail.remove('00000000-0000-4000-8000-000000000000'), false);
     assert.equal(trail.revision, 3);
+});
+
+test('화면 상태는 revision 을 올리지 않는다', () => {
+    // revision 은 "내가 본 트리가 아직 그대로인가" 를 재는 값이다. 접기·배치·
+    // 활성 노드까지 올리면, 노드 하나를 누른 것만으로 그 순간 날아가던 정의
+    // 요청이 거절된다. 저장은 해야 하므로 updatedAt 은 갱신한다.
+    let clock = 0;
+    const trail = new Trail({
+        title: 't',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        now: () => `2026-01-01T00:00:${String(clock++).padStart(2, '0')}.000Z`,
+    });
+    const root = trail.addRoot(makeSymbol());
+    const structural = trail.revision;
+    const before = trail.updatedAt;
+
+    assert.equal(trail.setCollapsed(root.id, true), true);
+    assert.equal(trail.setMode('board'), true);
+    assert.equal(trail.setNodeUi(root.id, { boardX: 10 }), true);
+    assert.equal(trail.setActiveNode(root.id), true);
+
+    assert.equal(trail.revision, structural);
+    assert.notEqual(trail.updatedAt, before);
+
+    // 이미 그 상태면 아무것도 하지 않는다.
+    assert.equal(trail.setCollapsed(root.id, true), false);
+    assert.equal(trail.setMode('board'), false);
+    assert.equal(trail.setActiveNode(root.id), false);
 });
 
 test('부모는 클릭한 코드가 속한 노드다 — A 안에서 클릭한 둘은 형제다', () => {

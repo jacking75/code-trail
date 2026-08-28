@@ -6,7 +6,7 @@ import { createLogger, type LogLevel, type Logger } from './config/logger.js';
 import type { ServerContext } from './context.js';
 import { pathToUri } from './lsp/documents.js';
 import { LspManager } from './lsp/manager.js';
-import { toPublicState } from './lsp/types.js';
+import { toPublicState, type LspSessionInfo } from './lsp/types.js';
 import { ResolveFlow } from './trails/resolveFlow.js';
 import { SymbolResolver } from './symbols/resolver.js';
 import { removeLock, writeLock } from './persistence/lock.js';
@@ -84,8 +84,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     const documents = new DocumentRegistry(projectRoot);
 
     // 앱이 만들어진 뒤에야 게이트웨이가 생긴다. 상태 변화는 그때부터 뿌린다.
-    let broadcastLspState: (info: ReturnType<LspManager['diagnostics']>[number]) => void =
-        () => undefined;
+    let broadcastLspState: (info: LspSessionInfo) => void = () => undefined;
 
     const lsp = new LspManager({
         projectRoot,
@@ -126,6 +125,10 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         lsp,
         resolveFlow,
     };
+
+    // 설정을 바꾸면 실행 파일을 다시 찾는다. 안 그러면 경로를 고쳐도
+    // 다음 재시작까지 예전 결과가 남는다.
+    store.onSettingsChanged(() => lsp.invalidateDetection());
 
     // 7. 세션 토큰. 프로세스가 사는 동안만 유효하고 디스크에 남기지 않는다.
     const token = createSessionToken();

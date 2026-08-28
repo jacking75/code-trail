@@ -15,7 +15,40 @@
 
     --ct-font: system-ui, -apple-system, 'Segoe UI', 'Noto Sans KR', sans-serif;
     --ct-code-font: 'Cascadia Mono', Consolas, 'DejaVu Sans Mono', monospace;
+    /* 헤더 글자 크기. 폭 맞춤이 이 값을 건드리지 않는다. */
     --ct-font-size: 13px;
+    /* 코드 본문 글자 크기. 폭 맞춤이 줄이는 것은 이것뿐이다. */
+    --ct-code-font-size: 12px;
+}
+
+/*
+ * 밝은 테마.
+ *
+ * `data-theme="light"` 는 사용자가 설정에서 고른 것이고, 그게 없으면 브라우저
+ * 설정을 따른다. 확장에서는 VS Code 가 테마 변수를 넣어줬지만 이제 우리가 정한다.
+ */
+:root[data-theme='light'] {
+    --ct-bg: #ffffff;
+    --ct-bg-raised: #f3f4f7;
+    --ct-bg-input: #fafafa;
+    --ct-fg: #1f2335;
+    --ct-fg-muted: #6b7089;
+    --ct-accent: #2e5fd0;
+    --ct-border: #d5d8e2;
+    --ct-danger: #c2354d;
+}
+
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme='dark']) {
+        --ct-bg: #ffffff;
+        --ct-bg-raised: #f3f4f7;
+        --ct-bg-input: #fafafa;
+        --ct-fg: #1f2335;
+        --ct-fg-muted: #6b7089;
+        --ct-accent: #2e5fd0;
+        --ct-border: #d5d8e2;
+        --ct-danger: #c2354d;
+    }
 }
 
 * {

@@ -83,13 +83,48 @@ export interface TrailSummary {
     rootCount: number;
 }
 
+/** 화면이 쓰는 설정. 서버 타입 전체를 가져오지 않고 필요한 것만 적는다. */
+export interface ProjectSettingsView {
+    ui: {
+        theme: 'system' | 'light' | 'dark';
+        clickTarget: 'allSymbols' | 'callsOnly';
+        childOrder: 'source' | 'click';
+        maxCodeLines: number;
+        contextLines: number;
+        fitToWidth: boolean;
+        minFontSize: number;
+        fontSize: number;
+        autoFollowSingleImplementation: boolean;
+        revealInExternalEditorOnAdd: boolean;
+    };
+}
+
 export interface Bootstrap {
     protocolVersion: number;
     project: { name: string };
-    settings: unknown;
+    settings: ProjectSettingsView;
     trails: TrailSummary[];
     activeTrailId: string | null;
     capabilities: { externalEditor: boolean; languages: string[] };
+}
+
+export interface HealthCheckView {
+    label: string;
+    level: 'ok' | 'warn' | 'error';
+    detail: string;
+}
+
+export interface LanguageDiagnostics {
+    language: 'cpp' | 'csharp' | 'go' | 'rust';
+    displayName: string;
+    enabled: boolean;
+    state: 'notStarted' | 'starting' | 'ready' | 'failed' | 'stopped';
+    executableName: string | null;
+    detectionSource: string;
+    lastError: string | null;
+    restartCount: number;
+    missingCapabilities: string[];
+    healthChecks: HealthCheckView[];
 }
 
 export const api = {
@@ -111,4 +146,9 @@ export const api = {
 
     document: (documentId: string) =>
         request<DocumentContent>(`/api/documents/${encodeURIComponent(documentId)}`),
+
+    diagnostics: () =>
+        request<{ languages: LanguageDiagnostics[]; recoveryCandidates: unknown[] }>(
+            '/api/diagnostics',
+        ),
 };

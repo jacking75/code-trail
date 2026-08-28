@@ -476,13 +476,12 @@ export class WebSocketGateway {
                     nodeId: string;
                     collapsed: boolean;
                 };
-                const result = await trails.mutate(
+                const result = await trails.updateUi(
                     trailId,
-                    command.baseRevision as number,
                     (trail) => trail.setCollapsed(nodeId, collapsed),
                 );
                 if (!result.ok) {
-                    this.sendStaleRecovery(client, trailId, result.error, command.commandId);
+                    this.sendError(client, result.error, command.commandId);
                     return;
                 }
                 this.broadcast('trail.nodeToggled', { nodeId, collapsed }, {

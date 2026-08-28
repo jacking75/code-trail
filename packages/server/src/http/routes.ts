@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { PROTOCOL_VERSION } from '@code-trail/shared';
 
 import type { ServerContext } from '../context.js';
+import { findSolutionCandidates } from '../lsp/adapters/index.js';
 import { toPublicState } from '../lsp/types.js';
 import type { SupportedLanguage } from '../workspace/languages.js';
 import { PathDeniedError } from '../security/paths.js';
@@ -38,11 +39,8 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
         capabilities: {
             // 외부 에디터 열기는 단계 9에서 붙는다.
             externalEditor: context.store.getSettings().editor.executable !== null,
-            // 설정에 실행 파일이 있는 언어만 알린다. 실제로 뜨는지는 열어봐야 안다.
-            languages: context.lsp
-                .diagnostics()
-                .filter((info) => info.enabled && info.executableName !== null)
-                .map((info) => info.language),
+            // 실행 파일을 찾은 언어만 알린다. 실제로 뜨는지는 열어봐야 안다.
+            languages: await context.lsp.availableLanguages(),
         },
     }));
 
@@ -142,19 +140,37 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
         },
     );
 
-    app.get('/api/diagnostics', async () => ({
-        languages: context.lsp.diagnostics().map((info) => ({
-            language: info.language,
-            enabled: info.enabled,
-            state: toPublicState(info.state),
-            // 실행 파일 **이름**만. 전체 경로는 내보내지 않는다(구현서 8.1).
-            executableName: info.executableName,
-            lastError: info.lastError,
-            restartCount: info.restartCount,
-            missingCapabilities: info.missingCapabilities,
-        })),
-        recoveryCandidates: context.store.getRecoveryCandidates(),
-    }));
+    app.get('/api/diagnostics', async () => {
+        const languages = await context.lsp.diagnostics();
+        return {
+            languages: languages.map((info) => ({
+                language: info.language,
+                displayName: info.displayName,
+                enabled: info.enabled,
+                state: toPublicState(info.state),
+                // 실행 파일 **이름**만. 전체 경로는 내보내지 않는다(구현서 8.1).
+                // 예외는 rust-analyzer 뿐이고, 그건 어댑터가 점검 항목에 담는다.
+                executableName: info.executableName,
+                detectionSource: info.detectionSource,
+                lastError: info.lastError,
+                restartCount: info.restartCount,
+                missingCapabilities: info.missingCapabilities,
+                healthChecks: info.healthChecks,
+            })),
+            recoveryCandidates: context.store.getRecoveryCandidates(),
+        };
+    });
+
+    /** C# 솔루션 후보. 여럿이면 사용자가 하나를 골라 설정에 적는다(구현서 12.2). */
+    app.get('/api/diagnostics/csharp/solutions', async () => {
+        const candidates = await findSolutionCandidates(context.projectRoot);
+        return {
+            // 프로젝트 상대경로만. 절대경로는 내보내지 않는다.
+            candidates: candidates.paths,
+            suggested: candidates.suggested,
+            selected: context.store.getSettings().languages.csharp.solutionPath,
+        };
+    });
 
     /**
      * 언어 서버의 최근 stderr.

@@ -205,6 +205,26 @@ VS Code 1.85 이상이 필요하고, 탭 드래그가 안 되는 환경에서도
 | `codeTrail.minFontSize` | `8` | 폭 맞춤이 줄일 수 있는 하한(px) |
 | `codeTrail.fontSize` | `0` | 코드 폰트 크기(px). 0이면 에디터 설정을 따름. 0보다 크면 폭 맞춤을 끄고 이 크기로 고정 |
 
+### 독립 프로그램의 설정
+
+`packages/` 쪽은 VS Code 설정 대신 프로젝트 안의 `.code-trail/settings.json` 을 쓴다.
+`ui.*` 는 위 표와 같은 값들이고, 여기에 언어 서버 설정이 더 붙는다.
+
+| 키 | 기본값 | 설명 |
+| --- | --- | --- |
+| `ui.theme` | `system` | `system` \| `light` \| `dark` |
+| `editor.executable` | `null` | 외부 에디터 실행 파일. `null` 이면 열기 기능을 끈다 |
+| `editor.args` | `[]` | 실행 인자. `{path}`, `{line}`, `{column}`, `{project}` 만 쓴다 |
+| `languages.<언어>.enabled` | `true` | 그 언어의 서버를 쓸지 |
+| `languages.<언어>.executable` | `null` | 실행 파일 경로. `null` 이면 자동 탐지 |
+| `languages.<언어>.args` | `[]` | 실행 인자. 셸을 거치지 않고 그대로 넘긴다 |
+| `languages.<언어>.env` | `{}` | 덮어쓸 환경 변수만. 비밀값을 넣지 않는다 |
+| `languages.<언어>.initializationOptions` | `null` | LSP `initialize` 에 그대로 실린다 |
+| `languages.csharp.solutionPath` | `null` | 열 솔루션. **프로젝트 상대경로.** 후보가 여럿이면 우리가 고르지 않는다 |
+
+`<언어>` 는 `cpp`, `csharp`, `go`, `rust` 넷이다.
+탐지 순서와 진단 항목은 `npm run start` 로 띄운 뒤 `GET /api/diagnostics` 가 보여준다.
+
 ## 설치
 
 받은 `.vsix` 를 바로 설치하려면:
@@ -315,6 +335,7 @@ code --extensionDevelopmentPath=<이 폴더의 절대경로> <탐색할_프로�
 npm test                      # 브라우저가 필요 없는 것 전부
 npm run test:ui               # 웹뷰 렌더링·상호작용 (playwright 필요)
 npm run test:e2e              # 독립 프로그램 전체 (playwright 필요)
+npm run test:lsp              # 실제 언어 서버 스모크. 설치된 언어만 돌고 나머지는 건너뛴다
 ```
 
 `npm test` 가 도는 것:
@@ -361,9 +382,10 @@ npm run build
 npm run start -- <프로젝트 경로>
 ```
 
-로 띄우면 파일을 찾아 읽기 전용으로 볼 수 있고, 언어 서버를 붙이면 심볼 해석까지 된다.
-다만 **언어 서버 실행 파일을 자동으로 찾지 않는다** — `.code-trail/settings.json` 에
-경로를 직접 적어야 한다. 트레일을 그리는 화면도 아직 없다(다음 단계).
+로 띄우면 파일을 찾아 읽고, 함수 위에서 `Ctrl+Alt+T` 로 트레일을 시작하고,
+식별자를 클릭해 정의를 자식 노드로 펼칠 수 있다. clangd·gopls·rust-analyzer·
+roslyn-language-server 를 설치해 두면 자동으로 찾는다.
+아직 없는 것은 **보드 모드**(단계 8)와 **외부 에디터 열기·진단 화면**(단계 9)이다.
 계획은 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md),
 확장 마지막 상태의 기준선은 [`docs/baseline.md`](docs/baseline.md) 에 있다.
 

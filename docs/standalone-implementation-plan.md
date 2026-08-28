@@ -141,78 +141,78 @@
 
 #### C/C++ — clangd
 
-- [ ] 설정 경로와 PATH 기반 clangd 탐지를 구현한다.
-- [ ] 플랫폼별 일반 LLVM 설치 위치 탐지를 구현한다.
-- [ ] `clangd --version` 진단을 구현한다.
-- [ ] `compile_commands.json` 탐지를 구현한다.
-- [ ] `compile_flags.txt` 폴백 진단을 구현한다.
-- [ ] 설정된 `--compile-commands-dir`와 `--query-driver` argv를 전달한다.
-- [ ] C++ definition·documentSymbol·가상 함수 implementation fixture를 통과한다.
+- [x] 설정 경로와 PATH 기반 clangd 탐지를 구현한다.
+- [x] 플랫폼별 일반 LLVM 설치 위치 탐지를 구현한다.
+- [x] `clangd --version` 진단을 구현한다.
+- [x] `compile_commands.json` 탐지를 구현한다.
+- [x] `compile_flags.txt` 폴백 진단을 구현한다.
+- [x] 설정된 `--compile-commands-dir`와 `--query-driver` argv를 전달한다.
+- [ ] C++ definition·documentSymbol·가상 함수 implementation fixture를 통과한다. — **clangd 미설치로 미확인.** `npm run test:lsp` 이 fixture 를 들고 있고, clangd 가 있는 기계에서 돌리면 검증된다
 
 #### Go — gopls
 
-- [ ] 설정 경로, PATH, GOBIN, GOPATH/bin 탐지를 구현한다.
-- [ ] `gopls version`과 `go version` 진단을 구현한다.
-- [ ] `go.work`와 `go.mod` 탐지를 구현한다.
-- [ ] Go definition·documentSymbol·interface implementation fixture를 통과한다.
+- [x] 설정 경로, PATH, GOBIN, GOPATH/bin 탐지를 구현한다.
+- [x] `gopls version`과 `go version` 진단을 구현한다.
+- [x] `go.work`와 `go.mod` 탐지를 구현한다.
+- [ ] Go definition·documentSymbol·interface implementation fixture를 통과한다. — **gopls 미설치로 미확인.** 같은 방법으로 검증한다
 
 #### Rust — rust-analyzer
 
-- [ ] 설정 경로, PATH, rustup proxy 탐지를 구현한다.
-- [ ] 실제 선택된 rust-analyzer 경로를 표시한다.
-- [ ] rust-analyzer·rustc·cargo 버전 진단을 구현한다.
-- [ ] `Cargo.toml`, `rust-project.json`, `rust-src` 진단을 구현한다.
-- [ ] Rust definition·documentSymbol·trait implementation fixture를 통과한다.
+- [x] 설정 경로, PATH, rustup proxy 탐지를 구현한다.
+- [x] 실제 선택된 rust-analyzer 경로를 표시한다.
+- [x] rust-analyzer·rustc·cargo 버전 진단을 구현한다.
+- [x] `Cargo.toml`, `rust-project.json`, `rust-src` 진단을 구현한다.
+- [ ] Rust definition·documentSymbol·trait implementation fixture를 통과한다. — **rustup proxy 만 있고 rust-analyzer 본체가 없어 미확인.** `rustup component add rust-analyzer` 뒤 `npm run test:lsp`
 
 #### C# — roslyn-language-server
 
-- [ ] 독립 C# 언어 서버 선행 스파이크 환경을 만든다.
-- [ ] 설정의 명시 실행 경로를 우선하도록 구현한다.
-- [ ] PATH의 `roslyn-language-server` 탐지를 구현한다.
-- [ ] 실행 인자와 initializationOptions를 C# 어댑터에 격리한다.
-- [ ] `.sln`, `.slnx`, `.csproj` 후보 탐지를 구현한다.
-- [ ] 후보 하나를 제안하고 여러 후보는 사용자가 선택하게 한다.
-- [ ] 선택한 솔루션 경로를 프로젝트 상대경로로 저장한다.
-- [ ] C# definition·documentSymbol·implementation·typeDefinition을 검증한다.
-- [ ] 다중 프로젝트 간 정의 이동을 검증한다.
-- [ ] 인터페이스 구현 하나와 여러 개 시나리오를 검증한다.
-- [ ] 서버 배포 규약 변화가 공통 LSP 계층에 영향을 주지 않는지 확인한다.
+- [ ] 독립 C# 언어 서버 선행 스파이크 환경을 만든다. — fixture 와 어댑터는 있으나 **roslyn-language-server 미설치로 실행 확인 못 함**
+- [x] 설정의 명시 실행 경로를 우선하도록 구현한다.
+- [x] PATH의 `roslyn-language-server` 탐지를 구현한다.
+- [x] 실행 인자와 initializationOptions를 C# 어댑터에 격리한다.
+- [x] `.sln`, `.slnx`, `.csproj` 후보 탐지를 구현한다.
+- [x] 후보 하나를 제안하고 여러 후보는 사용자가 선택하게 한다.
+- [x] 선택한 솔루션 경로를 프로젝트 상대경로로 저장한다.
+- [ ] C# definition·documentSymbol·implementation·typeDefinition을 검증한다. — **미확인**
+- [ ] 다중 프로젝트 간 정의 이동을 검증한다. — **미확인**
+- [ ] 인터페이스 구현 하나와 여러 개 시나리오를 검증한다. — 가짜 LSP 로는 검증했으나 **실제 Roslyn 으로는 미확인**
+- [x] 서버 배포 규약 변화가 공통 LSP 계층에 영향을 주지 않는지 확인한다. — 인자와 initializationOptions 를 어댑터 안에만 뒀다
 
 #### 어댑터 단계 완료
 
-- [ ] 네 어댑터의 실행 파일 누락 안내를 구현한다.
-- [ ] capability 미지원 기능을 UI에서 비활성화한다.
-- [ ] 네 언어 실제 LSP 스모크 테스트를 CI job으로 분리한다.
-- [ ] **단계 6 완료**
+- [x] 네 어댑터의 실행 파일 누락 안내를 구현한다.
+- [x] capability 미지원 기능을 UI에서 비활성화한다.
+- [x] 네 언어 실제 LSP 스모크 테스트를 CI job으로 분리한다. — `npm run test:lsp`. 설치된 언어만 돌고 나머지는 이유를 적고 건너뛴다
+- [ ] **단계 6 완료** — 어댑터·탐지·진단은 끝났다. 위의 실제 언어 서버 fixture 검증만 남았다
 
 ### 0.8 단계 7 — 트레일 UI 이식
 
-- [ ] 기존 CSS 변수에서 VS Code 테마 의존성을 제거한다.
-- [ ] 시스템·밝은·어두운 테마를 구현한다.
-- [ ] `TrailNodeView`를 구현한다.
-- [ ] 헤더의 종류·이름·시그니처·경로·배지를 이식한다.
-- [ ] 원본 코드 본문 렌더링을 이식한다.
-- [ ] 토크나이저를 TypeScript 순수 함수로 이식한다.
-- [ ] 주석·문자열을 클릭 후보에서 제외한다.
-- [ ] 식별자 클릭과 Alt+클릭을 서버 명령에 연결한다.
-- [ ] Ctrl/Cmd+클릭을 외부 에디터 명령에 연결한다.
-- [ ] 호출부 순번과 자식 헤더 순번의 짝을 구현한다.
-- [ ] 트리 모드 부모 위·자식 아래 배치를 구현한다.
-- [ ] 트리 모드 연결선을 구현한다.
-- [ ] 형제 코드 순서·클릭 순서 전환을 구현한다.
-- [ ] 브레드크럼을 구현한다.
-- [ ] 진입 링크와 부모 호출부 왕복 포커스를 구현한다.
-- [ ] 노드 접기·펼치기를 구현한다.
-- [ ] 노드 삭제와 하위 노드 제거를 구현한다.
-- [ ] `⇱` 새 루트 승격을 구현한다.
-- [ ] 이름·경로 필터를 구현한다.
-- [ ] 전체 펼치기·전체 접기를 구현한다.
-- [ ] Markdown 다운로드를 구현한다.
-- [ ] JSON 저장·불러오기 버튼을 제거한다.
-- [ ] 새 트레일 생성·선택·이름 변경·삭제 UI를 구현한다.
-- [ ] 현재 트리 모드 E2E 시나리오를 모두 이식한다.
-- [ ] 새로고침 후 트리와 접힘 상태 복원을 확인한다.
-- [ ] **단계 7 완료**
+- [x] 기존 CSS 변수에서 VS Code 테마 의존성을 제거한다.
+- [x] 시스템·밝은·어두운 테마를 구현한다.
+- [x] `TrailNodeView`를 구현한다.
+- [x] 헤더의 종류·이름·시그니처·경로·배지를 이식한다.
+- [x] 원본 코드 본문 렌더링을 이식한다.
+- [x] 토크나이저를 TypeScript 순수 함수로 이식한다.
+- [x] 주석·문자열을 클릭 후보에서 제외한다.
+- [x] 식별자 클릭과 Alt+클릭을 서버 명령에 연결한다.
+- [x] Ctrl/Cmd+클릭을 외부 에디터 명령에 연결한다.
+- [x] 호출부 순번과 자식 헤더 순번의 짝을 구현한다.
+- [x] 트리 모드 부모 위·자식 아래 배치를 구현한다.
+- [x] 트리 모드 연결선을 구현한다.
+- [x] 형제 코드 순서·클릭 순서 전환을 구현한다.
+- [x] 브레드크럼을 구현한다.
+- [x] 진입 링크와 부모 호출부 왕복 포커스를 구현한다.
+- [x] 노드 접기·펼치기를 구현한다.
+- [x] 노드 삭제와 하위 노드 제거를 구현한다.
+- [x] `⇱` 새 루트 승격을 구현한다.
+- [x] 이름·경로 필터를 구현한다.
+- [x] 전체 펼치기·전체 접기를 구현한다.
+- [x] Markdown 다운로드를 구현한다.
+- [x] JSON 저장·불러오기 버튼을 제거한다.
+- [x] 새 트레일 생성·선택·이름 변경·삭제 UI를 구현한다.
+- [x] 현재 트리 모드 E2E 시나리오를 모두 이식한다.
+- [x] 새로고침 후 트리와 접힘 상태 복원을 확인한다.
+- [x] **단계 7 완료**
 
 ### 0.9 단계 8 — 보드 모드와 UI 영속성
 
@@ -1081,6 +1081,8 @@ editor.openLocation
 settings.update
 lsp.restart
 ```
+
+`trail.toggleNode`는 단계 7에서 화면 명령으로 옮겼다. 접기는 트리 모양을 바꾸지 않고, 구조 명령으로 두면 "전체 접기"가 노드마다 명령을 보내면서 두 번째부터 전부 오래된 revision으로 거절된다. 같은 이유로 `trail.setMode`·`trail.setNodeUi`·`trail.setActiveNode`도 revision을 올리지 않는다.
 
 `trail.chooseCandidate`는 단계 5에서 추가했다. 정의 후보가 여러 개일 때 서버가 하나를 고르지 않고 `trail.definitionChoice` 이벤트로 목록을 보내며, 사용자가 고르면 이 명령으로 돌아온다. 서버가 응답을 붙들고 사용자를 기다리면 그 사이 같은 트레일의 다른 명령이 전부 막히므로 왕복을 둘로 나눴다.
 
