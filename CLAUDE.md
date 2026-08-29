@@ -157,6 +157,11 @@ A 안에서 B, C를 클릭하면 둘 다 A의 형제 자식이다. 이 규칙을
 
 **언어 서버를 자동으로 내려받지 않는다.** 설치 명령은 진단 화면이 안내만 한다.
 
+**CI 를 두지 않는다.** 저장소 주인의 결정이다. `.github/workflows/` 를 만들지 않고,
+계획 문서에도 CI 항목을 넣지 않는다. 플랫폼별 확인이 필요하면 그 환경에서
+`npm test` · `npm run test:e2e` · `npm run test:install` 을 손으로 돌린다.
+필요해지면 주인이 직접 요청한다.
+
 ## 구조
 
 npm workspaces. 배포하는 것은 `packages/cli` 의 `code-trail` 이다.
