@@ -1,5 +1,14 @@
 # 작업 로그
 
+## 2026-08-29 10:34 KST — CLAUDE.md·AGENTS.md 를 현재 구현에 맞췄다
+
+- 틀린 것 하나를 고쳤다. "자동 추적 경로에서 `resolveImplementationsAt` 의 참조 검색 폴백을 끈다" 는 확장 시절 이야기다. 지금은 그 함수도, 끌 폴백도 없다 — `SymbolResolver.resolveImplementations` 에 참조 통로 자체를 두지 않았다.
+- 규칙 셋을 새로 적었다. 종료 중 새 연결·새 명령 거부(`SERVER_STOPPING`), 폭 맞춤이 일하려면 노드 폭이 묶여 있어야 한다는 것, clangd 빌드 플래그를 추측하지 않는다는 것.
+- rust-analyzer 만 진단 화면에 전체 경로를 보여주는 것이 "이름만 내보낸다" 규칙의 **의도된 예외**임을 적었다. 안 적으면 누가 버그로 보고 고친다.
+- `packages/shared/tsconfig.json` 의 `lib` 에서 `DOM` 을 뺐다. "shared 는 DOM 에 의존하지 않는다" 를 문서로만 적어두고 아무도 검사하지 않던 것을 컴파일러가 잡게 했다.
+- 구조 목록에 `web/src/app/`, `web/src/styles/`, `server/src/config/` 를 넣고, 명령 목록에 `test:unit`·`test:integration` 을 넣었다.
+- 단위 150 + 통합 105 + E2E 72 + pack + LSP 스모크 통과.
+
 ## 2026-08-29 10:22 KST — CI 를 두지 않기로 정함
 
 - `.github/workflows/ci.yml` 과 그 커밋을 지웠다. 저장소에 CI 를 두지 않는다.

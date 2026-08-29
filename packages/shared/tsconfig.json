@@ -3,7 +3,10 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "lib": ["ES2022", "DOM"],
+    // DOM 을 넣지 않는다. 이 패키지는 서버·CLI·브라우저가 함께 쓰므로
+    // `document` 나 `window` 가 섞이면 서버에서 터진다. lib 에서 빼두면
+    // 컴파일러가 먼저 잡는다 — 규칙을 문서로만 적어두지 않는다.
+    "lib": ["ES2022"],
     "types": []
   },
   "include": ["src/**/*.ts"]

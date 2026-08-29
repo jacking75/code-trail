@@ -31,7 +31,7 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 | **순번** | `.idx`(헤더), `data-idx`(호출부) | 형제 노드 번호. 부모 호출부의 ①과 자식 노드의 ①이 한 짝이다 |
 | **배지** | `.badge` | 헤더 오른쪽의 `재귀` · `선언만` · `근사` |
 | **브레드크럼** | `#breadcrumb` | 패널 위쪽의 현재 경로 줄 |
-| **툴바** | `#toolbar` | 전체 펼치기·접기, 정렬, 보드 전환, 필터, 내보내기, 지우기 버튼 줄 |
+| **툴바** | `#toolbar` | 전체 펼치기·접기, 정렬, 보드 전환, 필터, 내보내기, 지우기 버튼 줄. 오른쪽 끝에 노드 수 |
 | **트리 모드 / 보드 모드** | `#root.board`, `Trail.mode` | 기본은 **트리 모드**(자식이 부모 안에 중첩). **보드 모드**는 노드를 캔버스에 자유 배치하고 헤더를 끌어 옮긴다 |
 | **연결선** | `.board-lines path` | 보드 모드에서 부모 오른쪽 → 자식 왼쪽을 잇는 곡선. 트리 모드의 가이드선에 해당한다 |
 | **폭 맞춤** | `useFitToWidth`, `--ct-code-font-size` | 가장 빠듯한 노드에 맞춰 **코드 본문** 글자만 줄이는 것. 헤더는 안 줄인다 |
@@ -77,6 +77,8 @@ npm run start -- <경로>         # 서버를 띄우고 브라우저를 연다
 npm run dev                     # Vite 개발 서버 (웹만 고칠 때)
 npm run typecheck               # 모든 workspace
 npm test                        # test/unit + test/integration (브라우저 불필요)
+npm run test:unit                # 단위만
+npm run test:integration         # 통합만
 npm run test:e2e                # 진짜 서버 + 진짜 브라우저 (playwright 필요)
 npm run test:lsp                # 실제 언어 서버 스모크. 설치된 언어만 돈다
 npm run test:pack               # 배포물 파일 목록 검사 (npm pack --dry-run)
@@ -127,6 +129,12 @@ textDocument/typeDefinition    정의 폴백
 건드리지 않는다 — 헤더까지 작아지면 트리 구조가 안 읽힌다.
 새 UI를 넣을 때 `--ct-font-size` 를 "코드 폰트"로 오해하지 않는다.
 
+폭 맞춤이 일을 하려면 **본문 폭이 묶여 있어야 한다.** 트리 모드는
+`--ct-tree-node-width`, 보드 모드는 `--ct-board-width` 로 노드 폭을 정한다.
+이 폭을 없애고 내용에 맞춰 늘리면 본문이 넘칠 일이 없어져 폭 맞춤이 조용히
+아무 일도 안 하는 설정이 된다. `Ctrl+휠` 로 사용자가 맞춘 노드는 `.code[data-fs]`
+표시가 붙고, 폭 맞춤은 그 노드를 재지도 바꾸지도 않는다.
+
 **부모-자식 관계는 "클릭한 코드가 어느 노드에 속했는가"로만 정해진다.**
 A 안에서 B, C를 클릭하면 둘 다 A의 형제 자식이다. 이 규칙을 깨지 않는다.
 보드 모드에서 노드를 아무 데나 끌어다 놓아도 이 관계는 바뀌지 않는다 — 화면 배치일 뿐이다.
@@ -155,6 +163,12 @@ A 안에서 B, C를 클릭하면 둘 다 A의 형제 자식이다. 이 규칙을
 **오류에 절대경로·코드 본문·환경 변수·토큰을 담지 않는다.** 브라우저는 신뢰 경계 밖이고,
 오류 메시지는 그 경계를 넘는 통로다. 실행 파일도 이름만 내보낸다.
 
+**종료가 시작되면 새 연결도 새 명령도 받지 않는다.** 종료 절차는 저장을 끝낸 뒤
+언어 서버를 내린다. 그 사이에 들어온 명령을 처리하면 트레일이 또 바뀌고 그 변경은
+어디에도 안 남는다. HTTP 는 503, WebSocket 은 붙자마자 1001 로 닫고, 이미 붙어 있던
+연결의 명령에는 `SERVER_STOPPING` 을 돌려준다. 업그레이드 요청에 평범한 HTTP 응답을
+쓰면 어느 쪽으로도 끝나지 않으므로, 그 판단은 `app.ts` 훅이 아니라 게이트웨이가 한다.
+
 **언어 서버를 자동으로 내려받지 않는다.** 설치 명령은 진단 화면이 안내만 한다.
 
 **CI 를 두지 않는다.** 저장소 주인의 결정이다. `.github/workflows/` 를 만들지 않고,
@@ -174,6 +188,7 @@ packages/server/src/security/   토큰, Host·Origin 검사, 경로 경계, CSP
 packages/server/src/persistence/ .code-trail/ 저장소, 원자적 쓰기, debounce, 잠금 파일
 packages/server/src/workspace/  파일 트리, 이름 검색, 문서 권한(documentId), 파일 감시
 packages/server/src/trails/     트레일 정본과 mutation queue
+packages/server/src/config/     로그. 절대경로와 토큰을 남기지 않는다
 packages/server/src/http/       읽기 전용 API
 packages/server/src/ws/         명령 수신과 이벤트 방송
 packages/server/src/lsp/        JSON-RPC 전송, 문서 동기화, 상태 머신·재시작
@@ -181,10 +196,12 @@ packages/server/src/lsp/adapters/  언어별 탐지·진단. 언어를 아는 �
 packages/server/src/symbols/    평탄화, 심볼 선택, 본문 범위, 선언만 판정
 packages/server/src/editor/     외부 에디터 탐지와 실행 (shell 없이, documentId 역조회)
 
+packages/web/src/app/           화면 뼈대. 앱 바, 탭, 소켓 이벤트 배분
 packages/web/src/api/           토큰 부트스트랩, HTTP, WebSocket, 명령 보내기
 packages/web/src/tokenizer/     하이라이팅 + 식별자에 좌표 심기 (순수 함수)
 packages/web/src/features/      파일 탐색기, 검색, 코드 화면, 트레일 화면, 진단 화면
 packages/web/src/features/trail/board.ts  보드 배치 계산 (순수 함수. 브라우저 없이 테스트한다)
+packages/web/src/styles/        app.css(변수·뼈대) 와 trail.css(노드·보드)
 packages/cli/src/               인자 해석, 서버 재사용 감지, 브라우저 열기
 
 test/unit/                      도메인·프로토콜·심볼 선택·보드 배치·CLI 인자 (node:test)
@@ -194,11 +211,14 @@ test/fake-lsp/                  나쁜 언어 서버를 흉내내는 stdio fixtu
 test/smoke/                     실제 언어 서버 스모크 (설치된 언어만)
 test/pack/                      배포물 파일 목록과 설치 스모크
 test/perf/                      1,000개 노드 성능 측정 (결과는 docs/perf-1000-nodes.md)
-test/fixtures/                  단계 0에서 굳힌 확장 시절 데이터. **고치지 않는다**
+test/fixtures/                  확장 시절 데이터를 굳혀 둔 것. **고치지 않는다**
 ```
 
 `packages/shared` 는 파일 시스템·네트워크·DOM 어디에도 의존하지 않는다.
-`test/unit/shared-independence.test.mjs` 가 이걸 검사한다.
+서버·CLI·브라우저가 함께 쓰기 때문이다. 둘이 지킨다 —
+`test/unit/shared-independence.test.mjs` 가 `vscode` 와 Node 전용 모듈(`node:*`, `fs`,
+`path`, `child_process` …)을 잡고, `packages/shared/tsconfig.json` 이 `lib` 에서
+`DOM` 을 빼서 `document`·`window` 를 컴파일 단계에서 막는다. **`DOM` 을 다시 넣지 않는다.**
 
 ## 바꾸면 같이 고칠 것
 
@@ -243,15 +263,24 @@ API 인증(`test/integration/resilience.test.mjs`), 배포물 목록(`npm run te
   보정하고 `approximate` 플래그를 세운다.
 - 인터페이스 메서드는 정의가 선언뿐이다. 코드에 `{` 가 없으면 `declarationOnly` 로
   표시하고, 사용자가 `⚑` 로 구현을 찾아갈 수 있게 한다.
-  구현이 **정확히 하나**면 `autoFollowSingleImplementation` 이 그것까지 바로 붙인다.
+  구현이 **정확히 하나**면 `resolveFlow.autoFollowSingleImplementation` 이 그것까지 바로 붙인다.
   **둘 이상일 때 하나를 골라 붙이지 않는다** — 호출부의 정적 타입만으로는 어느 구현이
   도는지 알 수 없고, 자동으로 고르면 그게 실행되는 코드라고 오해하게 된다.
-  자동으로 따라가는 경로에서는 `resolveImplementationsAt` 의 참조 검색 폴백을 끈다.
-  참조에는 호출부가 섞여 있어서 "이 메서드를 부르는 함수"로 끌려갈 수 있다.
+  `SymbolResolver.resolveImplementations` 에는 **참조 검색 폴백 자체가 없다.**
+  확장에는 껐다 켤 수 있는 폴백이 있었지만, 새 구현에서는 그 통로를 두지 않았다 —
+  참조에는 호출부가 섞여 있어서 "이 메서드를 부르는 함수" 가 구현으로 붙는다.
   선언 노드는 어느 쪽이든 지우지 않는다. "인터페이스를 거쳐 갔다"도 경로의 일부다.
 - **뜨자마자 죽는 서버**는 매번 `initialize` 에 성공한다. 그래서 성공만으로 재시도
   횟수를 되돌리면 자동 재시작이 영원히 멈추지 않는다. 요청 하나가 실제로 응답했거나
   (`markStable`) 뜬 채로 `STABLE_AFTER_MS` 를 버텼을 때만 되돌린다.
+- **clangd** 에게 빌드 플래그를 만들어 주지 않는다. 헤더 탐색 경로를 우리가 계산하기
+  시작하면 그 계산이 틀릴 때마다 사용자가 우리를 의심하게 되고, 정확도의 책임이 언어
+  서버에서 우리에게 넘어온다. `compile_commands.json` 이 있는지 알려주는 것까지가 우리 몫이다.
+- **rust-analyzer 만 진단 화면에 전체 경로를 보여준다.** "실행 파일은 이름만 내보낸다"
+  규칙의 **의도된 예외**다. `PATH` 의 `rust-analyzer` 가 rustup proxy 인데 그 toolchain 에
+  실제 서버가 없는 경우가 흔하고, 경로를 안 보여주면 무엇을 고쳐야 할지 알 수 없다.
+  감추려는 것은 프로젝트의 파일 구조이지 사용자가 직접 설치한 도구의 위치가 아니다.
+  이 줄을 "버그" 로 보고 고치지 않는다.
 - **Windows 의 `.cmd`/`.bat` shim** 은 `shell: false` 로 못 띄운다(Node CVE-2024-27980 대응).
   탐지에서 빼고, 설정에 적혀 있으면 그 이유를 알린다. `cmd /c` 로 우회하지 않는다 —
   인자가 셸 문법으로 해석되면 "셸을 거치지 않는다" 규칙이 무너진다.
