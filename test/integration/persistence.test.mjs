@@ -63,7 +63,41 @@ test('처음 열면 .code-trail 구조를 만든다', async () => {
 
             const ignore = await readFile(storePath(root, 'runtime', '.gitignore'), 'utf8');
             assert.match(ignore, /^\*$/m);
+            const localIgnore = await readFile(storePath(root, 'local', '.gitignore'), 'utf8');
+            assert.match(localIgnore, /^\*$/m);
+            const local = JSON.parse(await readFile(storePath(root, 'local', 'settings.json'), 'utf8'));
+            assert.equal(local.schemaVersion, 1);
         });
+    } finally {
+        await removeProject(root);
+    }
+});
+
+test('기존 단일 설정의 기계 값을 백업 후 로컬 설정으로 이전한다', async () => {
+    const root = await makeProject(FILES);
+    try {
+        await withServer(root, async () => {});
+        const settingsPath = storePath(root, 'settings.json');
+        const settings = JSON.parse(await readFile(settingsPath, 'utf8'));
+        settings.editor = { executable: 'code', args: ['--goto', '{path}:{line}'] };
+        settings.languages.cpp.executable = 'C:/tools/clangd.exe';
+        settings.languages.cpp.env = { PRIVATE_VALUE: 'local-only' };
+        await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+        await (await import('node:fs/promises')).unlink(storePath(root, 'local', 'settings.json'));
+
+        await withServer(root, async (running) => {
+            const boot = await (await authFetch(running, '/api/bootstrap')).json();
+            assert.equal(boot.settings.editor.executable, 'code');
+            assert.equal(boot.settings.languages.cpp.env.PRIVATE_VALUE, 'local-only');
+        });
+
+        const sharedSettings = JSON.parse(await readFile(settingsPath, 'utf8'));
+        const localSettings = JSON.parse(await readFile(storePath(root, 'local', 'settings.json'), 'utf8'));
+        assert.equal(sharedSettings.editor.executable, null);
+        assert.deepEqual(sharedSettings.languages.cpp.env, {});
+        assert.equal(localSettings.editor.executable, 'code');
+        assert.equal(localSettings.languages.cpp.env.PRIVATE_VALUE, 'local-only');
+        assert.equal((await stat(`${settingsPath}.pre-local-settings.bak`)).isFile(), true);
     } finally {
         await removeProject(root);
     }

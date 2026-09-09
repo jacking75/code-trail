@@ -341,6 +341,8 @@ test('.code-trail/runtime 은 감추고 settings 는 보여준다', async () => 
 
             const runtime = await authFetch(running, '/api/workspace/children?id=.code-trail/runtime');
             assert.equal(runtime.status, 403);
+            const local = await authFetch(running, '/api/workspace/children?id=.code-trail/local');
+            assert.equal(local.status, 403);
         });
     } finally {
         await removeProject(root);

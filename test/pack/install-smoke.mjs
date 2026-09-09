@@ -83,7 +83,7 @@ try {
         encoding: 'utf8',
         shell: false,
     }).trim();
-    check('버전을 찍는다', version === '1.0.0', version);
+    check('버전을 찍는다', version === '1.1.0', version);
 
     // 서버를 실제로 띄우고 정적 화면과 API 가 사는지 본다.
     const child = spawn(process.execPath, [cli, project, '--no-open', '--log-level', 'info'], {

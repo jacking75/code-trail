@@ -72,7 +72,7 @@ test('새로 생긴 항목이 기본값을 갖는다', () => {
     assert.equal(settings.editor.executable, null);
     assert.deepEqual(settings.editor.args, []);
 
-    for (const language of ['cpp', 'csharp', 'go', 'rust']) {
+    for (const language of ['cpp', 'csharp', 'go', 'rust', 'typescript']) {
         const ls = settings.languages[language];
         assert.equal(ls.enabled, true, language);
         // 실행 파일은 PATH 에서 자동 탐지한다. 경로를 미리 박아두지 않는다.

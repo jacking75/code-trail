@@ -10,6 +10,12 @@ import {
     uuidSchema,
     type ParseResult,
 } from './schemas.js';
+import {
+    annotationTargetSchema,
+    authorSchema,
+    codeRangeSchema,
+    shareExportPolicySchema,
+} from './analysisSchemas.js';
 
 /**
  * 브라우저 → 서버 명령.
@@ -139,8 +145,10 @@ export const settingsUpdatePayloadSchema = z.object({
     settings: projectSettingsSchema,
 });
 
+export const localAuthorUpdatePayloadSchema = z.object({ author: authorSchema });
+
 export const lspRestartPayloadSchema = z.object({
-    language: z.enum(['cpp', 'csharp', 'go', 'rust']),
+    language: z.enum(['cpp', 'csharp', 'go', 'rust', 'typescript']),
 });
 
 /**
@@ -150,7 +158,169 @@ export const lspRestartPayloadSchema = z.object({
  * 말이다. 진단 화면의 `지원됨` 은 뒤쪽을 뜻하고, 그 확인이 이 명령이다.
  */
 export const lspVerifyPayloadSchema = z.object({
-    language: z.enum(['cpp', 'csharp', 'go', 'rust']),
+    language: z.enum(['cpp', 'csharp', 'go', 'rust', 'typescript']),
+});
+
+// ── 분석 기록·공유 명령 ────────────────────────────────────────────────────
+
+export const analysisCreatePayloadSchema = z.object({
+    title: z.string().trim().min(1).max(200),
+    purpose: z.string().max(65_536).default(''),
+    trailIds: z.array(uuidSchema).max(10_000),
+    author: authorSchema,
+});
+
+export const analysisPlanUpdatePayloadSchema = z.object({
+    analysisId: uuidSchema,
+    baseRevision: z.int().min(0),
+    purpose: z.string().max(65_536),
+    actorId: uuidSchema,
+    goals: z.array(z.object({
+        id: uuidSchema,
+        title: z.string().trim().min(1).max(500),
+        targetIds: z.array(uuidSchema).max(10_000),
+        evidenceIds: z.array(uuidSchema).max(10_000),
+    })).max(1_000),
+    importantLocations: z.array(z.object({
+        id: uuidSchema,
+        title: z.string().trim().min(1).max(200),
+        target: annotationTargetSchema,
+    })).max(10_000),
+});
+
+export const analysisRecoverPayloadSchema = z.object({
+    analysisId: uuidSchema,
+    kind: z.enum(['temporary', 'backup']),
+});
+
+export const annotationCreatePayloadSchema = z.object({
+    analysisId: uuidSchema,
+    target: annotationTargetSchema,
+    body: z.string().trim().min(1).max(65_536),
+    kind: z.enum(['explanation', 'question', 'concern', 'conclusion']),
+    tags: z.array(z.string().trim().min(1).max(64)).max(20),
+    author: authorSchema,
+});
+
+export const annotationUpdatePayloadSchema = z.object({
+    analysisId: uuidSchema,
+    annotationId: uuidSchema,
+    baseVersion: z.int().min(1),
+    actorId: uuidSchema,
+    patch: z.object({
+        body: z.string().trim().min(1).max(65_536).optional(),
+        kind: z.enum(['explanation', 'question', 'concern', 'conclusion']).optional(),
+        tags: z.array(z.string().trim().min(1).max(64)).max(20).optional(),
+        status: z.enum(['open', 'resolved']).optional(),
+    }),
+});
+
+export const annotationVersionPayloadSchema = z.object({
+    analysisId: uuidSchema,
+    annotationId: uuidSchema,
+    baseVersion: z.int().min(1),
+    actorId: uuidSchema,
+});
+
+export const annotationReplyPayloadSchema = z.object({
+    analysisId: uuidSchema,
+    annotationId: uuidSchema,
+    body: z.string().trim().min(1).max(32_768),
+    author: authorSchema,
+});
+
+export const reviewSetStatePayloadSchema = z.object({
+    analysisId: uuidSchema,
+    target: annotationTargetSchema,
+    baselineId: uuidSchema,
+    state: z.enum(['unreviewed', 'reviewing', 'reviewed', 'needsReview']),
+    authorId: uuidSchema,
+    evidenceIds: z.array(uuidSchema).max(10_000),
+});
+
+export const anchorCapturePayloadSchema = z.object({
+    analysisId: uuidSchema,
+    documentId: z.string().min(1),
+    range: codeRangeSchema,
+});
+
+export const anchorRecheckPayloadSchema = z.object({
+    analysisId: uuidSchema,
+    anchorIds: z.array(uuidSchema).min(1).max(1_000),
+    actorId: uuidSchema,
+});
+
+export const anchorRebindPayloadSchema = z.object({
+    analysisId: uuidSchema,
+    anchorId: uuidSchema,
+    candidateId: z.string().min(1),
+    baseVersion: z.int().min(1),
+    actorId: uuidSchema,
+});
+
+export const walkthroughUpdatePayloadSchema = z.object({
+    analysisId: uuidSchema,
+    walkthroughId: uuidSchema.optional(),
+    baseVersion: z.int().min(1).optional(),
+    title: z.string().trim().min(1).max(200),
+    actorId: uuidSchema,
+    steps: z.array(z.object({
+        id: uuidSchema,
+        title: z.string().trim().min(1).max(200),
+        body: z.string().max(65_536),
+        annotationId: uuidSchema.nullable(),
+        target: annotationTargetSchema.nullable(),
+        baselineId: uuidSchema.nullable(),
+    })).max(10_000),
+});
+
+export const sharePreparePayloadSchema = z.object({
+    analysisId: uuidSchema,
+    policy: shareExportPolicySchema.partial(),
+});
+
+export const shareExportPayloadSchema = z.object({
+    planId: uuidSchema,
+    format: z.enum(['ctshare', 'markdown', 'html']).default('ctshare'),
+});
+export const shareUploadStartPayloadSchema = z.object({
+    byteLength: z.int().min(1).max(32 * 1024 * 1024),
+    sha256: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export const shareUploadChunkPayloadSchema = z.object({
+    uploadId: uuidSchema,
+    index: z.int().min(0),
+    base64: z.string().max(350_000),
+});
+export const shareUploadFinishPayloadSchema = z.object({ uploadId: uuidSchema });
+export const shareImportCommitPayloadSchema = z.object({
+    uploadId: uuidSchema,
+    forceCopy: z.boolean().default(false),
+});
+export const shareMergeCommitPayloadSchema = z.object({
+    planId: uuidSchema,
+    actorId: uuidSchema,
+});
+
+export const draftSavePayloadSchema = z.object({
+    analysisId: uuidSchema,
+    draftId: uuidSchema,
+    target: annotationTargetSchema,
+    body: z.string().max(65_536),
+});
+
+export const aiGeneratePayloadSchema = z.object({
+    requestId: uuidSchema,
+    analysisId: uuidSchema,
+    documentId: z.string().min(1),
+    range: codeRangeSchema,
+    purpose: z.string().max(4_000),
+});
+export const aiCancelPayloadSchema = z.object({ requestId: uuidSchema });
+export const aiAcceptPayloadSchema = z.object({
+    analysisId: uuidSchema,
+    draftId: uuidSchema,
+    author: authorSchema,
 });
 
 // ── 명령 목록 ───────────────────────────────────────────────────────────────
@@ -185,8 +355,35 @@ export const UI_COMMAND_TYPES = [
     'workspace.searchFiles',
     'editor.openLocation',
     'settings.update',
+    'settings.updateLocalAuthor',
     'lsp.restart',
     'lsp.verify',
+    'analysis.create',
+    'analysis.updatePlan',
+    'analysis.recover',
+    'annotation.create',
+    'annotation.update',
+    'annotation.delete',
+    'annotation.restore',
+    'annotation.reply',
+    'annotation.setStatus',
+    'review.setState',
+    'anchor.capture',
+    'anchor.recheck',
+    'anchor.rebind',
+    'walkthrough.update',
+    'share.prepare',
+    'share.export',
+    'share.uploadStart',
+    'share.uploadChunk',
+    'share.uploadFinish',
+    'share.importPreview',
+    'share.importCommit',
+    'share.mergeCommit',
+    'analysis.saveDraft',
+    'ai.generate',
+    'ai.cancel',
+    'ai.accept',
 ] as const;
 
 export type StructureCommandType = (typeof STRUCTURE_COMMAND_TYPES)[number];
@@ -216,8 +413,35 @@ export const COMMAND_PAYLOADS = {
     'workspace.searchFiles': searchFilesPayloadSchema,
     'editor.openLocation': openLocationPayloadSchema,
     'settings.update': settingsUpdatePayloadSchema,
+    'settings.updateLocalAuthor': localAuthorUpdatePayloadSchema,
     'lsp.restart': lspRestartPayloadSchema,
     'lsp.verify': lspVerifyPayloadSchema,
+    'analysis.create': analysisCreatePayloadSchema,
+    'analysis.updatePlan': analysisPlanUpdatePayloadSchema,
+    'analysis.recover': analysisRecoverPayloadSchema,
+    'annotation.create': annotationCreatePayloadSchema,
+    'annotation.update': annotationUpdatePayloadSchema,
+    'annotation.delete': annotationVersionPayloadSchema,
+    'annotation.restore': annotationVersionPayloadSchema,
+    'annotation.reply': annotationReplyPayloadSchema,
+    'annotation.setStatus': annotationUpdatePayloadSchema,
+    'review.setState': reviewSetStatePayloadSchema,
+    'anchor.capture': anchorCapturePayloadSchema,
+    'anchor.recheck': anchorRecheckPayloadSchema,
+    'anchor.rebind': anchorRebindPayloadSchema,
+    'walkthrough.update': walkthroughUpdatePayloadSchema,
+    'share.prepare': sharePreparePayloadSchema,
+    'share.export': shareExportPayloadSchema,
+    'share.uploadStart': shareUploadStartPayloadSchema,
+    'share.uploadChunk': shareUploadChunkPayloadSchema,
+    'share.uploadFinish': shareUploadFinishPayloadSchema,
+    'share.importPreview': shareUploadFinishPayloadSchema,
+    'share.importCommit': shareImportCommitPayloadSchema,
+    'share.mergeCommit': shareMergeCommitPayloadSchema,
+    'analysis.saveDraft': draftSavePayloadSchema,
+    'ai.generate': aiGeneratePayloadSchema,
+    'ai.cancel': aiCancelPayloadSchema,
+    'ai.accept': aiAcceptPayloadSchema,
 } as const satisfies Record<CommandType, z.ZodType>;
 
 export type CommandPayload<T extends CommandType> = z.infer<(typeof COMMAND_PAYLOADS)[T]>;

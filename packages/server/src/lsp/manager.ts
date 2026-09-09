@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 
 import type { ProjectSettings } from '@code-trail/shared';
@@ -11,6 +12,8 @@ import type { DetectionResult, HealthCheck, WorkspaceInfo } from './adapters/typ
 import { pathToUri, uriToPath } from './documents.js';
 import { LspSession } from './session.js';
 import { LspUnavailableError, type LspSessionInfo } from './types.js';
+import { flattenDocumentSymbols, type FlatSymbol } from '../symbols/flatten.js';
+import type { DocumentGrant } from '../workspace/documents.js';
 
 /**
  * 언어별 세션 관리 (구현서 5.1).
@@ -28,6 +31,7 @@ const SAMPLE_EXTENSIONS: Record<SupportedLanguage, readonly string[]> = {
     csharp: ['.cs'],
     go: ['.go'],
     rust: ['.rs'],
+    typescript: ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'],
 };
 
 /**
@@ -72,6 +76,8 @@ export interface LspManagerOptions {
 export class LspManager {
     private readonly sessions = new Map<SupportedLanguage, LspSession>();
     private readonly detections = new Map<SupportedLanguage, DetectionResult>();
+    private readonly symbolCache = new Map<string, { hash: string; symbols: FlatSymbol[]; bytes: number }>();
+    private symbolCacheBytes = 0;
     private readonly logger: Logger;
 
     constructor(private readonly options: LspManagerOptions) {
@@ -160,6 +166,7 @@ export class LspManager {
     /** 설정이 바뀌었다. 다음 탐지를 다시 하게 한다. */
     invalidateDetection(): void {
         this.detections.clear();
+        this.clearSymbolCache();
     }
 
     /**
@@ -186,7 +193,7 @@ export class LspManager {
         if (language === null) {
             throw new LspUnavailableError(
                 'cpp',
-                '이 언어는 심볼 해석을 지원하지 않는다. C/C++, C#, Go, Rust 만 된다.',
+                '이 언어는 심볼 해석을 지원하지 않는다. C/C++, C#, Go, Rust, TypeScript/JavaScript가 된다.',
             );
         }
         const session = await this.sessionFor(language);
@@ -194,12 +201,54 @@ export class LspManager {
         return session;
     }
 
+    /** 현재 문서의 심볼 목록. 허용된 documentSymbol 요청만 사용한다. */
+    async documentSymbols(grant: DocumentGrant, signal?: AbortSignal): Promise<FlatSymbol[]> {
+        if (signal?.aborted) throw new Error('문서 심볼 요청이 취소되었다.');
+        const uri = pathToUri(grant.realPath);
+        const content = await this.readDocument(uri);
+        const contentHash = createHash('sha256').update(content.text, 'utf8').digest('hex');
+        const cached = this.symbolCache.get(grant.realPath);
+        if (cached?.hash === contentHash) {
+            this.symbolCache.delete(grant.realPath);
+            this.symbolCache.set(grant.realPath, cached);
+            return cached.symbols.map((item) => ({ ...item }));
+        }
+        const session = await this.openFor(grant.realPath, uri);
+        if (!session.capabilities.documentSymbol) return [];
+        const raw = await session.request<unknown>('textDocument/documentSymbol', {
+            textDocument: { uri },
+        }, undefined, signal);
+        const symbols = flattenDocumentSymbols(raw, content.text.split(/\r?\n/).length);
+        const bytes = Buffer.byteLength(JSON.stringify(symbols), 'utf8');
+        if (cached) this.symbolCacheBytes -= cached.bytes;
+        this.symbolCache.set(grant.realPath, { hash: contentHash, symbols, bytes });
+        this.symbolCacheBytes += bytes;
+        while (this.symbolCacheBytes > 8 * 1024 * 1024 && this.symbolCache.size > 1) {
+            const oldest = this.symbolCache.entries().next().value as [string, { bytes: number }] | undefined;
+            if (!oldest) break;
+            this.symbolCache.delete(oldest[0]);
+            this.symbolCacheBytes -= oldest[1].bytes;
+        }
+        return symbols.map((item) => ({ ...item }));
+    }
+
     /** 파일 감시가 알려준 변경을 열려 있는 세션에 전달한다. */
     async notifyFileChanged(uri: string): Promise<void> {
+        const changedPath = uriToPath(uri);
+        if (changedPath) {
+            const cached = this.symbolCache.get(changedPath);
+            if (cached) this.symbolCacheBytes -= cached.bytes;
+            this.symbolCache.delete(changedPath);
+        }
         await Promise.all(
             [...this.sessions.values()].map((session) =>
                 session.refreshDocument(uri).catch(() => undefined)),
         );
+    }
+
+    private clearSymbolCache(): void {
+        this.symbolCache.clear();
+        this.symbolCacheBytes = 0;
     }
 
     /** 진단 화면이 쓰는 목록. 아직 안 뜬 언어도 보여준다. */

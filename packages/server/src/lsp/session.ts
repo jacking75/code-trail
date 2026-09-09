@@ -403,7 +403,7 @@ export class LspSession {
     }
 
     /** LSP 요청 하나. 서버가 준비되지 않았으면 먼저 띄운다. */
-    async request<T>(method: string, params: unknown, timeoutMs?: number): Promise<T> {
+    async request<T>(method: string, params: unknown, timeoutMs?: number, signal?: AbortSignal): Promise<T> {
         await this.ensureReady();
         const client = this.client;
         if (!client) {
@@ -411,7 +411,7 @@ export class LspSession {
         }
         const startedAt = Date.now();
         try {
-            const result = await client.request<T>(method, params, timeoutMs);
+            const result = await client.request<T>(method, params, timeoutMs, signal);
             // 성공한 요청만 남긴다. 실패한 요청은 서버가 답하고 있다는 증거가 아니다.
             this.lastRequest = {
                 method,

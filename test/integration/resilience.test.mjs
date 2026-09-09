@@ -22,6 +22,7 @@ import {
     makeProject,
     removeProject,
     server,
+    updateLocalSettings,
     withServer,
 } from './helpers.mjs';
 import { COMMAND_PAYLOADS } from '../../packages/shared/dist/index.js';
@@ -151,11 +152,10 @@ async function configureFakeLsp(root, scenarioArgs = ['--scenario=normal'], extr
         ...extra,
     };
     const first = await server.startServer(base);
-    const settingsPath = path.join(root, '.code-trail', 'settings.json');
-    const settings = JSON.parse(await readFile(settingsPath, 'utf8'));
-    settings.languages.cpp.executable = process.execPath;
-    settings.languages.cpp.args = [FAKE_LSP, ...scenarioArgs];
-    await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}${NL}`, 'utf8');
+    await updateLocalSettings(root, (settings) => {
+        settings.languages.cpp.executable = process.execPath;
+        settings.languages.cpp.args = [FAKE_LSP, ...scenarioArgs];
+    });
     await first.close();
     return base;
 }

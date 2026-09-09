@@ -57,6 +57,15 @@ test('구현서 14.2 의 명령이 전부 있다', () => {
         'trail.setActiveNode', 'trail.clear', 'trail.exportMarkdown',
         'workspace.openDocument', 'workspace.searchFiles', 'editor.openLocation',
         'settings.update', 'lsp.restart', 'lsp.verify',
+        'settings.updateLocalAuthor',
+        'analysis.create', 'analysis.updatePlan', 'analysis.recover', 'analysis.saveDraft',
+        'annotation.create', 'annotation.update', 'annotation.delete',
+        'annotation.restore', 'annotation.reply', 'annotation.setStatus',
+        'review.setState', 'anchor.capture', 'anchor.recheck', 'anchor.rebind',
+        'walkthrough.update', 'share.prepare', 'share.export',
+        'share.uploadStart', 'share.uploadChunk', 'share.uploadFinish',
+        'share.importPreview', 'share.importCommit', 'share.mergeCommit',
+        'ai.generate', 'ai.cancel', 'ai.accept',
     ];
     assert.deepEqual(Object.keys(COMMAND_PAYLOADS).sort(), [...documented].sort());
 });

@@ -7,6 +7,9 @@ import {
     type DocumentContent,
     type LanguageDiagnostics,
     type ProjectSettingsView,
+    type AnalysisDocumentView,
+    type AnalysisSummaryView,
+    type AnchorComparisonView,
 } from '../api/http.js';
 import { commands, type CommandContext } from '../api/commands.js';
 import { TrailSocket, type ConnectionState, type ServerEventMessage } from '../api/socket.js';
@@ -18,6 +21,16 @@ import { useTrail } from '../features/trail/useTrail.js';
 import type { TrailNodeView } from '../features/trail/types.js';
 import { FileSearch } from '../features/workspace/FileSearch.js';
 import { FileTree } from '../features/workspace/FileTree.js';
+import {
+    AnalysisPanel,
+    type AiDraftView,
+    type AnalysisTarget,
+    type ImportPreviewView,
+    type SelectedCodeRange,
+    type SharePreviewView,
+} from '../features/annotations/AnalysisPanel.js';
+import { ReadingStarts } from '../features/changes/ReadingStarts.js';
+import { currentToken } from '../api/session.js';
 
 /**
  * 화면 뼈대 (구현서 16.1).
@@ -41,7 +54,11 @@ const STATE_LABEL: Record<ConnectionState, string> = {
     closed: '끊김',
 };
 
-type Pane = 'code' | 'trail' | 'diagnostics';
+type Pane = 'code' | 'trail' | 'analysis' | 'diagnostics';
+type NavigationPoint = {
+    pane: 'code' | 'trail'; relPath?: string; line?: number; char?: number;
+    trailId?: string; nodeId?: string;
+};
 
 export function App(): JSX.Element {
     const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
@@ -52,7 +69,26 @@ export function App(): JSX.Element {
     const [error, setError] = useState<string | null>(null);
     const [pane, setPane] = useState<Pane>('code');
     const [diagnostics, setDiagnostics] = useState<LanguageDiagnostics[]>([]);
-    const [recoveryCandidates, setRecoveryCandidates] = useState<unknown[]>([]);
+    const [recoveryCandidates, setRecoveryCandidates] = useState<Array<{ trailId?: string; analysisId?: string; kind?: 'temporary' | 'backup'; savedAt: string }>>([]);
+    const [analyses, setAnalyses] = useState<AnalysisSummaryView[]>([]);
+    const [analysis, setAnalysis] = useState<AnalysisDocumentView | null>(null);
+    const [persistedRevision, setPersistedRevision] = useState<number | null>(null);
+    const [selectedRange, setSelectedRange] = useState<SelectedCodeRange | null>(null);
+    const [sharePreview, setSharePreview] = useState<SharePreviewView | null>(null);
+    const [importPreview, setImportPreview] = useState<ImportPreviewView | null>(null);
+    const [aiDraft, setAiDraft] = useState<AiDraftView | null>(null);
+    const [aiBusy, setAiBusy] = useState(false);
+    const [anchorComparison, setAnchorComparison] = useState<AnchorComparisonView | null>(null);
+    const [, setNavigationVersion] = useState(0);
+    const navigation = useRef<{ points: NavigationPoint[]; index: number }>({ points: [], index: -1 });
+    const restoringNavigation = useRef(false);
+    const [author, setAuthor] = useState(() => {
+        const saved = window.localStorage.getItem('code-trail.author');
+        if (saved) {
+            try { return JSON.parse(saved) as { id: string; displayName: string }; } catch { /* 새로 만든다. */ }
+        }
+        return { id: crypto.randomUUID(), displayName: '로컬 작성자' };
+    });
     /**
      * 외부 에디터를 못 띄웠을 때 보여줄 경로와 줄.
      *
@@ -66,19 +102,47 @@ export function App(): JSX.Element {
     const [socket, setSocket] = useState<TrailSocket | null>(null);
     const documentRef = useRef<DocumentContent | null>(null);
     documentRef.current = document;
+    const authorRef = useRef(author);
+    authorRef.current = author;
 
     const trailState = useTrail(socket);
     // 이벤트 처리기가 항상 최신이어야 한다. 의존성에 넣으면 소켓이 다시 붙는다.
     const handleEventRef = useRef(trailState.handleEvent);
     handleEventRef.current = trailState.handleEvent;
     const refreshDiagnosticsRef = useRef<() => void>(() => undefined);
+    const contextRef = useRef<CommandContext | null>(null);
+    const pendingAnnotation = useRef<{
+        body: string; kind: 'explanation' | 'question' | 'concern' | 'conclusion'; tags: string[];
+    } | null>(null);
+    const pendingUpload = useRef<Uint8Array<ArrayBuffer> | null>(null);
+    const pendingAiRequest = useRef<string | null>(null);
+    const handledReference = useRef<string | null>(null);
+
+    const recordNavigation = useCallback((point: NavigationPoint): void => {
+        if (restoringNavigation.current) return;
+        const state = navigation.current;
+        const previous = state.points[state.index];
+        if (previous && JSON.stringify(previous) === JSON.stringify(point)) return;
+        state.points = [...state.points.slice(0, state.index + 1), point].slice(-100);
+        state.index = state.points.length - 1;
+        window.localStorage.setItem('code-trail.navigation', JSON.stringify(state));
+        setNavigationVersion((value) => value + 1);
+    }, []);
 
     useEffect(() => {
+        try {
+            const saved = JSON.parse(window.localStorage.getItem('code-trail.navigation') ?? 'null') as { points?: NavigationPoint[]; index?: number } | null;
+            if (saved && Array.isArray(saved.points) && Number.isInteger(saved.index)) {
+                navigation.current = { points: saved.points.slice(-100), index: Math.min(saved.index ?? -1, saved.points.length - 1) };
+                setNavigationVersion((value) => value + 1);
+            }
+        } catch { /* 개인 이동 이력은 손상되면 비운다. */ }
         void api
             .bootstrap()
             .then((data) => {
                 setBootstrap(data);
                 setSettings(data.settings);
+                if (data.localAuthor) setAuthor(data.localAuthor);
             })
             .catch((cause: unknown) => {
                 setError(
@@ -96,7 +160,7 @@ export function App(): JSX.Element {
             .diagnostics()
             .then((data) => {
                 setDiagnostics(data.languages);
-                setRecoveryCandidates(data.recoveryCandidates);
+                setRecoveryCandidates([...data.recoveryCandidates, ...data.analysisRecoveryCandidates]);
             })
             .catch(() => undefined);
     }, []);
@@ -108,9 +172,35 @@ export function App(): JSX.Element {
     }, [refreshDiagnostics]);
 
     useEffect(() => {
+        const hash = window.location.hash;
+        if (!hash || handledReference.current === hash || analyses.length === 0) return;
+        const requested = new URLSearchParams(hash.slice(1)).get('localAnalysis');
+        if (!requested || !analyses.some((item) => item.id === requested)) return;
+        handledReference.current = hash;
+        if (analysis?.id === requested) {
+            setPane('analysis');
+            return;
+        }
+        void api.analysis(requested).then((value) => {
+            setAnalysis(value);
+            setPersistedRevision(value.revision);
+            setPane('analysis');
+        }).catch(() => undefined);
+    }, [analyses, analysis?.id]);
+
+    useEffect(() => {
         const created = new TrailSocket({
             onState: setConnection,
             onEvent: (event: ServerEventMessage) => {
+                if (event.type === 'command.error') {
+                    const payload = event.payload as { error?: { message?: string } };
+                    setError(payload.error?.message ?? '명령을 처리하지 못했다.');
+                    if (pendingAiRequest.current) {
+                        pendingAiRequest.current = null;
+                        setAiBusy(false);
+                    }
+                    return;
+                }
                 if (event.type === 'workspace.filesChanged') {
                     // 열어둔 파일이 바뀌었으면 표시만 한다. 자동으로 다시 읽지
                     // 않는다 — 보고 있던 코드가 발밑에서 바뀌면 흐름이 끊긴다.
@@ -143,6 +233,95 @@ export function App(): JSX.Element {
                     });
                     return;
                 }
+                if (event.type === 'analysis.listChanged') {
+                    const payload = event.payload as { analyses: AnalysisSummaryView[] };
+                    setAnalyses(payload.analyses);
+                    return;
+                }
+                if (event.type === 'analysis.snapshot') {
+                    const payload = event.payload as { analysis: AnalysisDocumentView };
+                    setAnalysis((current) => current === null || current.id === payload.analysis.id
+                        ? payload.analysis : current);
+                    return;
+                }
+                if (event.type === 'analysis.persisted') {
+                    const payload = event.payload as { analysisId: string; revision: number };
+                    setAnalysis((current) => {
+                        if (current?.id === payload.analysisId) setPersistedRevision(payload.revision);
+                        return current;
+                    });
+                    return;
+                }
+                if (event.type === 'anchor.checked' && pendingAnnotation.current) {
+                    const payload = event.payload as { analysisId: string; anchorId: string };
+                    const pending = pendingAnnotation.current;
+                    pendingAnnotation.current = null;
+                    const commandContext = contextRef.current;
+                    if (commandContext) commands.createAnnotation(commandContext, {
+                        analysisId: payload.analysisId,
+                        target: { kind: 'range', anchorId: payload.anchorId },
+                        ...pending,
+                        author: authorRef.current,
+                    });
+                    return;
+                }
+                if (event.type === 'share.prepared') {
+                    setSharePreview((event.payload as { preview: SharePreviewView }).preview);
+                    return;
+                }
+                if (event.type === 'share.ready') {
+                    const payload = event.payload as { url: string; fileName: string };
+                    void downloadProtected(payload.url, payload.fileName).catch(() => setError('공유 파일을 내려받지 못했다.'));
+                    return;
+                }
+                if (event.type === 'share.uploadReady') {
+                    const uploadId = (event.payload as { uploadId: string }).uploadId;
+                    const bytes = pendingUpload.current;
+                    const commandContext = contextRef.current;
+                    if (bytes && commandContext) {
+                        for (let offset = 0, index = 0; offset < bytes.length; offset += 256 * 1024, index += 1) {
+                            commands.uploadChunk(commandContext, uploadId, index, bytesToBase64(bytes.subarray(offset, offset + 256 * 1024)));
+                        }
+                        commands.importPreview(commandContext, uploadId);
+                    }
+                    return;
+                }
+                if (event.type === 'share.importPreview') {
+                    setImportPreview(event.payload as ImportPreviewView);
+                    return;
+                }
+                if (event.type === 'share.imported') {
+                    const payload = event.payload as { analysisId: string };
+                    void api.analysis(payload.analysisId).then((value) => {
+                        setAnalysis(value); setPane('analysis'); setImportPreview(null); pendingUpload.current = null;
+                    });
+                    return;
+                }
+                if (event.type === 'share.merged') {
+                    const payload = event.payload as { analysisId: string };
+                    void api.analysis(payload.analysisId).then((value) => {
+                        setAnalysis(value); setPane('analysis'); setImportPreview(null); pendingUpload.current = null;
+                    });
+                    return;
+                }
+                if (event.type === 'ai.draftReady') {
+                    const payload = event.payload as { requestId: string; draft: AiDraftView };
+                    if (pendingAiRequest.current === payload.requestId) {
+                        setAiDraft(payload.draft);
+                        pendingAiRequest.current = null;
+                        setAiBusy(false);
+                    }
+                    return;
+                }
+                if (event.type === 'ai.cancelled') {
+                    pendingAiRequest.current = null;
+                    setAiBusy(false);
+                    return;
+                }
+                if (event.type === 'ai.accepted') {
+                    setAiDraft(null);
+                    return;
+                }
                 handleEventRef.current(event);
             },
         });
@@ -165,8 +344,19 @@ export function App(): JSX.Element {
             revision: trailState.trail?.revision ?? 0,
         };
     }, [socket, trailState.trail, trailState.activeTrailId]);
+    contextRef.current = context;
 
-    const openFile = useCallback((relPath: string) => {
+    useEffect(() => {
+        window.localStorage.setItem('code-trail.author', JSON.stringify(author));
+        if (bootstrap === null) return;
+        const timer = window.setTimeout(() => {
+            const commandContext = contextRef.current;
+            if (commandContext) commands.updateLocalAuthor(commandContext, author);
+        }, 400);
+        return () => window.clearTimeout(timer);
+    }, [author, bootstrap]);
+
+    const openFile = useCallback((relPath: string, line?: number, char?: number) => {
         void api
             .open(relPath)
             .then((content) => {
@@ -174,11 +364,58 @@ export function App(): JSX.Element {
                 setStaleDocument(false);
                 setError(null);
                 setPane('code');
+                if (line !== undefined) cursorRef.current = { line, char: char ?? 0 };
+                recordNavigation({ pane: 'code', relPath, line: line ?? 0, char: char ?? 0 });
             })
             .catch((cause: unknown) => {
                 setError(cause instanceof ApiError ? cause.message : '파일을 열지 못했다.');
             });
+    }, [recordNavigation]);
+
+    const moveNavigation = useCallback((delta: -1 | 1): void => {
+        const state = navigation.current;
+        const next = state.index + delta;
+        const point = state.points[next];
+        if (!point) return;
+        state.index = next;
+        restoringNavigation.current = true;
+        if (point.pane === 'code' && point.relPath) {
+            void api.open(point.relPath).then((content) => {
+                setDocument(content); setStaleDocument(false); setPane('code');
+                cursorRef.current = { line: point.line ?? 0, char: point.char ?? 0 };
+            }).finally(() => { restoringNavigation.current = false; });
+        } else if (point.pane === 'trail' && point.trailId) {
+            const commandContext = contextRef.current;
+            if (commandContext) {
+                commands.selectTrail(commandContext, point.trailId);
+                if (point.nodeId) commands.setActiveNode(commandContext, point.nodeId);
+            }
+            setPane('trail');
+            restoringNavigation.current = false;
+        } else restoringNavigation.current = false;
+        window.localStorage.setItem('code-trail.navigation', JSON.stringify(state));
+        setNavigationVersion((value) => value + 1);
     }, []);
+
+    const navigateAnalysisTarget = useCallback((target: AnalysisTarget): void => {
+        const commandContext = contextRef.current;
+        if (target.kind === 'trail' || target.kind === 'node') {
+            if (commandContext) {
+                commands.selectTrail(commandContext, target.trailId);
+                if (target.kind === 'node') commands.setActiveNode(commandContext, target.nodeId);
+            }
+            setPane('trail');
+            return;
+        }
+        const anchor = (analysis?.anchors as Array<{
+            id: string; fileId: string;
+            range: SelectedCodeRange['range']; currentRange: SelectedCodeRange['range'] | null;
+        }> | undefined)?.find((item) => item.id === target.anchorId);
+        const file = (analysis?.baselines as Array<{ files: Array<{ fileId: string; relPath: string }> }> | undefined)
+            ?.flatMap((baseline) => baseline.files).find((item) => item.fileId === anchor?.fileId);
+        const range = anchor?.currentRange ?? anchor?.range;
+        if (file && range) openFile(file.relPath, range.start.line, range.start.char);
+    }, [analysis, openFile]);
 
     /** 코드 화면에서 루트를 만든다. 트레일이 없으면 먼저 하나 만든다. */
     const addRootHere = useCallback((line: number, char: number) => {
@@ -306,10 +543,20 @@ export function App(): JSX.Element {
                 <aside className="sidebar">
                     <FileSearch onOpenFile={openFile} />
                     <FileTree onOpenFile={openFile} activePath={document?.relPath ?? null} />
+                    <ReadingStarts document={document} onOpenFile={openFile} onAddRoot={addRootHere} />
                 </aside>
 
                 <main className="main">
                     <div className="pane-tabs">
+                        <button type="button" className="tab nav" aria-label="이전 읽던 위치" disabled={navigation.current.index <= 0} onClick={() => moveNavigation(-1)}>←</button>
+                        <button type="button" className="tab nav" aria-label="다음 읽던 위치" disabled={navigation.current.index >= navigation.current.points.length - 1} onClick={() => moveNavigation(1)}>→</button>
+                        <button
+                            type="button"
+                            className={pane === 'analysis' ? 'tab active' : 'tab'}
+                            onClick={() => setPane('analysis')}
+                        >
+                            {`분석 기록${analysis ? ` (${analysis.annotations.filter((item) => item.deletedAt === null).length})` : ''}`}
+                        </button>
                         <button
                             type="button"
                             className={pane === 'code' ? 'tab active' : 'tab'}
@@ -340,7 +587,9 @@ export function App(): JSX.Element {
                         ? renderCodePane()
                         : pane === 'trail'
                             ? renderTrailPane()
-                            : renderDiagnosticsPane()}
+                            : pane === 'analysis'
+                                ? renderAnalysisPane()
+                                : renderDiagnosticsPane()}
 
                     {error !== null ? <p className="panel-error">{error}</p> : null}
                 </main>
@@ -426,6 +675,19 @@ export function App(): JSX.Element {
                     onPositionClick={(position) => {
                         cursorRef.current = { line: position.line, char: position.char };
                     }}
+                    onSelectionChange={(range) => setSelectedRange(range && document ? {
+                        documentId: document.documentId,
+                        label: `${document.displayPath}:${range.start.line + 1}`,
+                        range,
+                    } : null)}
+                    annotationRanges={(analysis?.anchors ?? []).flatMap((anchor) => {
+                        const value = anchor as { fileId?: string; currentRange?: SelectedCodeRange['range'] | null; range?: SelectedCodeRange['range'] };
+                        const file = (analysis?.baselines ?? []).flatMap((baseline) => {
+                            const base = baseline as { files?: Array<{ fileId: string; relPath: string }> };
+                            return base.files ?? [];
+                        }).find((candidate) => candidate.fileId === value.fileId && candidate.relPath === document.relPath);
+                        return file ? [value.currentRange ?? value.range].filter((item): item is SelectedCodeRange['range'] => item !== undefined && item !== null) : [];
+                    })}
                 />
             </>
         );
@@ -453,6 +715,10 @@ export function App(): JSX.Element {
                         commands.updateSettings(context, next);
                     }
                 }}
+                readOnly={bootstrap?.capabilities.readOnlyShare ?? false}
+                onRecoverAnalysis={(analysisId, kind) => {
+                    if (context) commands.recoverAnalysis(context, analysisId, kind);
+                }}
             />
         );
     }
@@ -466,7 +732,21 @@ export function App(): JSX.Element {
                 </div>
             );
         }
-        return (
+        const activeId = trailState.trail.activeNodeId;
+        const nodes = flattenTrailNodes(trailState.trail.roots);
+        const active = nodes.find((node) => node.id === activeId);
+        const sameSymbol = active ? nodes.filter((node) => node.symbol.name === active.symbol.name
+            && node.symbol.relPath === active.symbol.relPath
+            && node.symbol.anchorLine === active.symbol.anchorLine) : [];
+        const duplicateIndex = sameSymbol.findIndex((node) => node.id === activeId);
+        const focusDuplicate = (index: number): void => {
+            const node = sameSymbol[(index + sameSymbol.length) % sameSymbol.length];
+            if (!node) return;
+            commands.setActiveNode(context, node.id);
+            recordNavigation({ pane: 'trail', trailId: trailState.trail?.id, nodeId: node.id });
+        };
+        return (<>
+            {sameSymbol.length > 1 ? <div className="doc-bar"><span>{`같은 심볼 ${duplicateIndex + 1}/${sameSymbol.length}`}</span><button type="button" onClick={() => focusDuplicate(duplicateIndex - 1)}>이전</button><button type="button" onClick={() => focusDuplicate(duplicateIndex + 1)}>다음</button></div> : null}
             <TrailView
                 trail={trailState.trail}
                 busyNodeIds={trailState.busyNodeIds}
@@ -493,7 +773,18 @@ export function App(): JSX.Element {
                     }
                 }}
                 onIdentifierClick={onIdentifierClick}
-                onFocusNode={(nodeId) => commands.setActiveNode(context, nodeId)}
+                onRangeSelect={(node, range) => {
+                    if (node.symbol.documentId) setSelectedRange({
+                        documentId: node.symbol.documentId,
+                        label: `${node.symbol.displayPath}:${range.start.line + 1}`,
+                        range,
+                    });
+                    setPane('analysis');
+                }}
+                onFocusNode={(nodeId) => {
+                    commands.setActiveNode(context, nodeId);
+                    recordNavigation({ pane: 'trail', trailId: trailState.trail?.id, nodeId });
+                }}
                 onClear={() => commands.clear(context)}
                 onExportMarkdown={() => commands.exportMarkdown(context)}
                 onChooseCandidate={(choiceId, candidateId) => {
@@ -504,6 +795,195 @@ export function App(): JSX.Element {
                 onSetMode={(mode) => commands.setMode(context, mode)}
                 onNodeUi={(nodeId, patch) => commands.setNodeUi(context, nodeId, patch)}
             />
+        </>
         );
     }
+
+    function renderAnalysisPane(): JSX.Element {
+        return (
+            <AnalysisPanel
+                analyses={analyses}
+                analysis={analysis}
+                activeTrailId={trailState.activeTrailId}
+                activeNodeId={trailState.trail?.activeNodeId ?? null}
+                selectedRange={selectedRange}
+                author={author}
+                persistedRevision={persistedRevision}
+                readOnly={bootstrap?.capabilities.readOnlyShare ?? false}
+                sharePreview={sharePreview}
+                importPreview={importPreview}
+                aiCapability={bootstrap?.capabilities.ai ?? { enabled: false, provider: 'ollama', model: '', maxInputBytes: 0 }}
+                aiDraft={aiDraft}
+                aiBusy={aiBusy}
+                comparison={anchorComparison}
+                onSelect={(analysisId) => void api.analysis(analysisId).then((value) => {
+                    setAnalysis(value); setPersistedRevision(value.revision); setAnchorComparison(null);
+                })}
+                onCreateAnalysis={(title, purpose) => {
+                    if (context) commands.createAnalysis(context, {
+                        title, purpose,
+                        trailIds: trailState.activeTrailId ? [trailState.activeTrailId] : [],
+                        author,
+                    });
+                }}
+                onAuthorName={(displayName) => setAuthor((current) => ({ ...current, displayName }))}
+                onCreateAnnotation={(value) => {
+                    if (!context || !analysis) return;
+                    if ('documentId' in value.target) {
+                        pendingAnnotation.current = { body: value.body, kind: value.kind, tags: value.tags };
+                        commands.captureAnchor(context, {
+                            analysisId: analysis.id,
+                            documentId: value.target.documentId,
+                            range: value.target.range,
+                        });
+                    } else {
+                        commands.createAnnotation(context, {
+                            analysisId: analysis.id, target: value.target as unknown as Record<string, unknown>,
+                            body: value.body, kind: value.kind, tags: value.tags, author,
+                        });
+                    }
+                }}
+                onUpdateAnnotation={(annotationId, baseVersion, patch) => {
+                    if (context && analysis) commands.updateAnnotation(context, {
+                        analysisId: analysis.id, annotationId, baseVersion, actorId: author.id, patch,
+                    });
+                }}
+                onDeleteAnnotation={(annotationId, baseVersion) => {
+                    if (context && analysis) commands.deleteAnnotation(context, {
+                        analysisId: analysis.id, annotationId, baseVersion, actorId: author.id,
+                    });
+                }}
+                onRestoreAnnotation={(annotationId, baseVersion) => {
+                    if (context && analysis) commands.restoreAnnotation(context, {
+                        analysisId: analysis.id, annotationId, baseVersion, actorId: author.id,
+                    });
+                }}
+                onReply={(annotationId, body) => {
+                    if (context && analysis) commands.replyAnnotation(context, { analysisId: analysis.id, annotationId, body, author });
+                }}
+                onReview={(target, state, evidenceIds) => {
+                    if (!context || !analysis || target.kind !== 'range') return;
+                    const anchor = (analysis.anchors as Array<{ id: string; baselineId: string }>).find((item) => item.id === target.anchorId);
+                    if (anchor) commands.setReview(context, {
+                        analysisId: analysis.id, target: target as unknown as Record<string, unknown>, baselineId: anchor.baselineId,
+                        state, authorId: author.id, evidenceIds,
+                    });
+                }}
+                onRecheck={() => {
+                    if (context && analysis) commands.recheckAnchors(context, {
+                        analysisId: analysis.id,
+                        anchorIds: (analysis.anchors as Array<{ id: string }>).map((item) => item.id),
+                        actorId: author.id,
+                    });
+                }}
+                onCreateWalkthrough={() => {
+                    if (!context || !analysis) return;
+                    commands.updateWalkthrough(context, {
+                        analysisId: analysis.id, title: '안내 순서', actorId: author.id,
+                        steps: analysis.annotations.filter((item) => item.deletedAt === null).map((item) => ({
+                            id: crypto.randomUUID(), title: item.body.split(/\r?\n/)[0]?.slice(0, 80) || '기록',
+                            body: item.body, annotationId: item.id, target: item.target, baselineId: null,
+                        })),
+                    });
+                }}
+                onUpdateWalkthrough={(walkthrough) => {
+                    if (!context || !analysis) return;
+                    commands.updateWalkthrough(context, {
+                        analysisId: analysis.id, walkthroughId: walkthrough.id,
+                        baseVersion: walkthrough.version, title: walkthrough.title,
+                        steps: walkthrough.steps, actorId: author.id,
+                    });
+                }}
+                onPrepareShare={(includeCode) => {
+                    if (context && analysis) commands.prepareShare(context, analysis.id, {
+                        includeCode, includeAuthors: true, includeReplies: true, includeBoardLayout: false,
+                    });
+                }}
+                onExport={(planId, format) => { if (context) commands.exportShare(context, planId, format); }}
+                onChooseImport={(file) => {
+                    if (!context || file.size > 32 * 1024 * 1024) { setError('공유 파일이 너무 크다.'); return; }
+                    void file.arrayBuffer().then(async (buffer) => {
+                        const bytes = new Uint8Array(buffer);
+                        const digest = await crypto.subtle.digest('SHA-256', bytes);
+                        pendingUpload.current = bytes;
+                        commands.uploadStart(context, bytes.length, [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join(''));
+                    });
+                }}
+                onCommitImport={(uploadId) => { if (context) commands.importCommit(context, uploadId); }}
+                onCommitMerge={(planId) => { if (context) commands.mergeCommit(context, planId, author.id); }}
+                onGenerateAi={(purpose) => {
+                    if (!context || !analysis || !selectedRange || aiBusy) return;
+                    const requestId = crypto.randomUUID();
+                    pendingAiRequest.current = requestId;
+                    setAiDraft(null);
+                    setAiBusy(true);
+                    setError(null);
+                    commands.generateAiDraft(context, {
+                        requestId,
+                        analysisId: analysis.id,
+                        documentId: selectedRange.documentId,
+                        range: selectedRange.range,
+                        purpose,
+                    });
+                }}
+                onCancelAi={() => {
+                    if (context && pendingAiRequest.current) commands.cancelAiDraft(context, pendingAiRequest.current);
+                }}
+                onAcceptAi={(draftId) => {
+                    if (context && analysis) commands.acceptAiDraft(context, { analysisId: analysis.id, draftId, author });
+                }}
+                onSaveDraft={(draftId, target, body) => {
+                    if (context && analysis) commands.saveDraft(context, {
+                        analysisId: analysis.id, draftId, target, body,
+                    });
+                }}
+                onUpdatePlan={(purpose, goals, importantLocations) => {
+                    if (context && analysis) commands.updateAnalysisPlan(context, {
+                        analysisId: analysis.id, baseRevision: analysis.revision, purpose,
+                        goals, importantLocations, actorId: author.id,
+                    });
+                }}
+                onNavigateTarget={navigateAnalysisTarget}
+                onCompareAnchor={(anchorId) => {
+                    if (!analysis) return;
+                    setError(null);
+                    void api.anchorComparison(analysis.id, anchorId)
+                        .then(setAnchorComparison)
+                        .catch((cause: unknown) => setError(cause instanceof ApiError ? cause.message : '코드를 비교하지 못했다.'));
+                }}
+                onCloseComparison={() => setAnchorComparison(null)}
+            />
+        );
+    }
+}
+
+function flattenTrailNodes(roots: TrailNodeView[]): TrailNodeView[] {
+    const result: TrailNodeView[] = [];
+    const stack = [...roots].reverse();
+    while (stack.length > 0) {
+        const node = stack.pop();
+        if (!node) break;
+        result.push(node);
+        stack.push(...node.children.slice().reverse());
+    }
+    return result;
+}
+
+async function downloadProtected(url: string, fileName: string): Promise<void> {
+    const token = currentToken();
+    if (!token) throw new Error('세션 토큰이 없다.');
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) throw new Error('다운로드 실패');
+    const href = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = href; link.download = fileName; link.click();
+    URL.revokeObjectURL(href);
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+    let binary = '';
+    for (let offset = 0; offset < bytes.length; offset += 32_768) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
+    }
+    return btoa(binary);
 }

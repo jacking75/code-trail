@@ -1,0 +1,804 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233767d6'/%3E%3Cpath d='M9 9h14v4H13v6h10v4H9z' fill='white'/%3E%3C/svg%3E">
+  <title>Code Trail — 코드 이해·기록·공유 목업</title>
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --raised: #f1f3f8;
+      --ink: #1e2433;
+      --muted: #6c7486;
+      --faint: #939bad;
+      --line: #dfe3eb;
+      --line-strong: #cbd1dd;
+      --blue: #3767d6;
+      --blue-soft: #edf3ff;
+      --blue-mid: #d7e4ff;
+      --green: #287a51;
+      --green-soft: #eaf7ef;
+      --amber: #9b6510;
+      --amber-soft: #fff5dc;
+      --red: #b34254;
+      --red-soft: #fff0f2;
+      --purple: #6d55be;
+      --purple-soft: #f3efff;
+      --cyan: #217687;
+      --cyan-soft: #e8f7f9;
+      --shadow: 0 12px 36px rgba(39, 49, 70, .12);
+      --sans: Inter, Pretendard, "Noto Sans KR", "Segoe UI", sans-serif;
+      --mono: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-width: 1080px; height: 100%; }
+    body { color: var(--ink); background: #e9ecf2; font-family: var(--sans); font-size: 13px; overflow: hidden; }
+    button, input, select, textarea { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+      outline: 2px solid var(--blue); outline-offset: 2px;
+    }
+    .hidden { display: none !important; }
+
+    .prototype-bar {
+      height: 44px; display: flex; align-items: center; gap: 18px; padding: 0 16px;
+      background: #20263a; color: #e9edfa; border-bottom: 1px solid #131827;
+    }
+    .prototype-bar strong { font-size: 13px; white-space: nowrap; }
+    .prototype-bar .hint { color: #aeb7d1; font-size: 12px; white-space: nowrap; }
+    .scene-switch { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+    .scene-switch button {
+      padding: 6px 11px; border: 1px solid #424b68; border-radius: 6px; background: transparent;
+      color: #cbd2e6; cursor: pointer;
+    }
+    .scene-switch button.active { background: #eef3ff; color: #25355c; border-color: #eef3ff; font-weight: 700; }
+
+    .app { height: calc(100vh - 44px); display: flex; flex-direction: column; background: var(--bg); }
+    .app-bar {
+      height: 46px; flex: 0 0 46px; display: flex; align-items: center; gap: 10px; padding: 0 14px;
+      background: var(--panel); border-bottom: 1px solid var(--line);
+    }
+    .brand { color: var(--blue); font-weight: 800; letter-spacing: -.2px; }
+    .project { color: var(--muted); padding-right: 8px; border-right: 1px solid var(--line); }
+    .trail-select { display: flex; align-items: center; gap: 6px; }
+    .trail-select label { color: var(--muted); }
+    select, input[type="text"], .search-box, textarea {
+      border: 1px solid var(--line-strong); border-radius: 5px; background: var(--panel); color: var(--ink);
+    }
+    select { padding: 5px 26px 5px 8px; }
+    .save-state { display: flex; align-items: center; gap: 5px; color: var(--green); font-size: 12px; }
+    .save-state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #55b984; }
+    .grow { flex: 1; }
+    .conn { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 5px; }
+    .conn::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #83c65c; }
+
+    .btn {
+      border: 1px solid var(--line-strong); background: var(--panel); border-radius: 5px; padding: 5px 9px;
+      cursor: pointer; white-space: nowrap;
+    }
+    .btn:hover { border-color: #8fa9e8; background: #fafcff; }
+    .btn.primary { color: #fff; background: var(--blue); border-color: var(--blue); font-weight: 700; }
+    .btn.primary:hover { background: #2f5ec9; }
+    .btn.soft { background: var(--blue-soft); border-color: var(--blue-mid); color: #244fba; }
+    .btn.ghost { background: transparent; border-color: transparent; }
+    .btn.danger { color: var(--red); }
+    .btn.icon { width: 29px; height: 29px; padding: 0; display: inline-grid; place-items: center; }
+    .btn:disabled { opacity: .45; cursor: default; }
+
+    .app-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+    .sidebar { background: #f3f5f9; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+    .side-tabs { display: grid; grid-template-columns: 1fr 1fr; padding: 8px 8px 0; gap: 4px; }
+    .side-tab { border: 0; background: transparent; padding: 7px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
+    .side-tab.active { color: var(--blue); border-bottom-color: var(--blue); font-weight: 700; }
+    .side-search { padding: 8px; border-bottom: 1px solid var(--line); }
+    .search-box { width: 100%; padding: 7px 9px; background: var(--panel); }
+    .tree-list, .change-list { padding: 7px 0; overflow: auto; flex: 1; min-height: 0; }
+    .folder-label { padding: 7px 11px 4px; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .06em; }
+    .file-row {
+      width: 100%; border: 0; background: transparent; display: flex; align-items: center; gap: 7px;
+      padding: 5px 10px; cursor: pointer; text-align: left;
+    }
+    .file-row:hover { background: #e9edf5; }
+    .file-row.active { background: #dfe8fb; color: #234eae; }
+    .indent-1 { padding-left: 24px; }
+    .indent-2 { padding-left: 40px; }
+    .file-icon { width: 14px; color: var(--muted); text-align: center; }
+    .file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-state { margin-left: auto; font-family: var(--mono); font-size: 11px; font-weight: 800; }
+    .file-state.m { color: var(--amber); }
+    .file-state.a { color: var(--green); }
+    .file-state.u { color: var(--purple); }
+    .changed-count { margin-left: auto; color: var(--muted); font-size: 11px; }
+    .review-mini { margin: 8px; padding: 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+    .review-mini .top { display: flex; justify-content: space-between; margin-bottom: 8px; font-weight: 700; }
+    .meter { height: 6px; border-radius: 8px; background: #e7eaf1; overflow: hidden; }
+    .meter > span { display: block; height: 100%; width: 60%; background: linear-gradient(90deg, #4775dd, #69a0ff); }
+    .review-mini p { margin: 7px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+
+    .workspace { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--panel); }
+    .pane-tabs { height: 39px; display: flex; align-items: end; gap: 2px; padding: 0 10px; border-bottom: 1px solid var(--line); background: #fafbfc; }
+    .pane-tab { border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 10px 13px 8px; color: var(--muted); cursor: pointer; }
+    .pane-tab.active { color: var(--blue); border-bottom-color: var(--blue); font-weight: 700; }
+    .tab-count { display: inline-block; min-width: 17px; margin-left: 4px; padding: 1px 5px; border-radius: 9px; background: #e9edf5; color: var(--muted); font-size: 10px; }
+
+    .pane { flex: 1; min-height: 0; display: none; }
+    .pane.active { display: flex; flex-direction: column; }
+    .trail-toolbar {
+      min-height: 42px; display: flex; align-items: center; gap: 6px; padding: 6px 10px;
+      border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap;
+    }
+    .toolbar-sep { width: 1px; height: 20px; background: var(--line); margin: 0 2px; }
+    .filter-input { width: 170px; padding: 6px 8px; }
+    .toolbar-meta { color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .breadcrumb { min-height: 32px; display: flex; align-items: center; gap: 5px; padding: 5px 11px; border-bottom: 1px solid var(--line); color: var(--muted); }
+    .breadcrumb button { border: 0; background: transparent; color: var(--blue); padding: 1px 2px; cursor: pointer; }
+    .crumb-sep { color: #a8afbd; }
+
+    .trail-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(640px, 1fr) 350px; }
+    .trail-layout.notes-closed { grid-template-columns: minmax(640px, 1fr) 0; }
+    .trail-layout.notes-closed .notes-panel { display: none; }
+    .trail-canvas { min-width: 0; min-height: 0; overflow: auto; background-color: #fbfcfe; background-image: radial-gradient(#d9deea 0.65px, transparent .65px); background-size: 18px 18px; }
+    .canvas-inner { min-width: 930px; padding: 14px 18px 90px; }
+
+    .goal-card { display: grid; grid-template-columns: auto minmax(260px, 1fr) auto; gap: 12px; align-items: center; max-width: 980px; margin: 0 auto 14px; padding: 10px 12px; border: 1px solid #d8e2f8; border-radius: 8px; background: rgba(244, 248, 255, .96); }
+    .goal-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: var(--blue-mid); color: var(--blue); font-weight: 900; }
+    .goal-copy strong { display: block; margin-bottom: 2px; font-size: 12px; color: #284889; }
+    .goal-copy span { line-height: 1.4; }
+    .goal-progress { text-align: right; }
+    .goal-progress strong { font-size: 15px; }
+    .goal-progress small { display: block; color: var(--muted); margin-top: 2px; }
+
+    .node-tree { display: flex; flex-direction: column; align-items: center; }
+    .node-row { display: flex; justify-content: center; align-items: flex-start; gap: 24px; position: relative; padding-top: 28px; }
+    .node-row::before { content: ""; position: absolute; top: 0; left: 50%; width: 1px; height: 17px; background: #bfc8da; }
+    .node-row::after { content: ""; position: absolute; top: 17px; left: 25%; right: 25%; height: 1px; background: #bfc8da; }
+    .node-wrap { position: relative; }
+    .node-wrap.child::before { content: ""; position: absolute; top: -11px; left: 50%; width: 1px; height: 11px; background: #bfc8da; }
+    .code-node { width: 590px; border: 1px solid #aebfe7; border-radius: 7px; background: var(--panel); box-shadow: 0 3px 10px rgba(54, 70, 108, .07); overflow: hidden; }
+    .code-node.compact { width: 440px; }
+    .node-head { min-height: 34px; display: flex; align-items: center; gap: 7px; padding: 5px 7px; background: #f3f6fd; border-bottom: 1px solid #d8e1f5; cursor: pointer; }
+    .node-head:hover { background: #edf2fd; }
+    .fold { color: var(--blue); width: 15px; text-align: center; }
+    .node-index { width: 19px; height: 19px; display: grid; place-items: center; border: 1px solid #8ca8e8; border-radius: 50%; color: var(--blue); font-size: 10px; }
+    .kind { font-size: 9px; letter-spacing: .05em; font-weight: 800; color: var(--blue); background: #e5edff; border-radius: 3px; padding: 2px 4px; }
+    .symbol-name { font-family: var(--mono); font-weight: 800; }
+    .signature { font-family: var(--mono); color: #66708a; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .path { color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .node-actions { display: flex; gap: 2px; margin-left: auto; }
+    .node-action { width: 23px; height: 23px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #62708c; cursor: pointer; }
+    .node-action:hover { background: #dde7fb; color: var(--blue); }
+    .status-pill, .tag, .type-pill { display: inline-flex; align-items: center; gap: 4px; border-radius: 10px; padding: 2px 7px; white-space: nowrap; font-size: 10px; font-weight: 700; }
+    .status-pill.reviewing { color: var(--amber); background: var(--amber-soft); }
+    .status-pill.done { color: var(--green); background: var(--green-soft); }
+    .status-pill.rereview { color: var(--red); background: var(--red-soft); }
+    .status-pill.moved { color: var(--purple); background: var(--purple-soft); }
+    .origin { padding: 5px 10px; border-bottom: 1px solid var(--line); color: var(--blue); font-size: 11px; background: #fbfcff; }
+    .node-body { position: relative; max-height: 260px; overflow: auto; background: #fff; }
+    .code-node.collapsed .node-body, .code-node.collapsed .origin { display: none; }
+    .code-lines { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; line-height: 1.62; }
+    .code-lines td { vertical-align: top; white-space: pre; }
+    .line-no { width: 42px; padding: 0 10px 0 6px; text-align: right; color: #a0a7b5; user-select: none; border-right: 1px solid #f0f2f6; }
+    .line-code { position: relative; padding: 0 38px 0 10px; }
+    .code-lines tr.selected .line-no { color: var(--blue); background: #e9f0ff; }
+    .code-lines tr.selected .line-code { background: #edf3ff; }
+    .code-lines tr.changed-old .line-code, .code-lines tr.changed-old .line-no { background: #fff1f2; }
+    .code-lines tr.changed-new .line-code, .code-lines tr.changed-new .line-no { background: #eaf7ef; }
+    .kw { color: #8b52c7; } .fn { color: #225fc4; } .type { color: #147a7c; }
+    .str { color: #a45f21; } .comment { color: #88909f; } .num { color: #9b4f80; }
+    .clickable { color: #225fc4; text-decoration: underline dotted #8da6dd; text-underline-offset: 2px; cursor: pointer; }
+    .call-index { color: var(--blue); font-size: 10px; vertical-align: super; margin-right: 1px; }
+    .anchor-marker {
+      position: absolute; right: 6px; top: 1px; min-width: 24px; height: 18px; border: 0; border-radius: 9px;
+      background: #5e6ec7; color: #fff; font-size: 10px; font-weight: 800; cursor: pointer;
+    }
+    .anchor-marker.question { background: #aa7418; }
+    .anchor-marker.resolved { background: #3c8b60; }
+    .node-foot { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-top: 1px solid var(--line); background: #fafbfc; }
+    .node-foot .review-select { margin-left: auto; padding: 3px 24px 3px 7px; font-size: 11px; }
+    .mini-anchor { color: var(--muted); font-size: 10px; }
+    .node-add-record { border: 0; background: transparent; color: var(--blue); cursor: pointer; font-weight: 700; font-size: 11px; }
+
+    .notes-panel { border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+    .notes-head { height: 44px; display: flex; align-items: center; gap: 5px; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+    .notes-tab { border: 0; background: transparent; color: var(--muted); padding: 6px 7px; cursor: pointer; }
+    .notes-tab.active { color: var(--blue); font-weight: 800; }
+    .notes-tools { padding: 8px 10px; border-bottom: 1px solid var(--line); }
+    .notes-tools .search-box { width: 100%; }
+    .chips { display: flex; gap: 5px; margin-top: 7px; flex-wrap: wrap; }
+    .chip { border: 1px solid var(--line); border-radius: 11px; background: var(--panel); padding: 3px 7px; color: var(--muted); font-size: 10px; cursor: pointer; }
+    .chip.active { color: #284fae; border-color: #afc4f1; background: var(--blue-soft); }
+    .notes-list { flex: 1; min-height: 0; overflow: auto; padding: 8px; }
+    .note-card { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 7px; background: var(--panel); cursor: pointer; overflow: hidden; }
+    .note-card:hover { border-color: #b7c7e8; }
+    .note-card.active { border-color: #7294dd; box-shadow: 0 0 0 1px #d7e3ff inset; }
+    .note-card.stale { border-color: #e1b4bc; }
+    .note-top { display: flex; align-items: center; gap: 6px; padding: 8px 9px 3px; }
+    .type-pill.explain { color: #4b5cb2; background: #eef0ff; }
+    .type-pill.question { color: var(--amber); background: var(--amber-soft); }
+    .type-pill.concern { color: var(--red); background: var(--red-soft); }
+    .type-pill.conclusion { color: var(--green); background: var(--green-soft); }
+    .note-anchor { margin-left: auto; color: var(--muted); font-size: 10px; }
+    .note-body { padding: 5px 9px 8px; line-height: 1.5; }
+    .note-body p { margin: 0; }
+    .note-meta { display: flex; gap: 7px; margin-top: 7px; color: var(--faint); font-size: 10px; }
+    .note-extra { display: none; border-top: 1px solid var(--line); padding: 8px 9px; background: #fafbfe; }
+    .note-card.active .note-extra { display: block; }
+    .reply { border-left: 2px solid #cbd7f0; padding-left: 8px; margin: 2px 0 8px; line-height: 1.45; }
+    .reply small { display: block; color: var(--faint); margin-top: 3px; }
+    .reply-input { width: 100%; padding: 7px; resize: vertical; min-height: 52px; }
+    .note-actions { display: flex; gap: 5px; margin-top: 6px; }
+    .notes-empty { color: var(--muted); text-align: center; padding: 30px 12px; }
+    .composer { border-top: 1px solid var(--line); background: #fbfcff; padding: 10px; box-shadow: 0 -6px 20px rgba(40, 50, 75, .06); }
+    .composer-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+    .composer-title strong { font-size: 12px; }
+    .composer textarea { width: 100%; min-height: 84px; padding: 8px; resize: vertical; line-height: 1.45; }
+    .composer-row { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
+    .composer-row select { padding-top: 4px; padding-bottom: 4px; }
+    .draft-state { color: var(--amber); font-size: 10px; }
+
+    .walkthrough-panel { display: none; flex: 1; overflow: auto; padding: 9px; }
+    .notes-panel.walk-mode .notes-tools, .notes-panel.walk-mode .notes-list, .notes-panel.walk-mode .composer { display: none; }
+    .notes-panel.walk-mode .walkthrough-panel { display: block; }
+    .walk-step { display: grid; grid-template-columns: 26px 1fr; gap: 8px; padding: 8px 5px; border-bottom: 1px solid var(--line); cursor: pointer; }
+    .walk-step.active { background: var(--purple-soft); border-radius: 7px; border-bottom-color: transparent; }
+    .step-no { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; border: 1px solid #bdb2e7; color: var(--purple); font-weight: 800; }
+    .walk-step strong { display: block; margin-bottom: 3px; }
+    .walk-step p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .walk-controls { display: flex; gap: 5px; padding: 9px; border-top: 1px solid var(--line); }
+
+    .walkthrough-bar {
+      position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); width: min(660px, 70%);
+      display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid #b9afe4;
+      border-radius: 10px; background: rgba(250, 248, 255, .97); box-shadow: var(--shadow); z-index: 6;
+    }
+    .walkthrough-bar .step { color: var(--purple); font-weight: 800; white-space: nowrap; }
+    .walkthrough-bar .walk-copy { flex: 1; min-width: 0; }
+    .walkthrough-bar .walk-copy strong { display: block; margin-bottom: 2px; }
+    .walkthrough-bar .walk-copy span { color: var(--muted); font-size: 11px; }
+    .trail-pane { position: relative; }
+
+    .code-pane-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(600px, 1fr) 330px; }
+    .doc-area { display: flex; flex-direction: column; min-width: 0; }
+    .doc-bar { min-height: 39px; display: flex; align-items: center; gap: 9px; padding: 6px 12px; border-bottom: 1px solid var(--line); }
+    .doc-path { font-family: var(--mono); font-size: 12px; }
+    .doc-code { flex: 1; overflow: auto; background: #fff; padding: 15px 0; }
+    .doc-code .code-lines { font-size: 13px; line-height: 1.72; }
+    .symbol-panel { border-left: 1px solid var(--line); background: #fafbfc; overflow: auto; }
+    .symbol-panel h3 { margin: 0; padding: 12px; font-size: 12px; border-bottom: 1px solid var(--line); }
+    .symbol-row { display: flex; align-items: center; gap: 6px; padding: 7px 12px; cursor: pointer; }
+    .symbol-row:hover { background: #eef2f9; }
+    .symbol-row.active { background: var(--blue-soft); color: var(--blue); }
+    .symbol-kind { font-size: 9px; color: var(--muted); border: 1px solid var(--line); border-radius: 3px; padding: 2px 4px; }
+    .symbol-line { margin-left: auto; color: var(--faint); font-size: 10px; }
+    .selection-popover { position: absolute; right: 20px; top: 122px; display: flex; gap: 5px; padding: 6px; border-radius: 7px; background: #26304b; color: #fff; box-shadow: var(--shadow); }
+    .selection-popover button { border: 0; background: transparent; color: #fff; padding: 4px 7px; cursor: pointer; }
+
+    .changes-pane { background: #f8f9fc; }
+    .changes-head { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+    .changes-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 300px minmax(600px, 1fr); }
+    .change-files { border-right: 1px solid var(--line); background: var(--panel); overflow: auto; }
+    .change-file { width: 100%; display: grid; grid-template-columns: auto 1fr auto; gap: 8px; text-align: left; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--line); background: transparent; cursor: pointer; }
+    .change-file.active { background: var(--blue-soft); }
+    .diff-stat { font-family: var(--mono); font-size: 11px; }
+    .plus { color: var(--green); } .minus { color: var(--red); }
+    .diff-area { display: flex; flex-direction: column; min-width: 0; background: #fff; }
+    .diff-title { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+    .diff-grid { flex: 1; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
+    .diff-side { overflow: auto; border-right: 1px solid var(--line); }
+    .diff-side:last-child { border-right: 0; }
+    .diff-side h4 { position: sticky; top: 0; z-index: 2; margin: 0; padding: 7px 10px; background: #f5f6f9; border-bottom: 1px solid var(--line); color: var(--muted); font-weight: 600; }
+
+    .diagnostics { padding: 22px; overflow: auto; background: #f8f9fc; }
+    .diagnostics h2 { margin: 0 0 6px; font-size: 18px; }
+    .diagnostics > p { margin: 0 0 16px; color: var(--muted); }
+    .diag-grid { display: grid; grid-template-columns: repeat(2, minmax(320px, 1fr)); gap: 12px; }
+    .diag-card { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 13px; }
+    .diag-card h3 { margin: 0 0 9px; font-size: 13px; display: flex; justify-content: space-between; }
+    .diag-card dl { display: grid; grid-template-columns: 100px 1fr; gap: 7px; margin: 0; font-size: 11px; }
+    .diag-card dt { color: var(--muted); }
+    .diag-card dd { margin: 0; }
+
+    .read-banner { display: none; min-height: 42px; align-items: center; gap: 10px; padding: 7px 12px; background: #f5f1ff; border-bottom: 1px solid #d8cff3; color: #51418f; }
+    .read-banner strong { white-space: nowrap; }
+    .read-banner span { color: #6e6299; font-size: 11px; }
+    .scene-read .read-banner { display: flex; }
+    .scene-read .sidebar { display: none; }
+    .scene-read .app-body { grid-template-columns: 1fr; }
+    .scene-read .save-state { display: none; }
+    .scene-read .edit-only { display: none !important; }
+    .scene-read .notes-panel { background: #fbfaff; }
+    .scene-read .app-bar .project { color: var(--purple); }
+    .scene-read .trail-layout { grid-template-columns: minmax(640px, 1fr) 350px; }
+
+    .scene-stale span.stale-only { display: inline-flex !important; }
+    .scene-stale article.stale-only { display: block !important; }
+    .scene-stale .normal-only { display: none !important; }
+    .stale-only { display: none !important; }
+    .scene-stale .goal-card { border-color: #efc1c8; background: #fff7f8; }
+    .scene-stale .goal-icon { color: var(--red); background: var(--red-soft); }
+    .scene-stale .goal-copy strong { color: var(--red); }
+    .scene-stale .code-node.root-node { border-color: #dc919e; }
+    .scene-stale .root-node .node-head { background: #fff1f3; border-bottom-color: #f1c6cd; }
+
+    .modal-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(25, 30, 45, .5); padding: 30px; }
+    .modal { width: min(760px, 90vw); max-height: 88vh; overflow: auto; background: var(--panel); border-radius: 12px; box-shadow: 0 24px 70px rgba(10, 15, 30, .35); }
+    .modal-head { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .modal-head h2 { margin: 0; font-size: 16px; }
+    .modal-body { padding: 16px; }
+    .modal-foot { display: flex; align-items: center; gap: 7px; padding: 12px 16px; border-top: 1px solid var(--line); background: #fafbfc; border-radius: 0 0 12px 12px; }
+    .share-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+    .summary-box { padding: 10px; border: 1px solid var(--line); border-radius: 7px; background: #fafbfc; }
+    .summary-box strong { display: block; font-size: 18px; margin-bottom: 2px; }
+    .summary-box span { color: var(--muted); font-size: 10px; }
+    .option-card { display: flex; align-items: flex-start; gap: 9px; padding: 10px; border: 1px solid var(--line); border-radius: 7px; margin-bottom: 8px; }
+    .option-card input { margin-top: 3px; }
+    .option-card strong { display: block; margin-bottom: 3px; }
+    .option-card p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .privacy-note { display: flex; gap: 9px; padding: 10px; background: var(--amber-soft); border: 1px solid #f0d59a; border-radius: 7px; color: #6f531c; font-size: 11px; line-height: 1.5; }
+    .preview-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 11px; }
+    .preview-table th, .preview-table td { padding: 7px 8px; border: 1px solid var(--line); text-align: left; }
+    .preview-table th { background: #f6f7fa; color: var(--muted); }
+
+    .toast { position: fixed; left: 50%; bottom: 24px; z-index: 80; transform: translateX(-50%); padding: 9px 13px; border-radius: 8px; background: #20283d; color: #fff; box-shadow: var(--shadow); font-size: 12px; }
+
+    @media (max-width: 1250px) {
+      .trail-layout, .scene-read .trail-layout { grid-template-columns: minmax(620px, 1fr) 310px; }
+      .code-node { width: 540px; }
+      .code-node.compact { width: 400px; }
+      .hint { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="prototype-bar">
+    <strong>미래 화면 목업</strong>
+    <span class="hint">현재 구현 위에 계획서의 기록·코드 기준·공유 흐름을 합친 모습이다. 버튼을 눌러 장면과 동작을 확인할 수 있다.</span>
+    <div class="scene-switch" role="group" aria-label="목업 장면">
+      <button class="active" data-scene="author">작성·검토</button>
+      <button data-scene="stale">코드 변경</button>
+      <button data-scene="read">공유 읽기</button>
+    </div>
+  </div>
+
+  <div class="app scene-author" id="app">
+    <header class="app-bar">
+      <span class="brand">Code Trail</span>
+      <span class="project" id="projectLabel">checkout-service</span>
+      <div class="trail-select">
+        <label for="trailSelect">트레일</label>
+        <select id="trailSelect">
+          <option>로그인 중복 처리 검토 (4)</option>
+          <option>결제 실패 복구 (7)</option>
+        </select>
+      </div>
+      <button class="btn icon edit-only" title="새 트레일">＋</button>
+      <button class="btn icon edit-only" title="이름 바꾸기">✎</button>
+      <span class="save-state">디스크 저장됨</span>
+      <span class="grow"></span>
+      <button class="btn" id="importButton">가져오기</button>
+      <button class="btn primary edit-only" id="shareButton">공유</button>
+      <span class="conn">연결됨</span>
+    </header>
+
+    <div class="read-banner">
+      <strong>읽기 전용 공유 묶음</strong>
+      <span>김민준 · 2026-09-09 · 코드 포함 · 무결성 확인됨</span>
+      <span class="grow"></span>
+      <button class="btn soft" id="connectProject">내 프로젝트에 연결</button>
+      <button class="btn" id="makeLocalCopy">로컬 복사본 만들기</button>
+    </div>
+
+    <div class="app-body">
+      <aside class="sidebar">
+        <div class="side-tabs">
+          <button class="side-tab active" data-side="files">파일</button>
+          <button class="side-tab" data-side="changes">변경 4</button>
+        </div>
+        <div class="side-search"><input class="search-box" type="text" placeholder="파일 이름 검색"></div>
+        <div class="tree-list" id="fileList">
+          <div class="folder-label">프로젝트</div>
+          <button class="file-row"><span class="file-icon">▾</span><span class="file-name">src</span></button>
+          <button class="file-row indent-1"><span class="file-icon">▾</span><span class="file-name">auth</span></button>
+          <button class="file-row indent-2 active"><span class="file-icon">TS</span><span class="file-name">login.ts</span><span class="file-state m">M</span></button>
+          <button class="file-row indent-2"><span class="file-icon">TS</span><span class="file-name">session.ts</span><span class="file-state m">M</span></button>
+          <button class="file-row indent-1"><span class="file-icon">▾</span><span class="file-name">store</span></button>
+          <button class="file-row indent-2"><span class="file-icon">TS</span><span class="file-name">token-store.ts</span><span class="file-state a">A</span></button>
+          <button class="file-row indent-1"><span class="file-icon">TS</span><span class="file-name">app.ts</span></button>
+          <button class="file-row"><span class="file-icon">▾</span><span class="file-name">test</span></button>
+          <button class="file-row indent-1"><span class="file-icon">TS</span><span class="file-name">login.test.ts</span><span class="file-state m">M</span></button>
+        </div>
+        <div class="change-list hidden" id="sideChangeList">
+          <div class="folder-label">기준 커밋 → 작업 디렉터리</div>
+          <button class="file-row active"><span class="file-state m">M</span><span class="file-name">src/auth/login.ts</span><span class="changed-count">+18 −6</span></button>
+          <button class="file-row"><span class="file-state m">M</span><span class="file-name">src/auth/session.ts</span><span class="changed-count">+7 −2</span></button>
+          <button class="file-row"><span class="file-state a">A</span><span class="file-name">src/store/token-store.ts</span><span class="changed-count">+44</span></button>
+          <button class="file-row"><span class="file-state m">M</span><span class="file-name">test/login.test.ts</span><span class="changed-count">+21 −3</span></button>
+        </div>
+        <div class="review-mini">
+          <div class="top"><span>검토 진행률</span><span>3 / 5</span></div>
+          <div class="meter"><span></span></div>
+          <p>지정한 코드 범위 5개 중 3개를 확인했다. 재검토가 필요한 범위는 완료에서 제외한다.</p>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <div class="pane-tabs">
+          <button class="pane-tab" data-pane="code">코드</button>
+          <button class="pane-tab active" data-pane="trail">트레일 — 로그인 중복 처리 검토</button>
+          <button class="pane-tab edit-only" data-pane="changes">변경 <span class="tab-count">4</span></button>
+          <button class="pane-tab" data-pane="diagnostics">진단</button>
+        </div>
+
+        <section class="pane code-pane" data-pane-content="code">
+          <div class="code-pane-layout">
+            <div class="doc-area">
+              <div class="doc-bar">
+                <span class="doc-path">src/auth/login.ts</span>
+                <span class="status-pill reviewing">확인 중</span>
+                <span class="grow"></span>
+                <button class="btn soft edit-only" data-open-composer>＋ 선택 범위에 기록</button>
+                <button class="btn edit-only">Ctrl+Alt+T 루트 만들기</button>
+              </div>
+              <div class="doc-code">
+                <table class="code-lines" aria-label="읽기 전용 코드">
+                  <tbody id="fullCode"></tbody>
+                </table>
+              </div>
+              <div class="selection-popover hidden" id="selectionPopover">
+                <button data-open-composer>＋ 기록</button><button>루트 만들기</button><button>복사</button>
+              </div>
+            </div>
+            <aside class="symbol-panel">
+              <h3>문서 심볼 <span style="float:right;color:var(--muted);font-weight:400">4</span></h3>
+              <div class="symbol-row"><span class="symbol-kind">class</span><strong>LoginService</strong><span class="symbol-line">12</span></div>
+              <div class="symbol-row active"><span class="symbol-kind">method</span><span>handleLogin</span><span class="symbol-line">43</span></div>
+              <div class="symbol-row"><span class="symbol-kind">method</span><span>verifyCredentials</span><span class="symbol-line">89</span></div>
+              <div class="symbol-row"><span class="symbol-kind">method</span><span>issueToken</span><span class="symbol-line">118</span></div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="pane trail-pane active" data-pane-content="trail">
+          <div class="trail-toolbar">
+            <button class="btn" id="expandAll">⤢ 전체 펼치기</button>
+            <button class="btn" id="collapseAll">⤡ 전체 접기</button>
+            <button class="btn">⇅ 코드 순서</button>
+            <button class="btn" id="boardToggle">⬚ 보드</button>
+            <span class="toolbar-sep"></span>
+            <input class="filter-input" type="text" placeholder="이름·경로 필터…">
+            <button class="btn soft edit-only" data-open-composer>＋ 기록</button>
+            <button class="btn" id="walkButton">안내 4</button>
+            <button class="btn" id="markdownButton">Markdown</button>
+            <span class="grow"></span>
+            <span class="toolbar-meta">노드 4 · 기록 6 · 미해결 2</span>
+            <button class="btn icon" id="notesToggle" title="기록 목록 접기">◫</button>
+          </div>
+          <div class="breadcrumb"><button>handleLogin</button><span class="crumb-sep">›</span><button>claim</button><span class="crumb-sep">›</span><button>save</button></div>
+          <div class="trail-layout" id="trailLayout">
+            <div class="trail-canvas">
+              <div class="canvas-inner">
+                <div class="goal-card">
+                  <div class="goal-icon">◎</div>
+                  <div class="goal-copy">
+                    <strong id="goalState">검토 목표</strong>
+                    <span id="goalText">동시에 들어온 로그인 요청이 토큰을 중복 발급하거나 이미 쓴 nonce를 다시 저장하지 않는지 확인한다.</span>
+                  </div>
+                  <div class="goal-progress"><strong>3 / 5</strong><small>지정한 범위 확인함</small></div>
+                </div>
+
+                <div class="node-tree" id="nodeTree">
+                  <div class="node-wrap">
+                    <article class="code-node root-node">
+                      <div class="node-head">
+                        <span class="fold">⌄</span><span class="kind">METHOD</span><span class="symbol-name">handleLogin</span>
+                        <span class="signature">(request: LoginRequest) → Promise&lt;Token&gt;</span>
+                        <span class="path">src/auth/login.ts:43</span>
+                        <span class="status-pill reviewing normal-only">확인 중</span>
+                        <span class="status-pill rereview stale-only">재검토 필요</span>
+                        <div class="node-actions edit-only"><button class="node-action" title="중요 위치">⚑</button><button class="node-action" title="외부 에디터">↗</button><button class="node-action" title="새 루트">⇱</button><button class="node-action" title="삭제">×</button></div>
+                      </div>
+                      <div class="node-body">
+                        <table class="code-lines"><tbody id="rootCode"></tbody></table>
+                      </div>
+                      <div class="node-foot">
+                        <button class="node-add-record edit-only" data-open-composer>＋ 기록</button>
+                        <span class="mini-anchor">선택 범위 63–67 · 기록 3</span>
+                        <span class="status-pill moved stale-only">본문 변경</span>
+                        <select class="review-select edit-only" aria-label="검토 상태"><option>확인 중</option><option>미검토</option><option>확인함</option><option>재검토 필요</option></select>
+                      </div>
+                    </article>
+                  </div>
+                  <div class="node-row">
+                    <div class="node-wrap child">
+                      <article class="code-node compact">
+                        <div class="node-head"><span class="fold">⌄</span><span class="node-index">1</span><span class="kind">METHOD</span><span class="symbol-name">claim</span><span class="path">src/store/token-store.ts:21</span><span class="status-pill done">확인함</span><div class="node-actions edit-only"><button class="node-action">↗</button><button class="node-action">×</button></div></div>
+                        <div class="origin">↑ handleLogin 의 64번째 줄 claim</div>
+                        <div class="node-body"><table class="code-lines"><tbody id="claimCode"></tbody></table></div>
+                        <div class="node-foot"><button class="node-add-record edit-only" data-open-composer>＋ 기록</button><span class="mini-anchor">기록 1</span></div>
+                      </article>
+                    </div>
+                    <div class="node-wrap child">
+                      <article class="code-node compact">
+                        <div class="node-head"><span class="fold">⌄</span><span class="node-index">2</span><span class="kind">METHOD</span><span class="symbol-name">verifyCredentials</span><span class="path">src/auth/login.ts:89</span><span class="status-pill done">확인함</span><div class="node-actions edit-only"><button class="node-action">↗</button><button class="node-action">×</button></div></div>
+                        <div class="origin">↑ handleLogin 의 59번째 줄 verifyCredentials</div>
+                        <div class="node-body"><table class="code-lines"><tbody id="verifyCode"></tbody></table></div>
+                        <div class="node-foot"><button class="node-add-record edit-only" data-open-composer>＋ 기록</button><span class="mini-anchor">기록 1 · 결론</span></div>
+                      </article>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside class="notes-panel" id="notesPanel">
+              <div class="notes-head">
+                <button class="notes-tab active" data-notes-tab="records">기록 6</button>
+                <button class="notes-tab" data-notes-tab="walk">안내 순서 4</button>
+                <span class="grow"></span>
+                <button class="btn icon" id="closeNotes" title="기록 목록 접기">×</button>
+              </div>
+              <div class="notes-tools">
+                <input class="search-box" type="text" placeholder="기록 검색…">
+                <div class="chips"><button class="chip active">전체 6</button><button class="chip">질문 2</button><button class="chip">우려 1</button><button class="chip">미해결 2</button></div>
+              </div>
+              <div class="notes-list">
+                <article class="note-card active" data-note="1">
+                  <div class="note-top"><span class="type-pill concern">우려 · 열림</span><span class="note-anchor">login.ts 63–67</span></div>
+                  <div class="note-body"><p>검사와 저장 사이에 다른 요청이 들어오면 같은 nonce가 두 번 통과할 수 있다.</p><div class="note-meta"><span>#동시성</span><span>김민준</span><span>14:32</span></div></div>
+                  <div class="note-extra"><div class="reply">저장소의 <code>claim</code>이 원자적으로 처리하는지 확인이 필요하다.<small>박서연 · 14:41</small></div><textarea class="reply-input" placeholder="답글 추가…"></textarea><div class="note-actions"><button class="btn soft">답글 저장</button><button class="btn">해결됨으로 표시</button></div></div>
+                </article>
+                <article class="note-card" data-note="2">
+                  <div class="note-top"><span class="type-pill explain">설명</span><span class="note-anchor">claim · 함수 전체</span></div>
+                  <div class="note-body"><p><code>SET NX</code> 한 번으로 nonce 소유권을 가져와 검사와 저장을 분리하지 않는다.</p><div class="note-meta"><span>#근거</span><span>김민준</span><span>14:38</span></div></div>
+                  <div class="note-extra"><div class="reply">Redis 응답이 false면 이미 처리 중인 요청으로 본다.<small>김민준 · 14:39</small></div></div>
+                </article>
+                <article class="note-card stale normal-only" data-note="3">
+                  <div class="note-top"><span class="type-pill question">질문 · 열림</span><span class="note-anchor">login.ts 70</span></div>
+                  <div class="note-body"><p>토큰 발급이 실패하면 획득한 nonce를 되돌려 재시도를 허용해야 하는가?</p><div class="note-meta"><span>#실패경로</span><span>박서연</span><span>14:44</span></div></div>
+                </article>
+                <article class="note-card stale-only" data-note="4">
+                  <div class="note-top"><span class="type-pill concern">우려 · 재확인</span><span class="note-anchor">위치 이동 · 63→66</span></div>
+                  <div class="note-body"><p>기준 코드 뒤에 감사 로그가 추가되어 기록 범위가 달라졌다. 이전 코드와 현재 코드를 비교해야 한다.</p><div class="note-meta"><span>#코드변경</span><span>기준 a6f431c</span></div></div>
+                  <div class="note-extra"><button class="btn soft" data-pane-jump="changes">이전/현재 코드 비교</button> <button class="btn">현재 위치로 재연결</button></div>
+                </article>
+                <article class="note-card" data-note="5">
+                  <div class="note-top"><span class="type-pill conclusion">결론 · 해결됨</span><span class="note-anchor">verifyCredentials</span></div>
+                  <div class="note-body"><p>비밀번호 비교는 일정 시간 비교 함수를 사용하며 실패 이유를 외부에 구분해 노출하지 않는다.</p><div class="note-meta"><span>#입력경계</span><span>김민준</span><span>15:02</span></div></div>
+                </article>
+                <article class="note-card" data-note="6">
+                  <div class="note-top"><span class="type-pill explain">설명</span><span class="note-anchor">login.test.ts 74–96</span></div>
+                  <div class="note-body"><p>동일 nonce 요청 두 개를 동시에 보내 하나만 성공하는 테스트를 근거로 연결했다.</p><div class="note-meta"><span>#테스트근거</span><span>김민준</span><span>15:06</span></div></div>
+                </article>
+              </div>
+              <div class="walkthrough-panel">
+                <div class="walk-step active"><span class="step-no">1</span><div><strong>로그인 진입점</strong><p>중복 방지 키를 만들기 전 입력 검증을 확인한다.</p></div></div>
+                <div class="walk-step"><span class="step-no">2</span><div><strong>nonce 소유권 획득</strong><p>claim이 검사와 저장을 원자적으로 묶는 근거다.</p></div></div>
+                <div class="walk-step"><span class="step-no">3</span><div><strong>실패 시 해제 정책</strong><p>열린 질문과 재시도 정책을 함께 읽는다.</p></div></div>
+                <div class="walk-step"><span class="step-no">4</span><div><strong>검토 결론</strong><p>확인한 범위와 아직 미확인인 테스트 근거를 정리한다.</p></div></div>
+              </div>
+              <div class="walk-controls hidden"><button class="btn">← 이전</button><button class="btn soft">현재 단계 보기</button><button class="btn">다음 →</button></div>
+              <div class="composer hidden" id="composer">
+                <div class="composer-title"><strong>선택 범위에 기록</strong><button class="btn ghost" id="closeComposer">×</button></div>
+                <textarea id="composerText" placeholder="이 코드에서 이해한 점이나 확인할 질문을 적는다."></textarea>
+                <div class="composer-row"><select><option>설명</option><option>질문</option><option>우려</option><option>결론</option></select><input class="search-box" type="text" placeholder="태그"><span class="grow"></span><span class="draft-state">작성 중</span><button class="btn primary" id="saveRecord">기록 저장</button></div>
+              </div>
+            </aside>
+          </div>
+          <div class="walkthrough-bar hidden" id="walkthroughBar">
+            <span class="step">2 / 4</span><button class="btn icon">←</button><div class="walk-copy"><strong>nonce 소유권 획득</strong><span>claim이 검사와 저장을 원자적으로 묶는 근거를 확인한다.</span></div><button class="btn soft">이 위치 보기</button><button class="btn icon">→</button><button class="btn icon" id="closeWalk">×</button>
+          </div>
+        </section>
+
+        <section class="pane changes-pane" data-pane-content="changes">
+          <div class="changes-head"><strong>변경 목록</strong><select><option>기준 커밋 a6f431c → 작업 디렉터리</option><option>두 커밋 비교…</option></select><span class="toolbar-meta">수정 3 · 추가 1 · +90 −11</span><span class="grow"></span><button class="btn">↻ 다시 읽기</button></div>
+          <div class="changes-grid">
+            <div class="change-files">
+              <button class="change-file active"><span class="file-state m">M</span><span>src/auth/login.ts</span><span class="diff-stat"><b class="plus">+18</b> <b class="minus">−6</b></span></button>
+              <button class="change-file"><span class="file-state m">M</span><span>src/auth/session.ts</span><span class="diff-stat"><b class="plus">+7</b> <b class="minus">−2</b></span></button>
+              <button class="change-file"><span class="file-state a">A</span><span>src/store/token-store.ts</span><span class="diff-stat"><b class="plus">+44</b></span></button>
+              <button class="change-file"><span class="file-state m">M</span><span>test/login.test.ts</span><span class="diff-stat"><b class="plus">+21</b> <b class="minus">−3</b></span></button>
+            </div>
+            <div class="diff-area">
+              <div class="diff-title"><span class="doc-path">src/auth/login.ts</span><span class="status-pill rereview">기록 2개 재검토 필요</span><span class="grow"></span><button class="btn soft" data-pane-jump="trail">연결된 기록 보기</button><button class="btn primary">이 범위에서 루트 만들기</button></div>
+              <div class="diff-grid">
+                <div class="diff-side"><h4>기준 코드 · a6f431c</h4><table class="code-lines"><tbody id="oldDiff"></tbody></table></div>
+                <div class="diff-side"><h4>현재 코드 · 작업 디렉터리</h4><table class="code-lines"><tbody id="newDiff"></tbody></table></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="pane" data-pane-content="diagnostics">
+          <div class="diagnostics">
+            <h2>진단</h2><p>프로세스 실행과 실제 코드 탐색 지원 여부를 구분해 보여준다.</p>
+            <div class="diag-grid">
+              <article class="diag-card"><h3><span>TypeScript 언어 서버</span><span class="status-pill done">지원됨</span></h3><dl><dt>상태</dt><dd>준비됨</dd><dt>마지막 확인</dt><dd>documentSymbol · definition 응답</dd><dt>다음 동작</dt><dd>코드 화면에서 바로 탐색할 수 있다.</dd></dl></article>
+              <article class="diag-card"><h3><span>공유 묶음</span><span class="status-pill done">읽기 가능</span></h3><dl><dt>형식</dt><dd>code-trail-share · v1</dd><dt>코드 기준</dt><dd>5개 파일 중 4개 일치</dd><dt>다음 동작</dt><dd>login.ts의 이전/현재 코드를 비교한다.</dd></dl></article>
+              <article class="diag-card"><h3><span>저장</span><span class="status-pill done">정상</span></h3><dl><dt>서버 반영</dt><dd>완료</dd><dt>디스크 저장</dt><dd>15:07:31에 완료</dd><dt>복구</dt><dd>복구할 임시 파일이 없다.</dd></dl></article>
+              <article class="diag-card"><h3><span>외부 에디터</span><span class="status-pill reviewing">선택 필요</span></h3><dl><dt>후보</dt><dd>Visual Studio Code, Cursor</dd><dt>현재 설정</dt><dd>없음</dd><dt>다음 동작</dt><dd>사용할 에디터를 선택한다.</dd></dl></article>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="shareModal" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+    <div class="modal">
+      <div class="modal-head"><h2 id="shareTitle">공유 묶음 만들기</h2><span class="status-pill done">내보낼 수 있음</span><span class="grow"></span><button class="btn icon" data-close-modal>×</button></div>
+      <div class="modal-body">
+        <div class="share-summary"><div class="summary-box"><strong>1</strong><span>트레일</span></div><div class="summary-box"><strong>4</strong><span>노드</span></div><div class="summary-box"><strong>6</strong><span>기록 · 답글 2</span></div><div class="summary-box"><strong>4</strong><span>안내 단계</span></div></div>
+        <label class="option-card"><input type="radio" name="scope" checked><span><strong>현재 트레일과 기록</strong><p>로그인 중복 처리 검토에 연결된 코드 기준, 검토 상태, 안내 순서를 담는다.</p></span></label>
+        <label class="option-card"><input type="checkbox" id="includeCode"><span><strong>선택한 코드 본문 포함</strong><p>프로젝트가 없는 사람도 노드와 기록을 읽을 수 있다. 파일 전체가 아니라 노드·기록 범위만 포함한다.</p></span></label>
+        <label class="option-card"><input type="checkbox" checked><span><strong>작성자 이름과 답글 포함</strong><p>개인 초안, 실행 설정, 로그와 삭제 이력은 포함하지 않는다.</p></span></label>
+        <div class="privacy-note"><strong>확인</strong><span>기록 본문에 직접 적은 코드·비밀값과 상대경로는 그대로 전달된다. 세션 토큰, 절대경로, 환경 변수, 외부 에디터 설정은 공유 파일에 들어가지 않는다.</span></div>
+        <table class="preview-table"><thead><tr><th>코드 기준</th><th>상태</th><th>공유 결과</th></tr></thead><tbody><tr><td>src/auth/login.ts · a6f431c</td><td>현재 파일과 다름</td><td>기준 정보와 기록만 포함</td></tr><tr><td>src/store/token-store.ts · 91c2d0e</td><td>일치함</td><td>기준 정보와 선택 본문 포함 가능</td></tr><tr><td>프로젝트 외부 심볼 1개</td><td>외부</td><td>이름·종류만 포함</td></tr></tbody></table>
+      </div>
+      <div class="modal-foot"><span class="toolbar-meta" id="shareSize">예상 크기 84 KiB · 코드 미포함</span><span class="grow"></span><button class="btn" data-close-modal>취소</button><button class="btn" id="previewRead">받는 사람 화면 미리보기</button><button class="btn primary" id="downloadShare">.ctshare.json 만들기</button></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="importModal" role="dialog" aria-modal="true" aria-labelledby="importTitle">
+    <div class="modal" style="width:min(620px,90vw)">
+      <div class="modal-head"><h2 id="importTitle">공유 묶음 가져오기</h2><span class="grow"></span><button class="btn icon" data-close-modal>×</button></div>
+      <div class="modal-body"><div class="privacy-note" style="background:var(--blue-soft);border-color:var(--blue-mid);color:#2d4e91"><strong>검증 완료</strong><span>형식 v1 · 무결성 일치 · 트레일 1 · 기록 6 · 코드 본문 3개다. 기존 자료를 덮어쓰지 않고 새 복사본으로 연다.</span></div><table class="preview-table"><tbody><tr><th>보낸 사람</th><td>김민준</td></tr><tr><th>프로젝트</th><td>checkout-service</td></tr><tr><th>코드 기준</th><td>5개 중 4개 일치 · 1개 변경됨</td></tr><tr><th>연결할 수 없음</th><td>프로젝트 외부 심볼 1개</td></tr></tbody></table></div>
+      <div class="modal-foot"><span class="grow"></span><button class="btn" data-close-modal>취소</button><button class="btn" id="openReadOnly">프로젝트 없이 읽기</button><button class="btn primary" id="importCopy">새 복사본 가져오기</button></div>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast" role="status"></div>
+
+  <script>
+    const app = document.getElementById('app');
+    const escapeHtml = value => value.replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));
+    const codeRow = (no, html, cls = '') => `<tr class="${cls}"><td class="line-no">${no}</td><td class="line-code">${html}</td></tr>`;
+
+    const rootRows = [
+      [56, '<span class="kw">async</span> <span class="fn">handleLogin</span>(request: <span class="type">LoginRequest</span>) {'],
+      [57, '  <span class="kw">const</span> user = <span class="kw">await</span> <span class="clickable">this.verifyCredentials</span>(request);'],
+      [58, '  <span class="kw">const</span> nonceKey = <span class="str">`login:${request.nonce}`</span>;'],
+      [59, ''],
+      [60, '  <span class="comment">// 한 요청만 nonce의 소유권을 가져야 한다.</span>'],
+      [61, '  <span class="kw">const</span> claimed = <span class="kw">await</span> <span class="call-index">①</span><span class="clickable">this.nonces.claim</span>(nonceKey);', 'selected'],
+      [62, '  <span class="kw">if</span> (!claimed) {', 'selected'],
+      [63, '    <span class="kw">throw new</span> <span class="type">DuplicateLoginError</span>();<button class="anchor-marker question" data-note-target="1">2</button>', 'selected'],
+      [64, '  }', 'selected'],
+      [65, ''],
+      [66, '  <span class="kw">return</span> <span class="clickable">this.tokens.issue</span>(user);'],
+      [67, '}']
+    ];
+    const staleRootRows = [
+      [59, '<span class="kw">async</span> <span class="fn">handleLogin</span>(request: <span class="type">LoginRequest</span>) {'],
+      [60, '  <span class="kw">const</span> user = <span class="kw">await</span> <span class="clickable">this.verifyCredentials</span>(request);'],
+      [61, '  <span class="kw">const</span> nonceKey = <span class="str">`login:${request.nonce}`</span>;'],
+      [62, '  <span class="clickable">this.audit.recordAttempt</span>(user.id);', 'changed-new'],
+      [63, ''],
+      [64, '  <span class="kw">const</span> claimed = <span class="kw">await</span> <span class="call-index">①</span><span class="clickable">this.nonces.claim</span>(nonceKey);', 'changed-new'],
+      [65, '  <span class="kw">if</span> (!claimed) {', 'changed-new'],
+      [66, '    <span class="kw">throw new</span> <span class="type">DuplicateLoginError</span>();<button class="anchor-marker question" data-note-target="4">!</button>', 'changed-new'],
+      [67, '  }', 'changed-new'],
+      [68, '  <span class="kw">return</span> <span class="clickable">this.tokens.issue</span>(user);'],
+      [69, '}']
+    ];
+    const claimRows = [[21,'<span class="kw">async</span> <span class="fn">claim</span>(key: <span class="type">string</span>) {'],[22,'  <span class="kw">return</span> <span class="kw">await</span> this.redis.set(key, <span class="str">\'1\'</span>, {'],[23,'    NX: <span class="kw">true</span>, EX: <span class="num">30</span>'],[24,'  }) !== <span class="kw">null</span>;'],[25,'}']];
+    const verifyRows = [[89,'<span class="kw">async</span> <span class="fn">verifyCredentials</span>(input: <span class="type">LoginRequest</span>) {'],[90,'  <span class="kw">const</span> user = <span class="kw">await</span> this.users.byEmail(input.email);'],[91,'  <span class="kw">if</span> (!user || !<span class="clickable">safeCompare</span>(user.hash, input.password))'],[92,'    <span class="kw">throw new</span> <span class="type">InvalidLoginError</span>();'],[93,'  <span class="kw">return</span> user;'],[94,'}']];
+    const fullRows = Array.from({length: 42}, (_, i) => [43 + i, i === 0 ? '<span class="kw">export class</span> <span class="type">LoginService</span> {' : i === 12 ? rootRows[0][1] : i > 12 && i < 24 ? rootRows[i - 12][1] : i === 24 ? '  <span class="kw">private</span> <span class="fn">buildSession</span>(user: <span class="type">User</span>) {' : i === 25 ? '    <span class="kw">return new</span> <span class="type">Session</span>(user.id);' : i === 26 ? '  }' : i === 41 ? '}' : '']);
+
+    function renderRows(target, rows) { document.getElementById(target).innerHTML = rows.map(row => codeRow(row[0], row[1], row[2] || '')).join(''); }
+    renderRows('rootCode', rootRows); renderRows('claimCode', claimRows); renderRows('verifyCode', verifyRows); renderRows('fullCode', fullRows);
+
+    const oldDiffRows = [[60,'  <span class="comment">// 한 요청만 nonce의 소유권을 가져야 한다.</span>'],[61,'  <span class="kw">const</span> claimed = <span class="kw">await</span> this.nonces.claim(nonceKey);','changed-old'],[62,'  <span class="kw">if</span> (!claimed) {','changed-old'],[63,'    <span class="kw">throw new</span> <span class="type">DuplicateLoginError</span>();','changed-old'],[64,'  }','changed-old'],[65,''],[66,'  <span class="kw">return</span> this.tokens.issue(user);']];
+    const newDiffRows = [[62,'  this.audit.recordAttempt(user.id);','changed-new'],[63,''],[64,'  <span class="kw">const</span> claimed = <span class="kw">await</span> this.nonces.claim(nonceKey);','changed-new'],[65,'  <span class="kw">if</span> (!claimed) {','changed-new'],[66,'    <span class="kw">throw new</span> <span class="type">DuplicateLoginError</span>();','changed-new'],[67,'  }','changed-new'],[68,'  <span class="kw">return</span> this.tokens.issue(user);']];
+    renderRows('oldDiff', oldDiffRows); renderRows('newDiff', newDiffRows);
+
+    function showPane(name) {
+      document.querySelectorAll('.pane-tab').forEach(button => button.classList.toggle('active', button.dataset.pane === name));
+      document.querySelectorAll('[data-pane-content]').forEach(pane => pane.classList.toggle('active', pane.dataset.paneContent === name));
+    }
+    document.querySelectorAll('.pane-tab').forEach(button => button.addEventListener('click', () => showPane(button.dataset.pane)));
+    document.querySelectorAll('[data-pane-jump]').forEach(button => button.addEventListener('click', () => showPane(button.dataset.paneJump)));
+
+    function setScene(scene) {
+      app.className = `app scene-${scene}`;
+      document.querySelectorAll('[data-scene]').forEach(button => button.classList.toggle('active', button.dataset.scene === scene));
+      document.getElementById('projectLabel').textContent = scene === 'read' ? 'checkout-service · 공유 묶음' : 'checkout-service';
+      document.getElementById('goalState').textContent = scene === 'stale' ? '코드 기준이 달라져 재검토가 필요함' : scene === 'read' ? '작성자가 남긴 검토 목표' : '검토 목표';
+      document.getElementById('goalText').textContent = scene === 'stale' ? '기록 당시 a6f431c와 현재 login.ts가 다르다. 이전 판단을 현재 코드에 그대로 적용하지 않는다.' : '동시에 들어온 로그인 요청이 토큰을 중복 발급하거나 이미 쓴 nonce를 다시 저장하지 않는지 확인한다.';
+      renderRows('rootCode', scene === 'stale' ? staleRootRows : rootRows);
+      bindMarkers();
+      if (scene === 'stale') showPane('trail');
+      if (scene === 'read') { showPane('trail'); showWalkthrough(true); }
+      else showWalkthrough(false);
+    }
+    document.querySelectorAll('[data-scene]').forEach(button => button.addEventListener('click', () => setScene(button.dataset.scene)));
+
+    document.querySelectorAll('.side-tab').forEach(button => button.addEventListener('click', () => {
+      document.querySelectorAll('.side-tab').forEach(item => item.classList.toggle('active', item === button));
+      document.getElementById('fileList').classList.toggle('hidden', button.dataset.side !== 'files');
+      document.getElementById('sideChangeList').classList.toggle('hidden', button.dataset.side !== 'changes');
+    }));
+
+    document.querySelectorAll('.node-head').forEach(head => head.addEventListener('click', event => {
+      if (event.target.closest('button, select')) return;
+      const node = head.closest('.code-node'); node.classList.toggle('collapsed');
+      head.querySelector('.fold').textContent = node.classList.contains('collapsed') ? '›' : '⌄';
+    }));
+    document.getElementById('collapseAll').addEventListener('click', () => document.querySelectorAll('.code-node').forEach(node => node.classList.add('collapsed')));
+    document.getElementById('expandAll').addEventListener('click', () => document.querySelectorAll('.code-node').forEach(node => node.classList.remove('collapsed')));
+
+    document.getElementById('boardToggle').addEventListener('click', event => {
+      const tree = document.getElementById('nodeTree'); const board = tree.dataset.board === 'true';
+      tree.dataset.board = String(!board); event.currentTarget.textContent = board ? '⬚ 보드' : '▤ 트리';
+      tree.style.alignItems = board ? 'center' : 'stretch';
+      tree.querySelector('.node-row').style.gap = board ? '24px' : '60px';
+      showToast(board ? '트리 모드로 돌아왔다.' : '보드 배치를 간략히 미리 보인다. 실제 구현에서는 헤더를 끌어 옮긴다.');
+    });
+
+    const notesPanel = document.getElementById('notesPanel');
+    function showNotesTab(tab) {
+      notesPanel.classList.toggle('walk-mode', tab === 'walk');
+      document.querySelectorAll('[data-notes-tab]').forEach(button => button.classList.toggle('active', button.dataset.notesTab === tab));
+      notesPanel.querySelector('.walk-controls').classList.toggle('hidden', tab !== 'walk');
+    }
+    document.querySelectorAll('[data-notes-tab]').forEach(button => button.addEventListener('click', () => showNotesTab(button.dataset.notesTab)));
+    document.getElementById('closeNotes').addEventListener('click', () => document.getElementById('trailLayout').classList.add('notes-closed'));
+    document.getElementById('notesToggle').addEventListener('click', () => document.getElementById('trailLayout').classList.toggle('notes-closed'));
+    document.querySelectorAll('.note-card').forEach(card => card.addEventListener('click', event => {
+      if (event.target.closest('button, textarea')) return;
+      document.querySelectorAll('.note-card').forEach(item => item.classList.toggle('active', item === card));
+    }));
+    function bindMarkers() {
+      document.querySelectorAll('[data-note-target]').forEach(marker => marker.addEventListener('click', event => {
+        event.stopPropagation(); document.getElementById('trailLayout').classList.remove('notes-closed'); showNotesTab('records');
+        const target = marker.dataset.noteTarget; document.querySelectorAll('.note-card').forEach(card => card.classList.toggle('active', card.dataset.note === target));
+        document.querySelector(`.note-card[data-note="${target}"]`)?.scrollIntoView({block:'nearest'});
+      }));
+    }
+    bindMarkers();
+
+    function openComposer() { document.getElementById('trailLayout').classList.remove('notes-closed'); showNotesTab('records'); document.getElementById('composer').classList.remove('hidden'); document.getElementById('composerText').focus(); }
+    document.querySelectorAll('[data-open-composer]').forEach(button => button.addEventListener('click', () => { showPane('trail'); openComposer(); }));
+    document.getElementById('closeComposer').addEventListener('click', () => document.getElementById('composer').classList.add('hidden'));
+    document.getElementById('saveRecord').addEventListener('click', () => {
+      const value = document.getElementById('composerText').value.trim();
+      if (!value) { showToast('기록 내용을 먼저 입력한다.'); return; }
+      document.getElementById('composer').classList.add('hidden'); document.getElementById('composerText').value = ''; showToast('서버 반영됨 → 디스크 저장됨');
+    });
+
+    function showWalkthrough(show) {
+      document.getElementById('walkthroughBar').classList.toggle('hidden', !show);
+      if (show) { document.getElementById('trailLayout').classList.remove('notes-closed'); showNotesTab('walk'); }
+      else showNotesTab('records');
+    }
+    document.getElementById('walkButton').addEventListener('click', () => showWalkthrough(document.getElementById('walkthroughBar').classList.contains('hidden')));
+    document.getElementById('closeWalk').addEventListener('click', () => showWalkthrough(false));
+
+    function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+    function closeModals() { document.querySelectorAll('.modal-backdrop').forEach(modal => modal.classList.add('hidden')); }
+    document.getElementById('shareButton').addEventListener('click', () => openModal('shareModal'));
+    document.getElementById('importButton').addEventListener('click', () => openModal('importModal'));
+    document.querySelectorAll('[data-close-modal]').forEach(button => button.addEventListener('click', closeModals));
+    document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.addEventListener('click', event => { if (event.target === backdrop) closeModals(); }));
+    document.getElementById('includeCode').addEventListener('change', event => { document.getElementById('shareSize').textContent = event.target.checked ? '예상 크기 126 KiB · 선택 코드 포함' : '예상 크기 84 KiB · 코드 미포함'; });
+    document.getElementById('previewRead').addEventListener('click', () => { closeModals(); setScene('read'); showToast('프로젝트 없는 받는 사람의 읽기 화면이다.'); });
+    document.getElementById('downloadShare').addEventListener('click', () => { closeModals(); showToast('목업: login-review.ctshare.json을 만들 준비가 되었다.'); });
+    document.getElementById('openReadOnly').addEventListener('click', () => { closeModals(); setScene('read'); });
+    document.getElementById('importCopy').addEventListener('click', () => { closeModals(); showToast('기존 자료를 덮어쓰지 않고 새 로컬 복사본을 열었다.'); });
+    document.getElementById('connectProject').addEventListener('click', () => { setScene('stale'); showToast('로컬 프로젝트와 비교했다. login.ts의 코드 기준이 달라 재검토가 필요하다.'); });
+    document.getElementById('makeLocalCopy').addEventListener('click', () => { setScene('author'); showToast('읽기 전용 원본은 유지하고, 기록을 추가할 로컬 복사본을 만들었다.'); });
+    document.getElementById('markdownButton').addEventListener('click', () => showToast('목업: 코드·기록·기준·안내 순서가 들어간 Markdown을 만든다.'));
+
+    document.querySelectorAll('#fullCode tr').forEach((row, index) => row.addEventListener('click', () => {
+      document.querySelectorAll('#fullCode tr').forEach(item => item.classList.remove('selected'));
+      row.classList.add('selected'); document.getElementById('selectionPopover').classList.remove('hidden');
+    }));
+
+    let toastTimer;
+    function showToast(message) { const toast = document.getElementById('toast'); toast.textContent = message; toast.classList.remove('hidden'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.add('hidden'), 2600); }
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeModals(); document.getElementById('composer').classList.add('hidden'); document.getElementById('selectionPopover').classList.add('hidden'); } });
+  </script>
+</body>
+</html>

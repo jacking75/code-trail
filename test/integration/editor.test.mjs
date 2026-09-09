@@ -6,7 +6,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { WebSocket } from 'ws';
 
-import { authFetch, makeProject, removeProject, server, waitForFile, withServer } from './helpers.mjs';
+import { authFetch, makeProject, removeProject, server, updateLocalSettings, waitForFile, withServer } from './helpers.mjs';
 
 const { WS_PROTOCOL } = server;
 
@@ -71,10 +71,7 @@ function openSocket(running) {
 /** 첫 기동으로 설정 파일을 만들고, 에디터 설정을 적은 뒤 다시 띄운다. */
 async function withEditor(root, editorSettings, run) {
     await withServer(root, async () => undefined);
-    const settingsPath = path.join(root, '.code-trail', 'settings.json');
-    const settings = JSON.parse(await readFile(settingsPath, 'utf8'));
-    settings.editor = editorSettings;
-    await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+    await updateLocalSettings(root, (settings) => { settings.editor = editorSettings; });
     return withServer(root, run);
 }
 
@@ -268,7 +265,7 @@ test('진단에 PID·capability·확인 여부가 들어 있다', async () => {
         await withServer(root, async (running) => {
             const response = await authFetch(running, '/api/diagnostics');
             const body = await response.json();
-            assert.equal(body.languages.length, 4);
+            assert.equal(body.languages.length, 5);
             for (const info of body.languages) {
                 assert.ok('pid' in info, 'pid 가 없다');
                 assert.ok('initializeMs' in info, 'initializeMs 가 없다');

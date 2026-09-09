@@ -1,4 +1,4 @@
-import { useMemo, useState, type JSX, type MouseEvent } from 'react';
+import { useMemo, useRef, useState, type JSX, type MouseEvent } from 'react';
 
 import { isClickable, tokenizeLines, type ClickTarget, type Token } from '../../tokenizer/tokenize.js';
 import { circled, type ResolvedSymbolView } from './types.js';
@@ -31,6 +31,10 @@ export interface CodeBodyProps {
         text: string,
         modifiers: { alt: boolean; ctrl: boolean },
     ) => void;
+    onRangeSelect?: (range: {
+        start: { line: number; char: number };
+        end: { line: number; char: number };
+    }) => void;
 }
 
 /** 호출부를 가리키는 키. 줄과 컬럼이 같으면 같은 지점이다. */
@@ -53,9 +57,16 @@ export function CodeBody(props: CodeBodyProps): JSX.Element {
     const limit = props.maxCodeLines > 0 ? props.maxCodeLines : lines.length;
     const shown = expanded ? lines.length : Math.min(lines.length, limit);
     const gutterWidth = String(symbol.startLine + lines.length).length;
+    const suppressClick = useRef(false);
 
     const onClick = (event: MouseEvent<HTMLSpanElement>, token: Token): void => {
         if (!isClickable(token)) {
+            return;
+        }
+        if (suppressClick.current) {
+            suppressClick.current = false;
+            event.preventDefault();
+            event.stopPropagation();
             return;
         }
         event.preventDefault();
@@ -69,6 +80,23 @@ export function CodeBody(props: CodeBodyProps): JSX.Element {
     return (
         <div
             className="code"
+            onMouseUp={() => {
+                const selection = window.getSelection();
+                if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+                const range = selection.getRangeAt(0);
+                const startLine = closestCodeLine(range.startContainer);
+                const endLine = closestCodeLine(range.endContainer);
+                if (!startLine || !endLine) return;
+                const start = pointInLine(startLine, range.startContainer, range.startOffset);
+                const end = pointInLine(endLine, range.endContainer, range.endOffset);
+                if (!start || !end) return;
+                const a = { line: Number(startLine.dataset.line), char: start };
+                const b = { line: Number(endLine.dataset.line), char: end };
+                const ordered = a.line < b.line || (a.line === b.line && a.char <= b.char)
+                    ? { start: a, end: b } : { start: b, end: a };
+                suppressClick.current = true;
+                props.onRangeSelect?.(ordered);
+            }}
             {...(props.fontSize === undefined
                 ? {}
                 : { style: { fontSize: `${props.fontSize}px` }, 'data-fs': '1' })}
@@ -80,7 +108,7 @@ export function CodeBody(props: CodeBodyProps): JSX.Element {
                     <span className="no">
                         {String(symbol.startLine + index + 1).padStart(gutterWidth, ' ')}
                     </span>
-                    <span className="ct">
+                    <span className="ct" data-line={symbol.startLine + index}>
                         {tokens.map((token, ti) => {
                             if (!isClickable(token)) {
                                 return (
@@ -127,4 +155,20 @@ export function CodeBody(props: CodeBodyProps): JSX.Element {
             ) : null}
         </div>
     );
+}
+
+function closestCodeLine(node: Node): HTMLElement | null {
+    const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement;
+    return element?.closest<HTMLElement>('.ct[data-line]') ?? null;
+}
+
+function pointInLine(line: HTMLElement, node: Node, offset: number): number | null {
+    try {
+        const range = document.createRange();
+        range.selectNodeContents(line);
+        range.setEnd(node, offset);
+        return range.toString().length;
+    } catch {
+        return null;
+    }
 }

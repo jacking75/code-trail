@@ -69,6 +69,7 @@ export interface LanguageSettings {
     csharp: CSharpServerSettings;
     go: LanguageServerSettings;
     rust: LanguageServerSettings;
+    typescript: LanguageServerSettings;
 }
 
 export interface ProjectSettings {
@@ -76,6 +77,29 @@ export interface ProjectSettings {
     ui: UiSettings;
     editor: EditorSettings;
     languages: LanguageSettings;
+}
+
+/** `.code-trail/local/settings.json`에만 저장하는 기계·개인 설정이다. */
+export interface LocalSettings {
+    schemaVersion: 1;
+    editor: EditorSettings;
+    languages: {
+        cpp: Omit<LanguageServerSettings, 'enabled'>;
+        csharp: Omit<LanguageServerSettings, 'enabled'>;
+        go: Omit<LanguageServerSettings, 'enabled'>;
+        rust: Omit<LanguageServerSettings, 'enabled'>;
+        typescript: Omit<LanguageServerSettings, 'enabled'>;
+    };
+    author: { id: string; displayName: string } | null;
+    /** 선택적 로컬 AI 제공자 설정이다. 프로젝트 설정이나 공유 묶음에 들어가지 않는다. */
+    ai: {
+        enabled: boolean;
+        provider: 'ollama';
+        endpoint: string;
+        model: string;
+        maxInputBytes: number;
+        timeoutMs: number;
+    };
 }
 
 export const SETTINGS_SCHEMA_VERSION = 1;
@@ -124,6 +148,100 @@ export function defaultSettings(): ProjectSettings {
             csharp: { ...defaultLanguageServer(), solutionPath: null },
             go: defaultLanguageServer(),
             rust: defaultLanguageServer(),
+            typescript: defaultLanguageServer(),
+        },
+    };
+}
+
+export function defaultLocalSettings(): LocalSettings {
+    const localLanguage = (): Omit<LanguageServerSettings, 'enabled'> => ({
+        executable: null,
+        args: [],
+        env: {},
+        initializationOptions: null,
+    });
+    return {
+        schemaVersion: 1,
+        editor: { executable: null, args: [] },
+        languages: {
+            cpp: localLanguage(),
+            csharp: localLanguage(),
+            go: localLanguage(),
+            rust: localLanguage(),
+            typescript: localLanguage(),
+        },
+        author: null,
+        ai: {
+            enabled: false,
+            provider: 'ollama',
+            endpoint: 'http://127.0.0.1:11434',
+            model: '',
+            maxInputBytes: 65_536,
+            timeoutMs: 60_000,
+        },
+    };
+}
+
+/** 형상 관리 가능한 설정에서 기계별 값을 비운다. */
+export function shareableSettings(settings: ProjectSettings): ProjectSettings {
+    const clean = defaultSettings();
+    clean.ui = { ...settings.ui };
+    clean.languages.cpp.enabled = settings.languages.cpp.enabled;
+    clean.languages.csharp.enabled = settings.languages.csharp.enabled;
+    clean.languages.csharp.solutionPath = settings.languages.csharp.solutionPath;
+    clean.languages.go.enabled = settings.languages.go.enabled;
+    clean.languages.rust.enabled = settings.languages.rust.enabled;
+    clean.languages.typescript.enabled = settings.languages.typescript.enabled;
+    return clean;
+}
+
+export function localSettingsFromEffective(
+    settings: ProjectSettings,
+    author: LocalSettings['author'] = null,
+    ai: LocalSettings['ai'] = defaultLocalSettings().ai,
+): LocalSettings {
+    const pick = (value: LanguageServerSettings): Omit<LanguageServerSettings, 'enabled'> => ({
+        executable: value.executable,
+        args: [...value.args],
+        env: { ...value.env },
+        initializationOptions: value.initializationOptions,
+    });
+    return {
+        schemaVersion: 1,
+        editor: { executable: settings.editor.executable, args: [...settings.editor.args] },
+        languages: {
+            cpp: pick(settings.languages.cpp),
+            csharp: pick(settings.languages.csharp),
+            go: pick(settings.languages.go),
+            rust: pick(settings.languages.rust),
+            typescript: pick(settings.languages.typescript),
+        },
+        author: author ? { ...author } : null,
+        ai: { ...ai },
+    };
+}
+
+export function applyLocalSettings(project: ProjectSettings, local: LocalSettings): ProjectSettings {
+    const merge = <T extends LanguageServerSettings>(
+        base: T,
+        machine: Omit<LanguageServerSettings, 'enabled'>,
+    ): T => ({
+        ...base,
+        executable: machine.executable,
+        args: [...machine.args],
+        env: { ...machine.env },
+        initializationOptions: machine.initializationOptions,
+    });
+    return {
+        ...project,
+        ui: { ...project.ui },
+        editor: { executable: local.editor.executable, args: [...local.editor.args] },
+        languages: {
+            cpp: merge(project.languages.cpp, local.languages.cpp),
+            csharp: merge(project.languages.csharp, local.languages.csharp),
+            go: merge(project.languages.go, local.languages.go),
+            rust: merge(project.languages.rust, local.languages.rust),
+            typescript: merge(project.languages.typescript, local.languages.typescript),
         },
     };
 }

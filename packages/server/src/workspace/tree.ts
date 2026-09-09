@@ -66,8 +66,9 @@ export class WorkspaceTree {
         if (relPath === '') {
             return false;
         }
-        // `.code-trail/runtime` 만 감춘다. settings·trails 는 사용자가 볼 수 있어야 한다.
-        if (relPath === '.code-trail/runtime' || relPath.startsWith('.code-trail/runtime/')) {
+        // 실행 부산물과 개인 설정만 감춘다. settings·trails·analysis 는 볼 수 있어야 한다.
+        if (relPath === '.code-trail/runtime' || relPath.startsWith('.code-trail/runtime/')
+            || relPath === '.code-trail/local' || relPath.startsWith('.code-trail/local/')) {
             return true;
         }
         return relPath.split('/').some((segment) => this.excluded.has(segment));

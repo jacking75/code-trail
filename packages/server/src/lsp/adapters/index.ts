@@ -3,6 +3,7 @@ import { clangdAdapter } from './clangd.js';
 import { csharpAdapter } from './csharp.js';
 import { goplsAdapter } from './gopls.js';
 import { rustAnalyzerAdapter } from './rustAnalyzer.js';
+import { typescriptAdapter } from './typescript.js';
 import type { LspAdapter } from './types.js';
 
 /**
@@ -16,9 +17,10 @@ export const ADAPTERS: Record<SupportedLanguage, LspAdapter> = {
     csharp: csharpAdapter,
     go: goplsAdapter,
     rust: rustAnalyzerAdapter,
+    typescript: typescriptAdapter,
 };
 
-export const SUPPORTED_LANGUAGES: readonly SupportedLanguage[] = ['cpp', 'csharp', 'go', 'rust'];
+export const SUPPORTED_LANGUAGES: readonly SupportedLanguage[] = ['cpp', 'csharp', 'go', 'rust', 'typescript'];
 
 export function adapterFor(language: SupportedLanguage): LspAdapter {
     return ADAPTERS[language];

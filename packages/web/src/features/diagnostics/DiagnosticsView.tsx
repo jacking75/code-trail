@@ -43,12 +43,14 @@ const SOURCE_LABEL: Record<string, string> = {
 export interface DiagnosticsViewProps {
     languages: LanguageDiagnostics[];
     settings: ProjectSettingsView | null;
-    recoveryCandidates: unknown[];
+    recoveryCandidates: Array<{ trailId?: string; analysisId?: string; kind?: 'temporary' | 'backup'; savedAt: string }>;
     onRefresh: () => void;
     onRestart: (language: string) => void;
     onVerify: (language: string) => void;
     /** 설정 저장. 서버가 파일에 쓰고 `settings.changed` 로 되돌려준다. */
     onUpdateSettings: (settings: ProjectSettingsView) => void;
+    readOnly?: boolean;
+    onRecoverAnalysis: (analysisId: string, kind: 'temporary' | 'backup') => void;
 }
 
 /** 한 줄 항목. 이름과 값을 나란히 둔다. */
@@ -152,7 +154,9 @@ export function DiagnosticsView(props: DiagnosticsViewProps): JSX.Element {
                 </button>
             )}
 
-            {props.languages.map((info) => (
+            {props.readOnly ? (
+                <section className="diag-card"><h2>공유 읽기 준비됨</h2><p>이 자료를 읽는 데 프로젝트·외부 에디터·언어 서버가 필요하지 않다.</p></section>
+            ) : props.languages.map((info) => (
                 <section className="diag-card" key={info.language} data-language={info.language}>
                     <h2>
                         <span className="diag-name">{info.displayName}</span>
@@ -217,6 +221,7 @@ export function DiagnosticsView(props: DiagnosticsViewProps): JSX.Element {
                             <span className="warn">{info.lastError}</span>
                         </Row>
                     )}
+                    <Row label="다음 행동"><strong>{nextAction(info)}</strong></Row>
 
                     <div className="diag-checks">
                         {info.healthChecks.map((check) => (
@@ -278,7 +283,7 @@ export function DiagnosticsView(props: DiagnosticsViewProps): JSX.Element {
                 </section>
             ))}
 
-            <section className="diag-card" id="diag-editor">
+            {props.readOnly ? null : <section className="diag-card" id="diag-editor">
                 <h2>
                     <span className="diag-name">외부 에디터</span>
                     {editor?.configured === null || editor === null ? (
@@ -311,7 +316,7 @@ export function DiagnosticsView(props: DiagnosticsViewProps): JSX.Element {
                         ))}
                     </ul>
                 )}
-            </section>
+            </section>}
 
             {props.recoveryCandidates.length === 0 ? null : (
                 <section className="diag-card">
@@ -319,11 +324,25 @@ export function DiagnosticsView(props: DiagnosticsViewProps): JSX.Element {
                     <p className="muted">
                         저장 중 강제 종료된 흔적이다. 다음 저장 때 정리된다.
                     </p>
-                    <pre className="diag-log">
-                        {JSON.stringify(props.recoveryCandidates, null, 2)}
-                    </pre>
+                    <ul>{props.recoveryCandidates.map((candidate, index) => (
+                        <li key={`${candidate.analysisId ?? candidate.trailId}:${candidate.kind ?? 'trail'}:${index}`}>
+                            <code>{candidate.analysisId ? `분석 ${candidate.analysisId}` : `트레일 ${candidate.trailId}`}</code>
+                            <span>{` · ${candidate.kind ?? 'temporary'} · ${candidate.savedAt}`}</span>
+                            {candidate.analysisId && candidate.kind ? <button type="button" onClick={() => props.onRecoverAnalysis(candidate.analysisId!, candidate.kind!)}>검증 후 복구</button> : null}
+                        </li>
+                    ))}</ul>
                 </section>
             )}
         </div>
     );
+}
+
+function nextAction(info: LanguageDiagnostics): string {
+    if (!info.enabled) return '설정에서 이 언어를 켠 뒤 다시 읽는다.';
+    if (info.state === 'starting') return '초기화가 끝날 때까지 기다린 뒤 확인을 누른다.';
+    if (!info.executableName) return info.healthChecks.find((item) => item.level !== 'ok')?.detail ?? '언어 서버를 설치하고 PATH 또는 로컬 설정에 지정한다.';
+    if (info.missingCapabilities.length > 0) return `필요한 ${info.missingCapabilities.join(', ')} 요청을 지원하는 서버 버전을 사용한다.`;
+    if (info.lastError) return '로그를 확인하고 다시 시작한 뒤 확인을 누른다.';
+    if (!info.verified) return '확인을 눌러 실제 documentSymbol·definition 요청을 시험한다.';
+    return '추가 조치가 필요하지 않다.';
 }

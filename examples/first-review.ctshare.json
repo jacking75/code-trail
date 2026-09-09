@@ -1,0 +1,112 @@
+{
+  "format": "code-trail-share",
+  "schemaVersion": 1,
+  "bundleId": "a0000000-0000-4000-8000-000000000001",
+  "createdAt": "2026-09-09T00:00:00.000Z",
+  "producerVersion": "1.1.0",
+  "lineage": {
+    "sourceAnalysisId": "a0000000-0000-4000-8000-000000000002",
+    "baseContentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "previousBundleId": null
+  },
+  "project": {
+    "name": "Code Trail 첫 검토 예제",
+    "repositoryId": null
+  },
+  "baselines": [],
+  "trails": [
+    {
+      "schemaVersion": 1,
+      "id": "a0000000-0000-4000-8000-000000000003",
+      "title": "요청에서 저장까지",
+      "createdAt": "2026-09-09T00:00:00.000Z",
+      "updatedAt": "2026-09-09T00:00:00.000Z",
+      "revision": 0,
+      "activeNodeId": null,
+      "mode": "tree",
+      "roots": [],
+      "nodeUi": {}
+    }
+  ],
+  "analysis": {
+    "id": "a0000000-0000-4000-8000-000000000002",
+    "title": "첫 코드 검토 예제",
+    "purpose": "기록을 읽고 안내 순서와 미해결 질문을 구분한다.",
+    "revision": 1,
+    "authors": [
+      {
+        "id": "a0000000-0000-4000-8000-000000000004",
+        "displayName": "예제 작성자"
+      }
+    ],
+    "annotations": [
+      {
+        "id": "a0000000-0000-4000-8000-000000000005",
+        "version": 1,
+        "target": {
+          "kind": "trail",
+          "trailId": "a0000000-0000-4000-8000-000000000003"
+        },
+        "kind": "question",
+        "body": "저장 실패 뒤 같은 명령을 다시 보내도 기록이 중복되지 않는가?",
+        "tags": ["첫-검토", "저장"],
+        "status": "open",
+        "authorId": "a0000000-0000-4000-8000-000000000004",
+        "createdAt": "2026-09-09T00:00:00.000Z",
+        "updatedAt": "2026-09-09T00:00:00.000Z",
+        "deletedAt": null
+      }
+    ],
+    "replies": [],
+    "reviews": [],
+    "anchors": [],
+    "walkthroughs": [
+      {
+        "id": "a0000000-0000-4000-8000-000000000006",
+        "version": 1,
+        "title": "읽는 순서",
+        "steps": [
+          {
+            "id": "a0000000-0000-4000-8000-000000000007",
+            "title": "검토 목표를 확인한다",
+            "body": "분석 목적과 열린 질문을 먼저 읽는다.",
+            "annotationId": "a0000000-0000-4000-8000-000000000005",
+            "target": {
+              "kind": "trail",
+              "trailId": "a0000000-0000-4000-8000-000000000003"
+            },
+            "baselineId": null
+          }
+        ]
+      }
+    ],
+    "goals": [],
+    "importantLocations": []
+  },
+  "mergeBase": {
+    "annotations": [
+      {
+        "id": "a0000000-0000-4000-8000-000000000005",
+        "version": 1,
+        "target": { "kind": "trail", "trailId": "a0000000-0000-4000-8000-000000000003" },
+        "kind": "question",
+        "body": "저장 실패 뒤 같은 명령을 다시 보내도 기록이 중복되지 않는가?",
+        "tags": ["첫-검토", "저장"],
+        "status": "open",
+        "authorId": "a0000000-0000-4000-8000-000000000004",
+        "createdAt": "2026-09-09T00:00:00.000Z",
+        "updatedAt": "2026-09-09T00:00:00.000Z",
+        "deletedAt": null
+      }
+    ],
+    "replies": []
+  },
+  "snapshots": [],
+  "exportPolicy": {
+    "includeCode": false,
+    "includeAuthors": true,
+    "includeReplies": true,
+    "includeBoardLayout": false
+  },
+  "integrity": "81fd25cda08518ad3d40239837c94c2bb4059abe639c30d06fa9c955d40669fb"
+}

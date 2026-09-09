@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 
-import { PROTOCOL_VERSION } from '@code-trail/shared';
+import { PROTOCOL_VERSION, textForRange } from '@code-trail/shared';
 
 import type { ServerContext } from '../context.js';
 import { findSolutionCandidates } from '../lsp/adapters/index.js';
@@ -9,6 +9,7 @@ import type { SupportedLanguage } from '../workspace/languages.js';
 import { PathDeniedError } from '../security/paths.js';
 import { DocumentTooLargeError } from '../workspace/documents.js';
 import { searchFiles } from '../workspace/search.js';
+import { searchContent } from '../workspace/contentSearch.js';
 
 /**
  * HTTP API (구현서 15.1).
@@ -18,7 +19,7 @@ import { searchFiles } from '../workspace/search.js';
  * 이벤트 방송이 한곳에서 끝난다.
  */
 
-const SUPPORTED_LANGUAGES: readonly string[] = ['cpp', 'csharp', 'go', 'rust'];
+const SUPPORTED_LANGUAGES: readonly string[] = ['cpp', 'csharp', 'go', 'rust', 'typescript'];
 
 /** 이 둘이 실제 문서에서 응답해야 `지원됨` 이다. */
 const VERIFY_METHODS = ['textDocument/documentSymbol', 'textDocument/definition'] as const;
@@ -37,14 +38,83 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
         protocolVersion: PROTOCOL_VERSION,
         project: { name: context.projectName },
         settings: context.store.getSettings(),
+        localAuthor: context.store.getLocalAuthor(),
         trails: context.trails.list(),
         activeTrailId: context.trails.getActiveTrailId(),
         capabilities: {
             externalEditor: context.editor.isConfigured(),
             // 실행 파일을 찾은 언어만 알린다. 실제로 뜨는지는 열어봐야 안다.
             languages: await context.lsp.availableLanguages(),
+            analyses: true,
+            sharing: true,
+            readOnlyShare: context.readOnlyShare,
+            ai: context.readOnlyShare
+                ? { enabled: false, provider: 'ollama', model: '', maxInputBytes: 0 }
+                : context.ai.capability(),
         },
     }));
+
+    app.get('/api/analyses', async () => ({ analyses: context.analyses.list() }));
+
+    app.get<{ Params: { analysisId: string } }>('/api/analyses/:analysisId', async (request, reply) => {
+        const analysis = context.analyses.get(request.params.analysisId);
+        return analysis ?? reply.code(404).send({
+            code: 'NOT_FOUND', message: '분석 문서를 찾을 수 없다.', retryable: false,
+        });
+    });
+
+    app.get<{ Params: { analysisId: string; anchorId: string } }>(
+        '/api/analyses/:analysisId/anchors/:anchorId/compare',
+        async (request, reply) => {
+            const analysis = context.analyses.get(request.params.analysisId);
+            const anchor = analysis?.anchors.find((item) => item.id === request.params.anchorId);
+            const baseline = analysis?.baselines.find((item) => item.id === anchor?.baselineId);
+            const file = baseline?.files.find((item) => item.fileId === anchor?.fileId);
+            if (!analysis || !anchor || !baseline || !file) {
+                return reply.code(404).send({
+                    code: 'NOT_FOUND', message: '비교할 기록 위치를 찾을 수 없다.', retryable: false,
+                });
+            }
+
+            // 저장된 상대경로를 그대로 읽지 않고 문서 권한 경계를 다시 통과시킨다.
+            // 가져온 공유 자료가 악의적인 경로를 담아도 프로젝트 밖 파일은 열리지 않는다.
+            const grant = await context.documents.grantInsideProject(file.relPath).catch(() => null);
+            const content = grant
+                ? await context.documents.read(grant.documentId).catch(() => null)
+                : null;
+            const currentRange = anchor.currentRange ?? anchor.range;
+            const currentText = content ? textForRange(content.text, currentRange) : null;
+            const currentUnavailableReason = !content
+                ? 'file-unavailable' as const
+                : currentText === null
+                    ? 'range-unavailable' as const
+                    : null;
+
+            return {
+                analysisId: analysis.id,
+                anchorId: anchor.id,
+                relPath: file.relPath,
+                state: anchor.state,
+                previousRange: anchor.range,
+                currentRange,
+                previousText: anchor.selectedText,
+                currentText,
+                previousUnavailableReason: anchor.selectedText === null ? 'code-not-included' as const : null,
+                currentUnavailableReason,
+            };
+        },
+    );
+
+    app.get<{ Querystring: { q?: string; kind?: 'explanation' | 'question' | 'concern' | 'conclusion'; status?: 'open' | 'resolved'; tag?: string } }>(
+        '/api/annotations/search',
+        async (request) => ({
+            results: context.analyses.search(request.query.q ?? '', {
+                ...(request.query.kind ? { kind: request.query.kind } : {}),
+                ...(request.query.status ? { status: request.query.status } : {}),
+                ...(request.query.tag ? { tag: request.query.tag } : {}),
+            }),
+        }),
+    );
 
     app.get<{ Querystring: { id?: string } }>('/api/workspace/children', async (request, reply) => {
         const id = request.query.id ?? '';
@@ -96,6 +166,27 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
         },
     );
 
+    app.get<{ Params: { documentId: string } }>(
+        '/api/documents/:documentId/symbols',
+        async (request, reply) => {
+            const grant = context.documents.get(request.params.documentId);
+            if (!grant) return reply.code(404).send({ code: 'NOT_FOUND', message: '문서 권한이 없다.', retryable: false });
+            const controller = new AbortController();
+            const abort = (): void => controller.abort();
+            request.raw.once('aborted', abort);
+            try {
+                const symbols = await context.lsp.documentSymbols(grant, controller.signal);
+                return { documentId: grant.documentId, symbols };
+            } catch {
+                return reply.code(503).send({
+                    code: 'LSP_UNAVAILABLE', message: '문서 심볼을 가져오지 못했다.', retryable: true,
+                });
+            } finally {
+                request.raw.off('aborted', abort);
+            }
+        },
+    );
+
     /**
      * 프로젝트 안의 파일을 열어 문서 권한을 받는다.
      *
@@ -142,6 +233,64 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
         },
     );
 
+    app.get<{ Querystring: { from?: string; to?: string } }>('/api/changes', async (request, reply) => {
+        try {
+            const changes = request.query.from
+                ? await context.git.changesBetween(request.query.from, request.query.to ?? 'HEAD')
+                : await context.git.workingChanges();
+            return { repository: true, changes };
+        } catch {
+            return reply.code(200).send({ repository: false, changes: [], message: 'Git 변경 정보를 읽을 수 없다.' });
+        }
+    });
+
+    app.get<{ Querystring: { q?: string; scope?: string; case?: string } }>(
+        '/api/workspace/content-search',
+        async (request, reply) => {
+            const controller = new AbortController();
+            const abort = (): void => controller.abort();
+            request.raw.once('aborted', abort);
+            try {
+                return await searchContent({
+                    tree: context.tree,
+                    query: request.query.q ?? '',
+                    scope: request.query.scope ?? '',
+                    caseSensitive: request.query.case === '1',
+                    signal: controller.signal,
+                });
+            } catch {
+                return reply.code(400).send({
+                    code: 'INVALID_COMMAND', message: '내용 검색 조건이 올바르지 않다.', retryable: false,
+                });
+            } finally {
+                request.raw.off('aborted', abort);
+            }
+        },
+    );
+
+    app.get<{ Params: { planId: string; format: string } }>(
+        '/api/shares/:planId/:format',
+        async (request, reply) => {
+            const exported = context.sharing.export(request.params.planId);
+            if (!exported) return reply.code(404).send({ code: 'NOT_FOUND', message: '내보내기 계획이 없거나 바뀌었다.', retryable: false });
+            const safe = exported.bundle.analysis.title.replace(/[^\w가-힣.-]+/g, '_') || 'code-trail-share';
+            if (request.params.format === 'markdown') {
+                return reply.header('Content-Type', 'text/markdown; charset=utf-8')
+                    .header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(`${safe}.md`)}`)
+                    .send(context.sharing.markdown(exported.bundle));
+            }
+            if (request.params.format === 'html') {
+                return reply.header('Content-Type', 'text/html; charset=utf-8')
+                    .header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(`${safe}.html`)}`)
+                    .send(context.sharing.staticHtml(exported.bundle));
+            }
+            if (request.params.format !== 'ctshare') return reply.code(404).send({ code: 'NOT_FOUND', message: '모르는 내보내기 형식이다.', retryable: false });
+            return reply.header('Content-Type', 'application/json; charset=utf-8')
+                .header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(`${safe}.ctshare.json`)}`)
+                .send(exported.text);
+        },
+    );
+
     app.get('/api/diagnostics', async () => {
         const languages = await context.lsp.diagnostics();
         return {
@@ -173,6 +322,7 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
                 verifiedMethods: info.verifiedMethods,
             })),
             recoveryCandidates: context.store.getRecoveryCandidates(),
+            analysisRecoveryCandidates: context.analysisStore.getRecoveryCandidates(),
         };
     });
 

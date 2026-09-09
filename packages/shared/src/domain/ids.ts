@@ -35,6 +35,11 @@ export function newEventId(): string {
     return getCrypto().randomUUID();
 }
 
+/** 분석 기록·위치·공유 자료처럼 트레일 밖에서 쓰는 개체 ID다. */
+export function newEntityId(): string {
+    return getCrypto().randomUUID();
+}
+
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** 저장 파일에서 읽은 ID 가 UUID 인지. 파일명으로 쓰기 전에 반드시 통과시킨다. */

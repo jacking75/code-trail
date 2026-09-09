@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import type { NodeUiState, TrailNode, TrailOrigin } from '../domain/trail.js';
 import type { ResolvedSymbol } from '../domain/symbol.js';
-import type { ProjectSettings, LanguageServerSettings } from '../domain/settings.js';
+import type { ProjectSettings, LanguageServerSettings, LocalSettings } from '../domain/settings.js';
 import type { StoredTrail, StoredTrailNode, TrailSummary } from '../domain/storage.js';
 
 /**
@@ -153,8 +153,51 @@ export const projectSettingsSchema = z.object({
         }),
         go: languageServerSettingsSchema,
         rust: languageServerSettingsSchema,
+        typescript: languageServerSettingsSchema.default({
+            enabled: true, executable: null, args: [], env: {}, initializationOptions: null,
+        }),
     }),
 }) satisfies z.ZodType<ProjectSettings>;
+
+const localLanguageSettingsSchema = languageServerSettingsSchema.omit({ enabled: true });
+
+export const localSettingsSchema = z.object({
+    schemaVersion: z.literal(1),
+    editor: z.object({
+        executable: z.string().nullable(),
+        args: z.array(z.string()),
+    }),
+    languages: z.object({
+        cpp: localLanguageSettingsSchema,
+        csharp: localLanguageSettingsSchema,
+        go: localLanguageSettingsSchema,
+        rust: localLanguageSettingsSchema,
+        typescript: localLanguageSettingsSchema.default({
+            executable: null, args: [], env: {}, initializationOptions: null,
+        }),
+    }),
+    author: z.object({ id: uuidSchema, displayName: z.string().trim().min(1).max(100) }).nullable(),
+    ai: z.object({
+        enabled: z.boolean(),
+        provider: z.literal('ollama'),
+        // shared 패키지는 DOM의 URL 타입에 의존하지 않는다. 경로 없는 loopback
+        // origin만 허용해 제공자가 프로젝트 파일을 이용한 SSRF 통로가 되지 않게 한다.
+        endpoint: z.string().regex(
+            /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::[0-9]{1,5})?\/?$/,
+            { message: 'AI 제공자는 로컬 호스트 주소만 허용한다.' },
+        ),
+        model: z.string().max(200),
+        maxInputBytes: z.int().min(1_024).max(1_048_576),
+        timeoutMs: z.int().min(1_000).max(300_000),
+    }).default({
+        enabled: false,
+        provider: 'ollama',
+        endpoint: 'http://127.0.0.1:11434',
+        model: '',
+        maxInputBytes: 65_536,
+        timeoutMs: 60_000,
+    }),
+}) satisfies z.ZodType<LocalSettings>;
 
 // ── 오류 ────────────────────────────────────────────────────────────────────
 
@@ -162,6 +205,7 @@ export const COMMAND_ERROR_CODES = [
     'INVALID_COMMAND',
     'UNAUTHORIZED',
     'STALE_REVISION',
+    'ANNOTATION_CONFLICT',
     'NOT_FOUND',
     'LSP_UNAVAILABLE',
     'LSP_TIMEOUT',
@@ -235,11 +279,15 @@ export const bootstrapResponseSchema = z.object({
         name: z.string(),
     }),
     settings: projectSettingsSchema,
+    localAuthor: z.object({ id: uuidSchema, displayName: z.string() }).nullable(),
     trails: z.array(trailSummarySchema),
     activeTrailId: uuidSchema.nullable(),
     capabilities: z.object({
         externalEditor: z.boolean(),
-        languages: z.array(z.enum(['cpp', 'csharp', 'go', 'rust'])),
+        languages: z.array(z.enum(['cpp', 'csharp', 'go', 'rust', 'typescript'])),
+        analyses: z.boolean(),
+        sharing: z.boolean(),
+        readOnlyShare: z.boolean(),
     }),
 });
 
@@ -251,7 +299,7 @@ export const healthResponseSchema = z.object({
 
 export const diagnosticsResponseSchema = z.object({
     languages: z.array(z.object({
-        language: z.enum(['cpp', 'csharp', 'go', 'rust']),
+        language: z.enum(['cpp', 'csharp', 'go', 'rust', 'typescript']),
         enabled: z.boolean(),
         state: z.enum(['notStarted', 'starting', 'ready', 'failed', 'stopped']),
         /** 탐지된 실행 파일 이름. 전체 경로는 내보내지 않는다. */

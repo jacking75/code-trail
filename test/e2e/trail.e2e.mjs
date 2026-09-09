@@ -74,12 +74,15 @@ let running = await server.startServer({
     logWrite: () => {},
 });
 const settingsPath = path.join(root, '.code-trail', 'settings.json');
+const localSettingsPath = path.join(root, '.code-trail', 'local', 'settings.json');
 const settings = JSON.parse(await readFile(settingsPath, 'utf8'));
-settings.languages.cpp.executable = process.execPath;
-settings.languages.cpp.args = [FAKE_LSP, '--scenario=normal'];
+const localSettings = JSON.parse(await readFile(localSettingsPath, 'utf8'));
+localSettings.languages.cpp.executable = process.execPath;
+localSettings.languages.cpp.args = [FAKE_LSP, '--scenario=normal'];
 // 폭 맞춤 하한을 눈에 띄게 올려 둔다. 아래에서 이 값에서 멈추는지 본다.
 settings.ui.minFontSize = 11;
 await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+await writeFile(localSettingsPath, `${JSON.stringify(localSettings, null, 2)}\n`, 'utf8');
 await running.close();
 
 running = await server.startServer({
@@ -393,7 +396,7 @@ try {
     });
     await page.goto(`${running.url}/#token=${running.token}`);
     await page.waitForSelector('.app-bar');
-    await page.locator('.pane-tabs .tab').nth(1).click();
+    await page.locator('.pane-tabs .tab', { hasText: '트레일' }).click();
     await page.waitForSelector('#root.board > .node', { timeout: 15000 });
     check('서버를 다시 띄워도 보드 모드가 유지된다', (await page.locator('#root.board').count()) === 1);
     const afterRestart = await page.locator(`[data-id="${childId}"]`).evaluate((el) => ({
@@ -482,7 +485,7 @@ try {
     });
     await page.goto(`${running.url}/#token=${running.token}`);
     await page.waitForSelector('.app-bar');
-    await page.locator('.pane-tabs .tab').nth(1).click();
+    await page.locator('.pane-tabs .tab', { hasText: '트레일' }).click();
     await page.waitForSelector('#root > .node', { timeout: 15000 });
     await page.waitForFunction(
         () => getComputedStyle(document.querySelector('.node .code')).fontSize === '20px',
@@ -507,7 +510,7 @@ try {
     console.log('\n[새로고침 복원]');
     await page.reload();
     await page.waitForSelector('.app-bar');
-    await page.locator('.pane-tabs .tab').nth(1).click();
+    await page.locator('.pane-tabs .tab', { hasText: '트레일' }).click();
     await page.waitForSelector('#root > .node', { timeout: 15000 });
     check('새로고침 후에도 노드가 남는다', (await page.locator('#root > .node').count()) === 2);
 
@@ -516,7 +519,7 @@ try {
     const second = await browser.newPage({ viewport: { width: 1200, height: 800 } });
     await second.goto(`${running.url}/#token=${running.token}`);
     await second.waitForSelector('.app-bar');
-    await second.locator('.pane-tabs .tab').nth(1).click();
+    await second.locator('.pane-tabs .tab', { hasText: '트레일' }).click();
     await second.waitForSelector('#root > .node', { timeout: 15000 });
     check('두 번째 탭도 같은 트리를 본다', (await second.locator('#root > .node').count()) === 2);
 
@@ -574,11 +577,11 @@ try {
     console.log(`${NL}[진단 화면]`);
     await page.locator('.pane-tabs .tab', { hasText: '진단' }).click();
     await page.waitForFunction(
-        () => document.querySelectorAll('.diag-card[data-language]').length === 4,
+        () => document.querySelectorAll('.diag-card[data-language]').length === 5,
         undefined,
         { timeout: 10000 },
     );
-    check('네 언어 카드가 다 나온다', (await page.locator('.diag-card[data-language]').count()) === 4);
+    check('다섯 언어 카드가 다 나온다', (await page.locator('.diag-card[data-language]').count()) === 5);
 
     const cpp = page.locator('.diag-card[data-language="cpp"]');
     const cppText = await cpp.textContent();
@@ -610,7 +613,7 @@ try {
     );
 
     console.log(`${NL}[외부 에디터 실패 폴백]`);
-    await page.locator('.pane-tabs .tab').nth(1).click();
+    await page.locator('.pane-tabs .tab', { hasText: '트레일' }).click();
     await page.waitForSelector('#root > .node', { timeout: 8000 });
     await page.locator('#root > .node > .hd [data-act="open"]').first().click();
     await page.waitForSelector('.editor-fallback', { timeout: 8000 });

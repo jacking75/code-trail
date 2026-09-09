@@ -1,9 +1,12 @@
 #!/usr/bin/env node
-import { stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { resolveProjectRoot, startServer, type RunningServer } from '@code-trail/server';
+import { MAX_SHARE_BYTES } from '@code-trail/shared';
 
 import { CliArgsError, USAGE, parseArgs, type CliArgs } from './args.js';
 import { openBrowser } from './openBrowser.js';
@@ -52,10 +55,26 @@ async function assertDirectory(input: string): Promise<string> {
 }
 
 async function run(args: CliArgs): Promise<void> {
-    const projectRoot = await assertDirectory(args.projectDirectory);
+    let temporaryShareRoot: string | null = null;
+    let shareText: string | null = null;
+    let projectRoot: string;
+    if (args.readSharePath) {
+        const info = await stat(args.readSharePath).catch(() => undefined);
+        if (!info?.isFile()) return fail('공유 묶음 파일을 찾을 수 없다.');
+        if (info.size > MAX_SHARE_BYTES) return fail('공유 묶음 크기 제한을 넘었다.');
+        try {
+            shareText = await readFile(args.readSharePath, 'utf8');
+            temporaryShareRoot = await mkdtemp(path.join(tmpdir(), 'code-trail-share-'));
+            projectRoot = temporaryShareRoot;
+        } catch {
+            return fail('공유 묶음 파일을 읽을 수 없다.');
+        }
+    } else {
+        projectRoot = await assertDirectory(args.projectDirectory);
+    }
 
     // 5~6. 같은 프로젝트에 이미 서버가 떠 있으면 새로 띄우지 않는다.
-    const { lock } = await findLiveServer(projectRoot);
+    const { lock } = args.readSharePath ? { lock: null } : await findLiveServer(projectRoot);
     if (lock) {
         process.stderr.write(
             `code-trail: 이 프로젝트는 이미 열려 있다 (pid ${lock.pid}, http://127.0.0.1:${lock.port}).\n`
@@ -71,9 +90,25 @@ async function run(args: CliArgs): Promise<void> {
             port: args.port,
             logLevel: args.logLevel,
             ...(args.configPath ? { settingsPath: args.configPath } : {}),
+            ...(args.readSharePath ? { readOnlyShare: true } : {}),
         });
     } catch (error) {
+        if (temporaryShareRoot) {
+            await rm(temporaryShareRoot, { recursive: true, force: true }).catch(() => undefined);
+        }
         return fail(error instanceof Error ? error.message : String(error));
+    }
+
+    if (shareText !== null) {
+        try {
+            await server.context.sharing.import(shareText);
+        } catch (error) {
+            await server.close().catch(() => undefined);
+            if (temporaryShareRoot) {
+                await rm(temporaryShareRoot, { recursive: true, force: true }).catch(() => undefined);
+            }
+            return fail(error instanceof Error ? error.message : '공유 묶음을 열 수 없다.');
+        }
     }
 
     // 10~11. 토큰은 fragment 로만 넘긴다. query 에 넣으면 서버 접근 로그,
@@ -82,7 +117,7 @@ async function run(args: CliArgs): Promise<void> {
         + (args.trailId ? `&trail=${encodeURIComponent(args.trailId)}` : '');
 
     process.stdout.write(`Code Trail  ${server.url}\n`);
-    process.stdout.write(`프로젝트    ${server.projectRoot}\n`);
+    process.stdout.write(args.readSharePath ? '읽기 전용 공유 묶음\n' : `프로젝트    ${server.projectRoot}\n`);
 
     if (args.open) {
         const opened = openBrowser(url);
@@ -107,6 +142,11 @@ async function run(args: CliArgs): Promise<void> {
         process.stderr.write(`\n${signal} 을 받았다. 저장을 끝내고 닫는다…\n`);
         server
             .close()
+            .then(async () => {
+                if (temporaryShareRoot) {
+                    await rm(temporaryShareRoot, { recursive: true, force: true });
+                }
+            })
             .then(() => process.exit(0))
             .catch(() => process.exit(1));
     };

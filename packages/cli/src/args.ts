@@ -12,6 +12,8 @@ import { isLogLevel, type LogLevel } from '@code-trail/server';
 
 export interface CliArgs {
     projectDirectory: string;
+    /** 프로젝트 없이 여는 읽기 전용 공유 묶음 경로다. */
+    readSharePath: string | null;
     port: number;
     open: boolean;
     trailId: string | null;
@@ -29,6 +31,7 @@ export class CliArgsError extends Error {
 }
 
 export const USAGE = `code-trail [project-directory]
+code-trail --read-share <share-file>
 
   코드 탐색 트레일을 로컬 서버로 띄우고 기본 브라우저를 연다.
   경로를 주지 않으면 현재 디렉터리를 연다.
@@ -39,6 +42,7 @@ export const USAGE = `code-trail [project-directory]
   --trail <trail-id>   시작한 뒤 이 트레일을 고른다
   --log-level <level>  error | warn | info | debug  (기본 info)
   --config <path>      설정 파일 위치를 덮어쓴다 (테스트·특수 환경 전용)
+  --read-share <path>  프로젝트·언어 서버 없이 공유 묶음을 읽기 전용으로 연다
   -h, --help           이 도움말
   -v, --version        버전
 
@@ -55,6 +59,7 @@ function requireValue(name: string, value: string | undefined): string {
 export function parseArgs(argv: readonly string[]): CliArgs {
     const args: CliArgs = {
         projectDirectory: '',
+        readSharePath: null,
         port: 0,
         open: true,
         trailId: null,
@@ -101,6 +106,9 @@ export function parseArgs(argv: readonly string[]): CliArgs {
             case '--config':
                 args.configPath = requireValue('--config', argv[++i]);
                 break;
+            case '--read-share':
+                args.readSharePath = requireValue('--read-share', argv[++i]);
+                break;
             default:
                 if (arg.startsWith('-')) {
                     throw new CliArgsError(`모르는 옵션이다: ${arg}`);
@@ -111,6 +119,12 @@ export function parseArgs(argv: readonly string[]): CliArgs {
 
     if (positional.length > 1) {
         throw new CliArgsError('프로젝트 경로는 하나만 준다.');
+    }
+    if (args.readSharePath && positional.length > 0) {
+        throw new CliArgsError('--read-share 와 프로젝트 경로를 함께 쓸 수 없다.');
+    }
+    if (args.readSharePath && (args.trailId || args.configPath)) {
+        throw new CliArgsError('--read-share 에서는 --trail 또는 --config 를 쓸 수 없다.');
     }
     // 1. 인자가 없으면 현재 작업 디렉터리를 쓴다.
     args.projectDirectory = positional[0] ?? process.cwd();

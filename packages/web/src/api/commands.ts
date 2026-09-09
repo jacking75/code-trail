@@ -138,6 +138,12 @@ export const commands = {
             withTrail: false,
         }),
 
+    updateLocalAuthor: (context: CommandContext, author: { id: string; displayName: string }) =>
+        send(context, 'settings.updateLocalAuthor', { author }, {
+            withRevision: false,
+            withTrail: false,
+        }),
+
     restartLsp: (context: CommandContext, language: string) =>
         send(context, 'lsp.restart', { language }, {
             withRevision: false,
@@ -155,4 +161,95 @@ export const commands = {
             withRevision: false,
             withTrail: false,
         }),
+
+    createAnalysis: (
+        context: CommandContext,
+        payload: { title: string; purpose: string; trailIds: string[]; author: { id: string; displayName: string } },
+    ) => send(context, 'analysis.create', payload, { withRevision: false, withTrail: false }),
+
+    updateAnalysisPlan: (context: CommandContext, payload: Record<string, unknown>) =>
+        send(context, 'analysis.updatePlan', payload, { withRevision: false, withTrail: false }),
+
+    recoverAnalysis: (context: CommandContext, analysisId: string, kind: 'temporary' | 'backup') =>
+        send(context, 'analysis.recover', { analysisId, kind }, { withRevision: false, withTrail: false }),
+
+    createAnnotation: (
+        context: CommandContext,
+        payload: {
+            analysisId: string; target: Record<string, unknown>; body: string;
+            kind: 'explanation' | 'question' | 'concern' | 'conclusion'; tags: string[];
+            author: { id: string; displayName: string };
+        },
+    ) => send(context, 'annotation.create', payload, { withRevision: false, withTrail: false }),
+
+    updateAnnotation: (
+        context: CommandContext,
+        payload: { analysisId: string; annotationId: string; baseVersion: number; actorId: string; patch: Record<string, unknown> },
+    ) => send(context, 'annotation.update', payload, { withRevision: false, withTrail: false }),
+
+    deleteAnnotation: (
+        context: CommandContext,
+        payload: { analysisId: string; annotationId: string; baseVersion: number; actorId: string },
+    ) => send(context, 'annotation.delete', payload, { withRevision: false, withTrail: false }),
+
+    restoreAnnotation: (
+        context: CommandContext,
+        payload: { analysisId: string; annotationId: string; baseVersion: number; actorId: string },
+    ) => send(context, 'annotation.restore', payload, { withRevision: false, withTrail: false }),
+
+    replyAnnotation: (
+        context: CommandContext,
+        payload: { analysisId: string; annotationId: string; body: string; author: { id: string; displayName: string } },
+    ) => send(context, 'annotation.reply', payload, { withRevision: false, withTrail: false }),
+
+    setReview: (
+        context: CommandContext,
+        payload: { analysisId: string; target: Record<string, unknown>; baselineId: string; state: string; authorId: string; evidenceIds: string[] },
+    ) => send(context, 'review.setState', payload, { withRevision: false, withTrail: false }),
+
+    captureAnchor: (
+        context: CommandContext,
+        payload: { analysisId: string; documentId: string; range: { start: { line: number; char: number }; end: { line: number; char: number } } },
+    ) => send(context, 'anchor.capture', payload, { withRevision: false, withTrail: false }),
+
+    recheckAnchors: (
+        context: CommandContext,
+        payload: { analysisId: string; anchorIds: string[]; actorId: string },
+    ) => send(context, 'anchor.recheck', payload, { withRevision: false, withTrail: false }),
+
+    updateWalkthrough: (context: CommandContext, payload: Record<string, unknown>) =>
+        send(context, 'walkthrough.update', payload, { withRevision: false, withTrail: false }),
+
+    prepareShare: (context: CommandContext, analysisId: string, policy: Record<string, boolean>) =>
+        send(context, 'share.prepare', { analysisId, policy }, { withRevision: false, withTrail: false }),
+
+    exportShare: (context: CommandContext, planId: string, format: 'ctshare' | 'markdown' | 'html') =>
+        send(context, 'share.export', { planId, format }, { withRevision: false, withTrail: false }),
+
+    uploadStart: (context: CommandContext, byteLength: number, sha256: string) =>
+        send(context, 'share.uploadStart', { byteLength, sha256 }, { withRevision: false, withTrail: false }),
+
+    uploadChunk: (context: CommandContext, uploadId: string, index: number, base64: string) =>
+        send(context, 'share.uploadChunk', { uploadId, index, base64 }, { withRevision: false, withTrail: false }),
+
+    importPreview: (context: CommandContext, uploadId: string) =>
+        send(context, 'share.importPreview', { uploadId }, { withRevision: false, withTrail: false }),
+
+    importCommit: (context: CommandContext, uploadId: string, forceCopy = false) =>
+        send(context, 'share.importCommit', { uploadId, forceCopy }, { withRevision: false, withTrail: false }),
+
+    mergeCommit: (context: CommandContext, planId: string, actorId: string) =>
+        send(context, 'share.mergeCommit', { planId, actorId }, { withRevision: false, withTrail: false }),
+
+    saveDraft: (context: CommandContext, payload: Record<string, unknown>) =>
+        send(context, 'analysis.saveDraft', payload, { withRevision: false, withTrail: false }),
+
+    generateAiDraft: (context: CommandContext, payload: Record<string, unknown>) =>
+        send(context, 'ai.generate', payload, { withRevision: false, withTrail: false }),
+
+    cancelAiDraft: (context: CommandContext, requestId: string) =>
+        send(context, 'ai.cancel', { requestId }, { withRevision: false, withTrail: false }),
+
+    acceptAiDraft: (context: CommandContext, payload: Record<string, unknown>) =>
+        send(context, 'ai.accept', payload, { withRevision: false, withTrail: false }),
 };

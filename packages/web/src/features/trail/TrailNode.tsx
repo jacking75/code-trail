@@ -63,6 +63,10 @@ export interface TrailNodeProps {
         text: string,
         modifiers: { alt: boolean; ctrl: boolean },
     ) => void;
+    onRangeSelect?: (node: TrailNodeView, range: {
+        start: { line: number; char: number };
+        end: { line: number; char: number };
+    }) => void;
     /** 본문 높이를 사용자가 바꿨을 때. 값은 서버에 저장된다. */
     onNodeUi: (nodeId: string, patch: { bodyHeight?: number | null }) => void;
 }
@@ -294,7 +298,7 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
             ) : null}
 
             <div className="body" ref={bodyRef}>
-                <CodeBody
+                {node.collapsed ? null : <CodeBody
                     symbol={node.symbol}
                     clickTarget={props.clickTarget}
                     maxCodeLines={props.maxCodeLines}
@@ -304,7 +308,8 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
                         : { fontSize: ui.codeFontSize })}
                     onIdentifierClick={(line, char, text, modifiers) =>
                         props.onIdentifierClick(node, line, char, text, modifiers)}
-                />
+                    onRangeSelect={(range) => props.onRangeSelect?.(node, range)}
+                />}
             </div>
 
             {board ? null : (

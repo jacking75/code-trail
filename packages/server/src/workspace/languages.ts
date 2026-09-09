@@ -57,7 +57,7 @@ export function languageIdFor(fileName: string): string | null {
 }
 
 /** Code Trail 이 심볼 해석을 지원하는 언어. */
-export type SupportedLanguage = 'cpp' | 'csharp' | 'go' | 'rust';
+export type SupportedLanguage = 'cpp' | 'csharp' | 'go' | 'rust' | 'typescript';
 
 export function supportedLanguageFor(languageId: string): SupportedLanguage | null {
     switch (languageId) {
@@ -70,6 +70,11 @@ export function supportedLanguageFor(languageId: string): SupportedLanguage | nu
             return 'go';
         case 'rust':
             return 'rust';
+        case 'typescript':
+        case 'typescriptreact':
+        case 'javascript':
+        case 'javascriptreact':
+            return 'typescript';
         default:
             return null;
     }

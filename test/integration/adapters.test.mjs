@@ -12,9 +12,10 @@ const adapters = await import(
 const detect = await import(
     new URL('../../packages/server/dist/lsp/adapters/detect.js', import.meta.url).href
 );
+const shared = await import(new URL('../../packages/shared/dist/index.js', import.meta.url).href);
 
 const FILES = { 'src/a.cpp': 'void a() {}\n' };
-const LANGUAGES = ['cpp', 'csharp', 'go', 'rust'];
+const LANGUAGES = ['cpp', 'csharp', 'go', 'rust', 'typescript'];
 
 /**
  * 가짜 언어 서버 실행 파일.
@@ -40,15 +41,27 @@ async function makeBatchShim(root, name) {
 async function withSettings(root, mutate, run) {
     await withServer(root, async () => {});
     const settingsPath = path.join(root, '.code-trail', 'settings.json');
+    const localPath = path.join(root, '.code-trail', 'local', 'settings.json');
     const settings = JSON.parse(await readFile(settingsPath, 'utf8'));
+    const local = JSON.parse(await readFile(localPath, 'utf8'));
+    settings.editor = { ...local.editor };
+    for (const language of LANGUAGES) {
+        settings.languages[language] = { ...settings.languages[language], ...local.languages[language] };
+    }
     mutate(settings);
+    local.editor = { ...settings.editor };
+    for (const language of LANGUAGES) {
+        const { executable, args, env, initializationOptions } = settings.languages[language];
+        local.languages[language] = { executable, args, env, initializationOptions };
+    }
     await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+    await writeFile(localPath, `${JSON.stringify(local, null, 2)}\n`, 'utf8');
     await withServer(root, run);
 }
 
 const VERSION_LINE = /^v\d+\.\d+\.\d+/;
 
-test('어댑터가 네 언어를 모두 맡고 이름을 갖는다', () => {
+test('어댑터가 다섯 언어를 모두 맡고 이름을 갖는다', () => {
     for (const language of LANGUAGES) {
         const adapter = adapters.adapterFor(language);
         assert.equal(adapter.id, language);
@@ -57,6 +70,28 @@ test('어댑터가 네 언어를 모두 맡고 이름을 갖는다', () => {
     }
     // C/C++ 은 어댑터 하나가 둘 다 맡는다.
     assert.deepEqual([...adapters.adapterFor('cpp').languageIds], ['c', 'cpp']);
+});
+
+test('TypeScript 어댑터는 Windows npm shim 대신 Node CLI 진입점을 stdio로 띄운다', async () => {
+    const root = await makeProject({ 'package.json': '{}\n', 'src/a.ts': 'export function a() {}\n' });
+    try {
+        const cli = path.join(root, 'typescript-language-server.mjs');
+        await writeFile(cli, 'if (process.argv.includes("--version")) console.log("1.0.0");\n', 'utf8');
+        const settings = shared.defaultSettings();
+        settings.languages.typescript.executable = cli;
+        const workspace = { projectRoot: root, settings };
+        const adapter = adapters.adapterFor('typescript');
+        const detection = await adapter.detectExecutable(workspace);
+        assert.equal(detection.source, 'settings');
+        const command = adapter.buildCommand(detection.executable, workspace);
+        assert.equal(command.command, process.execPath);
+        assert.deepEqual(command.args.slice(0, 2), [cli, '--stdio']);
+        const checks = await adapter.healthChecks(workspace, detection);
+        assert.equal(checks.find((item) => item.label === 'typescript-language-server --version').level, 'ok');
+        assert.equal(checks.find((item) => item.label === 'TypeScript 프로젝트 표지').level, 'ok');
+    } finally {
+        await removeProject(root);
+    }
 });
 
 test('설정에 적힌 경로를 가장 먼저 쓴다', async () => {

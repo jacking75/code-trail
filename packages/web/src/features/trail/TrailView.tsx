@@ -73,6 +73,10 @@ export interface TrailViewProps {
         text: string,
         modifiers: { alt: boolean; ctrl: boolean },
     ) => void;
+    onRangeSelect?: (node: TrailNodeView, range: {
+        start: { line: number; char: number };
+        end: { line: number; char: number };
+    }) => void;
     onFocusNode: (nodeId: string) => void;
     onClear: () => void;
     onExportMarkdown: () => void;
@@ -455,6 +459,7 @@ export function TrailView(props: TrailViewProps): JSX.Element {
         onOpenInEditor: props.onOpenInEditor,
         onJumpToOrigin: jumpToOrigin,
         onIdentifierClick: props.onIdentifierClick,
+        onRangeSelect: props.onRangeSelect,
         onNodeUi,
     };
 

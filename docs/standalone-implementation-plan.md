@@ -345,7 +345,7 @@
 - 대상: 현재 VS Code 확장인 Code Trail을 로컬 웹 서버와 브라우저 프론트엔드로 전환하는 작업
 - 실행 형태: 데스크톱 셸 없이 CLI가 로컬 서버를 시작하고 기본 브라우저를 연다.
 - 지원 플랫폼: Windows, macOS, Linux
-- 지원 언어: C/C++, C#, Go, Rust
+- 지원 언어: C/C++, C#, Go, Rust, TypeScript/JavaScript다. 뒤의 언어는 1.1.0 확장에서 추가했다.
 - 저장 위치: 탐색 대상 프로젝트 내부의 `.code-trail/`
 - 기존 데이터: 현재 확장의 JSON 형식과 호환하지 않는다.
 - VS Code 확장: 최종 결과물에서 완전히 제거한다.
@@ -363,7 +363,7 @@
 | 편집 | 웹에서는 편집하지 않으며 외부 에디터 열기를 제공함 |
 | 심볼 해석 | 언어별 자체 파서를 만들지 않고 표준 LSP 요청만 사용함 |
 | 언어 서버 배포 | 사용자 시스템에 설치된 실행 파일을 자동 탐지하고, 필요하면 설정에서 경로를 지정함 |
-| 지원 언어 | C/C++, C#, Go, Rust를 모두 지원함 |
+| 지원 언어 | C/C++, C#, Go, Rust, TypeScript/JavaScript를 지원함 |
 | 네트워크 | `127.0.0.1` 및 `::1`의 로컬 접속만 허용함 |
 | 영속 저장 | 프로젝트 루트의 `.code-trail/`에 설정과 트레일을 저장함 |
 | 기존 JSON | 가져오기와 변환 기능을 제공하지 않음 |
@@ -847,7 +847,7 @@ Monaco 모델은 다음 원칙으로 관리한다.
 
 ```ts
 interface LspAdapter {
-    id: 'cpp' | 'csharp' | 'go' | 'rust';
+    id: 'cpp' | 'csharp' | 'go' | 'rust' | 'typescript';
     languageIds: string[];
     detectExecutable(settings: ProjectSettings): Promise<DetectionResult>;
     buildCommand(settings: ProjectSettings): SpawnCommand;
@@ -1079,8 +1079,35 @@ workspace.openDocument
 workspace.searchFiles
 editor.openLocation
 settings.update
+settings.updateLocalAuthor
 lsp.restart
 lsp.verify
+analysis.create
+analysis.updatePlan
+analysis.recover
+analysis.saveDraft
+annotation.create
+annotation.update
+annotation.delete
+annotation.restore
+annotation.reply
+annotation.setStatus
+review.setState
+anchor.capture
+anchor.recheck
+anchor.rebind
+walkthrough.update
+share.prepare
+share.export
+share.uploadStart
+share.uploadChunk
+share.uploadFinish
+share.importPreview
+share.importCommit
+share.mergeCommit
+ai.generate
+ai.cancel
+ai.accept
 ```
 
 `lsp.verify`는 단계 9에서 추가했다. 진단 화면의 `지원됨`은 프로세스가 떴다는 뜻이 아니라 실제 샘플 문서에서 `documentSymbol`과 `definition`이 응답했다는 뜻이고, 그 확인을 사용자가 눌러서 돌린다. HTTP가 아니라 명령인 이유는 언어 서버를 띄우고 요청을 보내는 상태 변경이기 때문이다.
@@ -1101,7 +1128,15 @@ lsp.verify
 | GET | `/api/workspace/children?id=...` | 파일 탐색기 하위 항목 |
 | GET | `/api/workspace/search?q=...` | 파일 이름 검색 |
 | GET | `/api/documents/:documentId` | 허용된 원문과 언어 ID 조회 |
+| GET | `/api/documents/:documentId/symbols` | 현재 문서의 심볼 목록 조회 |
+| GET | `/api/analyses` | 분석 목록 조회 |
+| GET | `/api/analyses/:analysisId` | 분석 정본 조회 |
+| GET | `/api/analyses/:analysisId/anchors/:anchorId/compare` | 기록 당시 코드와 현재 코드의 읽기 전용 비교 |
+| GET | `/api/annotations/search` | 분석 기록 본문·메타데이터 검색 |
+| GET | `/api/changes` | 읽기 전용 Git 변경 목록 조회 |
+| GET | `/api/workspace/content-search` | 제한된 일반 문자열 내용 검색 |
 | GET | `/api/trails/:trailId/export.md` | Markdown 다운로드 |
+| GET | `/api/shares/:planId/:format` | 공유 묶음·Markdown·정적 HTML 다운로드 |
 | GET | `/api/diagnostics` | LSP 상태와 안전하게 정제한 진단 정보 |
 | GET | `/api/health` | 현재 프로세스의 단순 생존 확인 |
 
@@ -1144,6 +1179,7 @@ interface CommandError {
         | 'INVALID_COMMAND'
         | 'UNAUTHORIZED'
         | 'STALE_REVISION'
+        | 'ANNOTATION_CONFLICT'
         | 'NOT_FOUND'
         | 'LSP_UNAVAILABLE'
         | 'LSP_TIMEOUT'
@@ -1286,7 +1322,7 @@ sequenceDiagram
 단계 9에서 정한 것 두 가지.
 
 - **실행 파일은 정규화 경로가 아니라 이름만 내보낸다.** 위 목록의 첫 줄은 8.1("로그와 오류에 절대경로를 남기지 않는다")과 정면으로 부딪힌다. 진단 화면은 브라우저에서 열리고 그 내용은 사용자가 붙여 넣어 공유하기 쉬우므로 8.1을 우선했다. 어느 실행 파일인지는 `detectionSource`(설정 / PATH / 설치 위치 / GOBIN / rustup)와 버전 명령 결과로 구분된다. 예외는 rust-analyzer 뿐이고, rustup proxy와 별도 설치를 구분할 방법이 경로밖에 없어 어댑터가 점검 항목에 담는다.
-- **확인은 사용자가 누른다.** `lsp.verify` 명령이 샘플 문서 하나를 골라 documentSymbol과 definition을 실제로 보낸다. 진단 화면을 여는 것만으로 네 언어 서버를 전부 띄우지 않는다 — 쓰지도 않을 서버가 CPU와 메모리를 먹는다(5.1의 지연 기동과 같은 이유).
+- **확인은 사용자가 누른다.** `lsp.verify` 명령이 샘플 문서 하나를 골라 documentSymbol과 definition을 실제로 보낸다. 진단 화면을 여는 것만으로 모든 언어 서버를 띄우지 않는다 — 쓰지도 않을 서버가 CPU와 메모리를 먹는다(5.1의 지연 기동과 같은 이유).
 
 ## 19. 성능과 자원 제한
 
@@ -1479,12 +1515,13 @@ sequenceDiagram
 3. rust-analyzer
 4. C# 선행 스파이크
 5. C# 정식 어댑터
+6. TypeScript/JavaScript 어댑터 (`typescript-language-server --stdio`)
 
 각 어댑터마다 실행 파일 탐지, 버전, 프로젝트 인식, 초기화 옵션, fixture 스모크 테스트를 만든다.
 
 완료 조건:
 
-- 네 언어에서 definition과 documentSymbol이 통과한다.
+- 지원 언어에서 definition과 documentSymbol이 통과한다. 1.1.0에 추가한 TypeScript/JavaScript는 실제 서버 fixture를 별도로 둔다.
 - 지원 서버에서는 implementation과 typeDefinition도 통과한다.
 - C# 다중 프로젝트와 인터페이스 시나리오가 통과한다.
 
@@ -1607,7 +1644,7 @@ code-trail /path/to/project
 
 1. VS Code를 설치하지 않은 환경에서 CLI와 웹 UI가 실행된다.
 2. Windows, macOS, Linux에서 프로젝트를 열 수 있다.
-3. C/C++, C#, Go, Rust fixture에서 정의와 문서 심볼 탐색이 성공한다.
+3. C/C++, C#, Go, Rust, TypeScript/JavaScript fixture에서 정의와 문서 심볼 탐색이 성공한다.
 4. 지원되는 fixture에서 구현과 타입 정의 탐색이 성공한다.
 5. 언어별 자체 파서 없이 네 표준 LSP 요청으로만 심볼을 해석한다.
 6. 원본 코드와 좌표가 탭, 한글, 이모지, CRLF 파일에서 어긋나지 않는다.

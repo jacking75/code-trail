@@ -338,13 +338,21 @@ export class LspClient {
      * 받아야 그 작업을 멈춘다 — 안 그러면 이미 아무도 안 기다리는 계산에
      * CPU 를 계속 쓴다.
      */
-    async request<T>(method: string, params: unknown, timeoutMs?: number): Promise<T> {
+    async request<T>(method: string, params: unknown, timeoutMs?: number, signal?: AbortSignal): Promise<T> {
         const connection = this.connection;
         if (!connection) {
             throw new Error('언어 서버 연결이 없다.');
         }
         const limit = timeoutMs ?? this.requestTimeoutMs;
         const source = new CancellationTokenSource();
+        let rejectAbort: ((reason?: unknown) => void) | undefined;
+        const aborted = new Promise<never>((_resolve, reject) => { rejectAbort = reject; });
+        const abort = (): void => {
+            source.cancel();
+            rejectAbort?.(new Error('LSP 요청이 취소되었다.'));
+        };
+        if (signal?.aborted) abort();
+        else signal?.addEventListener('abort', abort, { once: true });
 
         let timer: NodeJS.Timeout | undefined;
         const timeout = new Promise<never>((_resolve, reject) => {
@@ -358,11 +366,13 @@ export class LspClient {
             return (await Promise.race([
                 connection.sendRequest<T>(method, params ?? undefined, source.token),
                 timeout,
+                aborted,
             ])) as T;
         } finally {
             if (timer) {
                 clearTimeout(timer);
             }
+            signal?.removeEventListener('abort', abort);
             source.dispose();
         }
     }

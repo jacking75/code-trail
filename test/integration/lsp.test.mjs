@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
 
-import { authFetch, makeProject, removeProject, server } from './helpers.mjs';
+import { authFetch, makeProject, removeProject, server, updateLocalSettings } from './helpers.mjs';
 
 const { WS_PROTOCOL } = server;
 const FAKE_LSP = fileURLToPath(new URL('../fake-lsp/server.mjs', import.meta.url));
@@ -72,11 +72,10 @@ async function startWithFakeLsp({ root, scenario, extraArgs }, run, serverOption
     const running = await server.startServer(base);
     try {
         // 설정에 가짜 서버를 적는다. 실행 파일을 자동으로 찾지 않는다는 규칙 그대로다.
-        const settingsPath = path.join(root, '.code-trail', 'settings.json');
-        const settings = JSON.parse(await readFile(settingsPath, 'utf8'));
-        settings.languages.cpp.executable = process.execPath;
-        settings.languages.cpp.args = [FAKE_LSP, `--scenario=${scenario}`, ...extraArgs];
-        await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+        await updateLocalSettings(root, (settings) => {
+            settings.languages.cpp.executable = process.execPath;
+            settings.languages.cpp.args = [FAKE_LSP, `--scenario=${scenario}`, ...extraArgs];
+        });
         // 서버는 시작할 때 설정을 읽었다. 다시 읽히려면 새로 띄워야 한다.
         await running.close();
 
@@ -1049,13 +1048,12 @@ test('진단 로그에 환경 변수·토큰·코드 본문이 안 남는다', a
             lspRequestTimeoutMs: 4000,
         };
         const first = await server.startServer(base);
-        const settingsPath = path.join(root, '.code-trail', 'settings.json');
-        const settings = JSON.parse(await readFile(settingsPath, 'utf8'));
-        settings.languages.cpp.executable = process.execPath;
-        settings.languages.cpp.args = [FAKE_LSP, '--scenario=noisyStderr'];
+        await updateLocalSettings(root, (settings) => {
+            settings.languages.cpp.executable = process.execPath;
+            settings.languages.cpp.args = [FAKE_LSP, '--scenario=noisyStderr'];
         // 비밀값을 환경에 넣는다. 로그에 그대로 나오면 안 된다.
-        settings.languages.cpp.env = { CT_TEST_SECRET: SECRET };
-        await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}` + NL, 'utf8');
+            settings.languages.cpp.env = { CT_TEST_SECRET: SECRET };
+        });
         await first.close();
 
         const running = await server.startServer(base);

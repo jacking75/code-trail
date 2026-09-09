@@ -1,17 +1,23 @@
-import { mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
     Trail,
+    applyLocalSettings,
+    defaultLocalSettings,
     defaultSettings,
     fromStoredTrail,
     isUuid,
+    localSettingsFromEffective,
+    localSettingsSchema,
     parseWith,
     projectSettingsSchema,
+    shareableSettings,
     storedTrailSchema,
     stringifyStoredTrail,
     toStoredTrail,
     toTrailSummary,
+    type LocalSettings,
     type ProjectSettings,
     type TrailSummary,
 } from '@code-trail/shared';
@@ -64,10 +70,13 @@ export class ProjectStore {
     readonly dir: string;
     readonly trailsDir: string;
     readonly runtimeDir: string;
+    readonly localDir: string;
 
     private readonly logger: Logger;
     private readonly settingsPath: string;
+    private readonly usesCustomSettingsPath: boolean;
     private settings: ProjectSettings = defaultSettings();
+    private localSettings: LocalSettings = defaultLocalSettings();
     private recovery: RecoveryCandidate[] = [];
     private readonly settingsListeners: Array<(settings: ProjectSettings) => void> = [];
 
@@ -76,15 +85,21 @@ export class ProjectStore {
         this.dir = path.join(this.root, STORE_DIR);
         this.trailsDir = path.join(this.dir, TRAILS_DIR);
         this.runtimeDir = path.join(this.dir, RUNTIME_DIR);
+        this.localDir = path.join(this.dir, 'local');
         this.logger = options.logger.child('store');
+        this.usesCustomSettingsPath = options.settingsPath !== undefined;
         this.settingsPath = options.settingsPath ?? path.join(this.dir, SETTINGS_FILE);
     }
 
     /** 디렉터리를 만들고 설정을 읽는다. 서버가 뜨기 전에 한 번 부른다. */
     async initialize(): Promise<void> {
-        await mkdir(this.trailsDir, { recursive: true });
+        await Promise.all([
+            mkdir(this.trailsDir, { recursive: true }),
+            mkdir(this.localDir, { recursive: true }),
+        ]);
         await mkdir(path.join(this.runtimeDir, 'lsp'), { recursive: true });
         await this.ensureRuntimeGitignore();
+        await this.ensureLocalGitignore();
         this.settings = await this.loadSettings();
         this.recovery = await this.findRecoveryCandidates();
     }
@@ -103,7 +118,15 @@ export class ProjectStore {
             // 처음 여는 프로젝트다. 기본값을 그대로 써 두면 사용자가 무엇을 바꿀 수
             // 있는지 파일만 열어 봐도 안다.
             const fresh = defaultSettings();
-            await writeFileAtomic(this.settingsPath, `${JSON.stringify(fresh, null, 2)}\n`);
+            if (this.usesCustomSettingsPath) {
+                await writeFileAtomic(this.settingsPath, `${JSON.stringify(fresh, null, 2)}\n`);
+            } else {
+                this.localSettings = defaultLocalSettings();
+                await Promise.all([
+                    writeFileAtomic(this.settingsPath, `${JSON.stringify(shareableSettings(fresh), null, 2)}\n`),
+                    writeFileAtomic(this.localSettingsPath, `${JSON.stringify(this.localSettings, null, 2)}\n`),
+                ]);
+            }
             return fresh;
         }
 
@@ -121,15 +144,68 @@ export class ProjectStore {
             this.logger.warn('settings.json 형식이 맞지 않아 기본값을 쓴다. 파일은 그대로 둔다.');
             return defaultSettings();
         }
+        if (this.usesCustomSettingsPath) return parsed.value;
+
+        const local = await this.readLocalSettings();
+        if (local) {
+            this.localSettings = local;
+            return applyLocalSettings(shareableSettings(parsed.value), local);
+        }
+
+        // 1.0의 단일 설정을 처음 읽을 때 기계별 값을 로컬 파일로 옮긴다.
+        // 원본은 백업하고 두 파일이 모두 준비된 뒤부터 분리 형식을 사용한다.
+        this.localSettings = localSettingsFromEffective(parsed.value);
+        await copyFile(this.settingsPath, `${this.settingsPath}.pre-local-settings.bak`).catch(() => undefined);
+        await Promise.all([
+            writeFileAtomic(this.localSettingsPath, `${JSON.stringify(this.localSettings, null, 2)}\n`),
+            writeFileAtomic(this.settingsPath, `${JSON.stringify(shareableSettings(parsed.value), null, 2)}\n`),
+        ]);
         return parsed.value;
     }
 
     async saveSettings(next: ProjectSettings): Promise<void> {
         this.settings = next;
-        await writeFileAtomic(this.settingsPath, `${JSON.stringify(next, null, 2)}\n`);
+        if (this.usesCustomSettingsPath) {
+            await writeFileAtomic(this.settingsPath, `${JSON.stringify(next, null, 2)}\n`);
+        } else {
+            this.localSettings = localSettingsFromEffective(next, this.localSettings.author, this.localSettings.ai);
+            await Promise.all([
+                writeFileAtomic(this.settingsPath, `${JSON.stringify(shareableSettings(next), null, 2)}\n`),
+                writeFileAtomic(this.localSettingsPath, `${JSON.stringify(this.localSettings, null, 2)}\n`),
+            ]);
+        }
         for (const listener of this.settingsListeners) {
             listener(next);
         }
+    }
+
+    getLocalAuthor(): LocalSettings['author'] {
+        return this.localSettings.author ? { ...this.localSettings.author } : null;
+    }
+
+    getAiSettings(): LocalSettings['ai'] {
+        return { ...this.localSettings.ai };
+    }
+
+    async saveLocalAuthor(author: NonNullable<LocalSettings['author']>): Promise<void> {
+        if (this.usesCustomSettingsPath) return;
+        this.localSettings = { ...this.localSettings, author: { ...author } };
+        await writeFileAtomic(this.localSettingsPath, `${JSON.stringify(this.localSettings, null, 2)}\n`);
+    }
+
+    private get localSettingsPath(): string {
+        return path.join(this.localDir, 'settings.json');
+    }
+
+    private async readLocalSettings(): Promise<LocalSettings | undefined> {
+        try {
+            const parsed = parseWith(localSettingsSchema, JSON.parse(await readFile(this.localSettingsPath, 'utf8')));
+            if (parsed.ok) return parsed.value;
+            this.logger.warn('local/settings.json 형식이 맞지 않아 이전하지 않는다. 파일은 그대로 둔다.');
+        } catch {
+            // 아직 분리하지 않은 설정이다.
+        }
+        return undefined;
     }
 
     /**
@@ -296,6 +372,17 @@ export class ProjectStore {
             }
         } catch {
             // 없으면 만든다
+        }
+        await writeFile(target, contents, 'utf8');
+    }
+
+    private async ensureLocalGitignore(): Promise<void> {
+        const target = path.join(this.localDir, '.gitignore');
+        const contents = '# Code Trail 개인·기계 설정. 형상 관리 대상이 아니다.\n*\n';
+        try {
+            if (await readFile(target, 'utf8') === contents) return;
+        } catch {
+            // 없으면 만든다.
         }
         await writeFile(target, contents, 'utf8');
     }

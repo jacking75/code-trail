@@ -19,6 +19,9 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 | **앱 바** | `.app-bar` | 맨 위 줄. 프로젝트 이름 · 트레일 고르기 · 연결 상태 |
 | **파일 탐색기** | `FileTree`·`FileSearch`, `.sidebar` | 왼쪽의 프로젝트 파일 목록과 이름 검색 |
 | **코드 화면** | `CodeView`, `.code-view` | Monaco 로 파일 전체를 보여주는 읽기 전용 탭. 여기서 `Ctrl+Alt+T` 를 누른다 |
+| **분석 기록 화면** | `AnalysisPanel`, `.analysis-panel` | 트레일·노드·코드 범위에 설명·질문·우려·결론을 남기고 검토·공유하는 탭 |
+| **읽기 시작점** | `ReadingStarts`, `.reading-starts` | 파일 탐색기 아래의 Git 변경 목록·문서 심볼·제한된 내용 검색 |
+| **AI 설명 초안** | `AiExplanationDraft`, `.ai-draft` | 선택한 코드 범위만 로컬 제공자에게 보내 받아온 채택 전 설명. 사람이 검토해 채택하기 전에는 분석 기록도 검토 완료도 아니다 |
 | **트레일 패널** (줄여서 **패널**) | `TrailView`, `.trail` | 함수 본문이 펼쳐지는 탭 **전체**. "뷰어", "윈도우", "미리보기 창"이라 부르지 않는다 |
 | **진단 화면** | `DiagnosticsView`, `#diagnostics` | 언어 서버 상태·점검 결과·로그와 외부 에디터 설정을 보여주는 탭 |
 | **트레일** | `Trail` | 패널에 담긴 탐색 트리 전체. 자동 저장과 Markdown 내보내기의 단위 |
@@ -55,7 +58,7 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 - `packages/` 가 전부다. VS Code 확장 소스(`src/`, `media/`)와 `.vsix` 흐름은 1.0.0 에서 지웠다.
   확장 마지막 상태는 태그 `v0.6.0-vscode-extension` 이고 기준선 기록은 [`docs/baseline.md`](docs/baseline.md) 다.
 - 언어 서버는 어댑터가 찾는다(설정 → PATH → 플랫폼별·GOBIN·rustup). **자동으로 내려받지 않는다.**
-- **실제 언어 서버로 검증하지 못한 것이 있다.** 이 기계에 clangd·gopls·roslyn 이 없고
+- **실제 언어 서버로 검증하지 못한 것이 있다.** 이 기계에 clangd·gopls·roslyn·typescript-language-server가 없고
   rust-analyzer 는 rustup proxy 만 있다. `npm run test:pack` · `npm run test:install` 은
   Windows 에서만 실제로 돌렸다. 어느 줄이 그런지는 구현서 0.7 · 0.13 · 0.14 에 표시해 뒀다.
 - 확장에서 되던 동작이 새 프로그램의 무엇으로 옮겨졌는지는 [`docs/e2e-port-checklist.md`](docs/e2e-port-checklist.md) 에 있다.
@@ -158,7 +161,7 @@ A 안에서 B, C를 클릭하면 둘 다 A의 형제 자식이다. 이 규칙을
 
 **진단 화면의 `지원됨` 은 프로세스가 떴다는 뜻이 아니다.** 실제 샘플 문서에서
 `documentSymbol` 과 `definition` 이 응답했다는 뜻이고, 그 확인은 `lsp.verify` 명령이
-사용자가 눌렀을 때만 돈다. 진단 화면을 여는 것만으로 네 언어 서버를 다 띄우지 않는다.
+사용자가 눌렀을 때만 돈다. 진단 화면을 여는 것만으로 다섯 언어 서버를 다 띄우지 않는다.
 
 **오류에 절대경로·코드 본문·환경 변수·토큰을 담지 않는다.** 브라우저는 신뢰 경계 밖이고,
 오류 메시지는 그 경계를 넘는 통로다. 실행 파일도 이름만 내보낸다.
@@ -284,3 +287,6 @@ API 인증(`test/integration/resilience.test.mjs`), 배포물 목록(`npm run te
 - **Windows 의 `.cmd`/`.bat` shim** 은 `shell: false` 로 못 띄운다(Node CVE-2024-27980 대응).
   탐지에서 빼고, 설정에 적혀 있으면 그 이유를 알린다. `cmd /c` 로 우회하지 않는다 —
   인자가 셸 문법으로 해석되면 "셸을 거치지 않는다" 규칙이 무너진다.
+- **typescript-language-server의 Windows npm shim도 같은 예외다.** 전역 패키지의
+  `lib/cli.mjs`를 찾았을 때만 현재 Node 실행 파일로 직접 `--stdio` 기동한다. 프로젝트의
+  `node_modules`를 자동 실행하지 않는다.

@@ -166,6 +166,31 @@ const FIXTURES = {
         callWord: 'Find',
         expectSymbol: 'HandlePacket',
     },
+    typescript: {
+        files: {
+            'package.json': '{"type":"module"}\n',
+            'tsconfig.json': '{"compilerOptions":{"strict":true,"module":"NodeNext","moduleResolution":"NodeNext"},"include":["src"]}\n',
+            'src/registry.ts': [
+                'export class Registry {',
+                '    find(opcode: number): number {',
+                '        return opcode + 1;',
+                '    }',
+                '}',
+                '',
+            ].join('\n'),
+            'src/dispatch.ts': [
+                "import { Registry } from './registry.js';",
+                '',
+                'export function handlePacket(registry: Registry, opcode: number): number {',
+                '    return registry.find(opcode);',
+                '}',
+                '',
+            ].join('\n'),
+        },
+        callerFile: 'src/dispatch.ts',
+        callWord: 'find',
+        expectSymbol: 'handlePacket',
+    },
 };
 
 /** `callWord` 가 놓인 첫 위치. 0-based 줄과 UTF-16 컬럼. */

@@ -5,7 +5,7 @@
  * 여기서 확인하려는 것 대부분(Host 검사, Origin 검사, CSP 헤더, 원자적 저장)이
  * 실제 소켓과 실제 파일 시스템에서만 드러나기 때문이다.
  */
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -26,6 +26,14 @@ export async function makeProject(files = {}) {
 
 export async function removeProject(root) {
     await rm(root, { recursive: true, force: true });
+}
+
+/** 기계·개인 설정은 프로젝트 설정이 아니라 local/settings.json에 쓴다. */
+export async function updateLocalSettings(root, mutate) {
+    const target = path.join(root, '.code-trail', 'local', 'settings.json');
+    const settings = JSON.parse(await readFile(target, 'utf8'));
+    mutate(settings);
+    await writeFile(target, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
 }
 
 /** 서버를 띄우고 끝나면 반드시 닫는다. */

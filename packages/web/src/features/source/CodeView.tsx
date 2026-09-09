@@ -19,6 +19,14 @@ export interface CodeViewProps {
     document: DocumentContent | null;
     /** 코드에서 무언가를 눌렀을 때. 좌표는 이미 0-based 로 바꿔서 준다. */
     onPositionClick?: (position: { line: number; char: number; word: string }) => void;
+    onSelectionChange?: (range: {
+        start: { line: number; char: number };
+        end: { line: number; char: number };
+    } | null) => void;
+    annotationRanges?: Array<{
+        start: { line: number; char: number };
+        end: { line: number; char: number };
+    }>;
 }
 
 /** Monaco 의 1-based 위치를 우리가 쓰는 0-based 로 바꾼다. */
@@ -26,11 +34,14 @@ export function toZeroBased(position: monaco.IPosition): { line: number; char: n
     return { line: position.lineNumber - 1, char: position.column - 1 };
 }
 
-export function CodeView({ document: doc, onPositionClick }: CodeViewProps): JSX.Element {
+export function CodeView({ document: doc, onPositionClick, onSelectionChange, annotationRanges = [] }: CodeViewProps): JSX.Element {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
     const clickRef = useRef(onPositionClick);
     clickRef.current = onPositionClick;
+    const selectionRef = useRef(onSelectionChange);
+    selectionRef.current = onSelectionChange;
+    const decorationIds = useRef<string[]>([]);
 
     useEffect(() => {
         const host = hostRef.current;
@@ -66,9 +77,20 @@ export function CodeView({ document: doc, onPositionClick }: CodeViewProps): JSX
             const { line, char } = toZeroBased(position);
             clickRef.current?.({ line, char, word });
         });
+        const selectionListener = editor.onDidChangeCursorSelection((event) => {
+            const selection = event.selection;
+            if (selection.isEmpty()) {
+                selectionRef.current?.(null);
+                return;
+            }
+            const start = toZeroBased(selection.getStartPosition());
+            const end = toZeroBased(selection.getEndPosition());
+            selectionRef.current?.({ start, end });
+        });
 
         return () => {
             listener.dispose();
+            selectionListener.dispose();
             editor.getModel()?.dispose();
             editor.dispose();
             editorRef.current = null;
@@ -92,6 +114,21 @@ export function CodeView({ document: doc, onPositionClick }: CodeViewProps): JSX
         editor.setModel(model);
         previous?.dispose();
     }, [doc]);
+
+    useEffect(() => {
+        const editor = editorRef.current;
+        if (!editor) return;
+        decorationIds.current = editor.deltaDecorations(
+            decorationIds.current,
+            annotationRanges.map((range) => ({
+                range: new monaco.Range(
+                    range.start.line + 1, range.start.char + 1,
+                    range.end.line + 1, range.end.char + 1,
+                ),
+                options: { inlineClassName: 'analysis-range', hoverMessage: { value: '분석 기록 위치' } },
+            })),
+        );
+    }, [annotationRanges, doc]);
 
     return <div className="code-view" ref={hostRef} />;
 }

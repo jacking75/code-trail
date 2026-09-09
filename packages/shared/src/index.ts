@@ -12,7 +12,11 @@ export * from './domain/settings.js';
 export * from './domain/storage.js';
 export * from './domain/markdown.js';
 export * from './domain/ids.js';
+export * from './domain/analysis.js';
+export * from './domain/share.js';
+export * from './domain/ai.js';
 
 export * from './protocol/schemas.js';
 export * from './protocol/commands.js';
 export * from './protocol/events.js';
+export * from './protocol/analysisSchemas.js';

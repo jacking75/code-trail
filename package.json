@@ -1,6 +1,6 @@
 {
   "name": "code-trail-workspace",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Code Trail 작업 공간. 배포하는 것은 packages/cli 의 code-trail 이다.",
   "license": "MIT",
@@ -22,9 +22,9 @@
     "test": "node --test \"test/unit/*.test.mjs\" && node --test \"test/integration/*.test.mjs\"",
     "test:unit": "node --test \"test/unit/*.test.mjs\"",
     "test:integration": "node --test \"test/integration/*.test.mjs\"",
-    "test:e2e": "node test/e2e/shell.e2e.mjs && node test/e2e/trail.e2e.mjs",
+    "test:e2e": "node test/e2e/shell.e2e.mjs && node test/e2e/trail.e2e.mjs && node test/e2e/analysis.e2e.mjs && node test/e2e/share-html.e2e.mjs",
     "test:lsp": "node test/smoke/real-lsp.mjs",
-    "test:perf": "node test/perf/board-1000.mjs",
+    "test:perf": "node test/perf/board-1000.mjs && node test/perf/analysis-scale.mjs",
     "test:pack": "node test/pack/files.test.mjs",
     "clean": "npm run clean --workspaces --if-present",
     "test:install": "node test/pack/install-smoke.mjs"

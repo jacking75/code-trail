@@ -6,6 +6,8 @@ import {
     type NodeUiState,
     type TrailMode,
     type TrailSummary,
+    fromStoredTrail,
+    type StoredTrail,
 } from '@code-trail/shared';
 
 import type { Logger } from '../config/logger.js';
@@ -142,6 +144,19 @@ export class TrailService {
             revision: trail.revision,
             write: () => this.options.store.saveTrail(trail),
         });
+        this.scheduleIndexSave();
+        return { trail, revision: trail.revision };
+    }
+
+    /** 검증한 공유 묶음을 새 ID로 바꾼 뒤 등록할 때만 사용한다. */
+    async importStored(stored: StoredTrail): Promise<TrailMutationResult> {
+        const trail = fromStoredTrail(stored);
+        if (this.trails.has(trail.id)) {
+            throw new Error('가져올 트레일 ID가 이미 있다.');
+        }
+        this.trails.set(trail.id, trail);
+        this.activeTrailId = trail.id;
+        await this.options.store.saveTrail(trail);
         this.scheduleIndexSave();
         return { trail, revision: trail.revision };
     }

@@ -121,6 +121,7 @@ export interface ProjectSettingsView {
         csharp: LanguageServerView & { solutionPath: string | null };
         go: LanguageServerView;
         rust: LanguageServerView;
+        typescript: LanguageServerView;
     };
 }
 
@@ -128,9 +129,52 @@ export interface Bootstrap {
     protocolVersion: number;
     project: { name: string };
     settings: ProjectSettingsView;
+    localAuthor: { id: string; displayName: string } | null;
     trails: TrailSummary[];
     activeTrailId: string | null;
-    capabilities: { externalEditor: boolean; languages: string[] };
+    capabilities: {
+        externalEditor: boolean;
+        languages: string[];
+        analyses: boolean;
+        sharing: boolean;
+        readOnlyShare: boolean;
+        ai: { enabled: boolean; provider: string; model: string; maxInputBytes: number };
+    };
+}
+
+export interface AnalysisSummaryView {
+    id: string; title: string; purpose: string; revision: number; updatedAt: string;
+    annotationCount: number; unresolvedCount: number; reviewedCount: number; reviewTargetCount: number;
+}
+
+export interface AnalysisDocumentView {
+    schemaVersion: 1; id: string; title: string; purpose: string; revision: number;
+    createdAt: string; updatedAt: string; trailIds: string[];
+    authors: Array<{ id: string; displayName: string }>;
+    annotations: Array<{ id: string; version: number; target: Record<string, unknown>; kind: 'explanation' | 'question' | 'concern' | 'conclusion'; body: string; tags: string[]; status: 'open' | 'resolved'; authorId: string; createdAt: string; updatedAt: string; deletedAt: string | null }>;
+    replies: Array<{ id: string; annotationId: string; body: string; authorId: string; deletedAt: string | null }>;
+    anchors: Array<Record<string, unknown>>;
+    baselines: Array<Record<string, unknown>>;
+    reviews: Array<{ id: string; target: Record<string, unknown>; state: string; evidenceIds: string[] }>;
+    walkthroughs: Array<{ id: string; version: number; title: string; steps: Array<{ id: string; title: string; body: string; annotationId: string | null; target: Record<string, unknown> | null; baselineId: string | null }> }>;
+    goals: Array<Record<string, unknown>>;
+    importantLocations: Array<Record<string, unknown>>;
+    history: Array<Record<string, unknown>>;
+    processedCommands: Array<Record<string, unknown>>;
+    sourceShare: Record<string, unknown> | null;
+}
+
+export interface AnchorComparisonView {
+    analysisId: string;
+    anchorId: string;
+    relPath: string;
+    state: 'matched' | 'moved' | 'changed' | 'ambiguous' | 'missing' | 'unknown';
+    previousRange: { start: { line: number; char: number }; end: { line: number; char: number } };
+    currentRange: { start: { line: number; char: number }; end: { line: number; char: number } };
+    previousText: string | null;
+    currentText: string | null;
+    previousUnavailableReason: 'code-not-included' | null;
+    currentUnavailableReason: 'file-unavailable' | 'range-unavailable' | null;
 }
 
 export interface HealthCheckView {
@@ -140,7 +184,7 @@ export interface HealthCheckView {
 }
 
 export interface LanguageDiagnostics {
-    language: 'cpp' | 'csharp' | 'go' | 'rust';
+    language: 'cpp' | 'csharp' | 'go' | 'rust' | 'typescript';
     displayName: string;
     enabled: boolean;
     state: 'notStarted' | 'starting' | 'ready' | 'failed' | 'stopped';
@@ -208,7 +252,7 @@ export const api = {
         request<DocumentContent>(`/api/documents/${encodeURIComponent(documentId)}`),
 
     diagnostics: () =>
-        request<{ languages: LanguageDiagnostics[]; recoveryCandidates: unknown[] }>(
+        request<{ languages: LanguageDiagnostics[]; recoveryCandidates: Array<{ trailId: string; savedAt: string }>; analysisRecoveryCandidates: Array<{ analysisId: string; kind: 'temporary' | 'backup'; savedAt: string }> }>(
             '/api/diagnostics',
         ),
 
@@ -225,5 +269,31 @@ export const api = {
     lspLog: (language: string) =>
         request<{ language: string; lines: string[] }>(
             `/api/diagnostics/${encodeURIComponent(language)}/log`,
+        ),
+
+    analyses: () => request<{ analyses: AnalysisSummaryView[] }>('/api/analyses'),
+
+    analysis: (analysisId: string) =>
+        request<AnalysisDocumentView>(`/api/analyses/${encodeURIComponent(analysisId)}`),
+
+    anchorComparison: (analysisId: string, anchorId: string) =>
+        request<AnchorComparisonView>(
+            `/api/analyses/${encodeURIComponent(analysisId)}/anchors/${encodeURIComponent(anchorId)}/compare`,
+        ),
+
+    documentSymbols: (documentId: string, signal?: AbortSignal) =>
+        request<{ documentId: string; symbols: Array<{ name: string; detail: string; container: string; kind: number; depth: number; selectionRange: { start: { line: number; character: number } } }> }>(
+            `/api/documents/${encodeURIComponent(documentId)}/symbols`,
+            { signal },
+        ),
+
+    changes: (from?: string, to?: string) => request<{ repository: boolean; changes: Array<{ relPath: string; status: string; area: string; addedLines: number | null; deletedLines: number | null }> }>(
+        `/api/changes${from ? `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to ?? 'HEAD')}` : ''}`,
+    ),
+
+    contentSearch: (query: string, scope = '', caseSensitive = false, signal?: AbortSignal) =>
+        request<{ matches: Array<{ relPath: string; line: number; char: number; preview: string }>; truncated: boolean; scannedFiles: number }>(
+            `/api/workspace/content-search?q=${encodeURIComponent(query)}&scope=${encodeURIComponent(scope)}&case=${caseSensitive ? '1' : '0'}`,
+            { signal },
         ),
 };

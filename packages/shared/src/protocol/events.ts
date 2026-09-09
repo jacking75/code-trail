@@ -14,6 +14,7 @@ import {
     workspaceSearchResponseSchema,
     type ParseResult,
 } from './schemas.js';
+import { analysisDocumentSchema, analysisSummarySchema, sharePreviewSchema } from './analysisSchemas.js';
 
 /**
  * 서버 → 브라우저 이벤트.
@@ -131,7 +132,7 @@ export const settingsChangedPayloadSchema = z.object({
 });
 
 export const lspStateChangedPayloadSchema = z.object({
-    language: z.enum(['cpp', 'csharp', 'go', 'rust']),
+    language: z.enum(['cpp', 'csharp', 'go', 'rust', 'typescript']),
     state: z.enum(['notStarted', 'starting', 'ready', 'failed', 'stopped']),
     message: z.string().nullable(),
 });
@@ -196,6 +197,77 @@ export const commandErrorPayloadSchema = z.object({
     error: commandErrorSchema,
 });
 
+export const analysisListChangedPayloadSchema = z.object({ analyses: z.array(analysisSummarySchema) });
+export const analysisSnapshotPayloadSchema = z.object({ analysis: analysisDocumentSchema });
+export const analysisPersistedPayloadSchema = z.object({ analysisId: uuidSchema, revision: z.int().min(0) });
+export const annotationChangedPayloadSchema = z.object({ analysisId: uuidSchema, annotationId: uuidSchema });
+export const replyAddedPayloadSchema = z.object({ analysisId: uuidSchema, annotationId: uuidSchema, replyId: uuidSchema });
+export const reviewChangedPayloadSchema = z.object({ analysisId: uuidSchema, reviewId: uuidSchema });
+export const anchorChangedPayloadSchema = z.object({ analysisId: uuidSchema, anchorId: uuidSchema });
+export const sharePreparedPayloadSchema = z.object({ preview: sharePreviewSchema });
+export const shareReadyPayloadSchema = z.object({
+    analysisId: uuidSchema,
+    format: z.enum(['ctshare', 'markdown', 'html']),
+    url: z.string().min(1),
+    fileName: z.string().min(1),
+});
+export const shareUploadPayloadSchema = z.object({ uploadId: uuidSchema });
+export const shareImportPreviewPayloadSchema = z.object({
+    uploadId: uuidSchema,
+    title: z.string(),
+    annotationCount: z.int().min(0),
+    trailCount: z.int().min(0),
+    codeIncluded: z.boolean(),
+    merge: z.object({
+        planId: uuidSchema,
+        additionCount: z.int().min(0),
+        updateCount: z.int().min(0),
+        deletionCount: z.int().min(0),
+        conflicts: z.array(z.object({
+            entity: z.enum(['annotation', 'reply']),
+            id: uuidSchema,
+            reason: z.enum(['bothChanged', 'deleteUpdate', 'missingBase']),
+            localBody: z.string().nullable(),
+            incomingBody: z.string().nullable(),
+        })),
+    }).nullable(),
+});
+export const shareImportedPayloadSchema = z.object({ analysisId: uuidSchema, duplicate: z.boolean() });
+export const shareMergedPayloadSchema = z.object({
+    analysisId: uuidSchema,
+    additionCount: z.int().min(0),
+    updateCount: z.int().min(0),
+    deletionCount: z.int().min(0),
+});
+export const draftSavedPayloadSchema = z.object({ analysisId: uuidSchema, draftId: uuidSchema });
+export const aiDraftReadyPayloadSchema = z.object({
+    requestId: uuidSchema,
+    inputBytes: z.int().min(0),
+    languageId: z.string(),
+    draft: z.object({
+        id: uuidSchema,
+        anchorId: uuidSchema,
+        provider: z.string(),
+        model: z.string(),
+        baselineId: uuidSchema,
+        range: z.object({
+            start: z.object({ line: z.int().min(0), char: z.int().min(0) }),
+            end: z.object({ line: z.int().min(0), char: z.int().min(0) }),
+        }),
+        body: z.string(),
+        questions: z.array(z.string()),
+        evidence: z.array(z.object({ anchorId: uuidSchema, claim: z.string() })),
+        createdAt: z.iso.datetime(),
+        acceptedAt: z.iso.datetime().nullable(),
+    }),
+});
+export const aiAcceptedPayloadSchema = z.object({
+    analysisId: uuidSchema,
+    draftId: uuidSchema,
+    annotationId: uuidSchema,
+});
+export const aiCancelledPayloadSchema = z.object({ requestId: uuidSchema, cancelled: z.boolean() });
+
 // ── 이벤트 목록 ─────────────────────────────────────────────────────────────
 
 export const EVENT_PAYLOADS = {
@@ -222,6 +294,28 @@ export const EVENT_PAYLOADS = {
     'lsp.stateChanged': lspStateChangedPayloadSchema,
     'editor.opened': editorOpenedPayloadSchema,
     'command.error': commandErrorPayloadSchema,
+    'analysis.listChanged': analysisListChangedPayloadSchema,
+    'analysis.snapshot': analysisSnapshotPayloadSchema,
+    'analysis.persisted': analysisPersistedPayloadSchema,
+    'annotation.created': annotationChangedPayloadSchema,
+    'annotation.updated': annotationChangedPayloadSchema,
+    'annotation.deleted': annotationChangedPayloadSchema,
+    'annotation.restored': annotationChangedPayloadSchema,
+    'annotation.replyAdded': replyAddedPayloadSchema,
+    'review.changed': reviewChangedPayloadSchema,
+    'anchor.checked': anchorChangedPayloadSchema,
+    'anchor.rebound': anchorChangedPayloadSchema,
+    'walkthrough.changed': z.object({ analysisId: uuidSchema, walkthroughId: uuidSchema }),
+    'share.prepared': sharePreparedPayloadSchema,
+    'share.ready': shareReadyPayloadSchema,
+    'share.uploadReady': shareUploadPayloadSchema,
+    'share.importPreview': shareImportPreviewPayloadSchema,
+    'share.imported': shareImportedPayloadSchema,
+    'share.merged': shareMergedPayloadSchema,
+    'analysis.draftSaved': draftSavedPayloadSchema,
+    'ai.draftReady': aiDraftReadyPayloadSchema,
+    'ai.accepted': aiAcceptedPayloadSchema,
+    'ai.cancelled': aiCancelledPayloadSchema,
 } as const;
 
 export type EventType = keyof typeof EVENT_PAYLOADS;

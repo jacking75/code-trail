@@ -11,12 +11,19 @@ import {
     type EventType,
     type Trail,
     type TrailNode,
+    type AnalysisDocument,
+    type AnnotationTarget,
+    type Author,
+    type CodeRange,
+    type ShareExportPolicy,
+    type WalkthroughStep,
 } from '@code-trail/shared';
 
 import type { ServerContext } from '../context.js';
 import { EditorDeniedError } from '../editor/service.js';
 import type { SupportedLanguage } from '../workspace/languages.js';
 import type { ResolveFlowResult } from '../trails/resolveFlow.js';
+import { contextForRange, createBaselineFile, reanchor, sha256 } from '../analysis/baselines.js';
 
 /**
  * WebSocket 게이트웨이.
@@ -51,6 +58,10 @@ export class WebSocketGateway {
      * 뒤에 트레일이 또 바뀌고, 그 변경은 어디에도 남지 않는다.
      */
     private stopping = false;
+    private readonly anchorCandidates = new Map<string, {
+        analysisId: string; anchorId: string; documentId: string;
+        range: CodeRange; contentHash: string;
+    }>();
 
     constructor(private readonly context: ServerContext) {}
 
@@ -262,6 +273,38 @@ export class WebSocketGateway {
                 payload: await this.snapshotPayloadWithGrants(active),
             });
         }
+        this.send(client, {
+            protocolVersion: PROTOCOL_VERSION,
+            type: 'analysis.listChanged',
+            eventId: newEventId(),
+            payload: { analyses: this.context.analyses.list() },
+        });
+        for (const summary of this.context.analyses.list()) {
+            const analysis = this.context.analyses.get(summary.id);
+            if (analysis) this.send(client, {
+                protocolVersion: PROTOCOL_VERSION,
+                type: 'analysis.snapshot',
+                eventId: newEventId(),
+                payload: { analysis },
+            });
+        }
+    }
+
+    private analysisChanged(
+        eventType: 'annotation.created' | 'annotation.updated' | 'annotation.deleted'
+            | 'annotation.restored' | 'review.changed' | 'anchor.checked'
+            | 'anchor.rebound' | 'walkthrough.changed',
+        document: AnalysisDocument,
+        entityId: string,
+        commandId: string,
+    ): void {
+        const entityKey = eventType.startsWith('annotation.') ? 'annotationId'
+            : eventType === 'review.changed' ? 'reviewId'
+                : eventType.startsWith('anchor.') ? 'anchorId' : 'walkthroughId';
+        this.broadcast(eventType, { analysisId: document.id, [entityKey]: entityId }, { commandId });
+        this.broadcast('analysis.snapshot', { analysis: document }, { commandId });
+        this.broadcast('analysis.persisted', { analysisId: document.id, revision: document.revision }, { commandId });
+        this.broadcast('analysis.listChanged', { analyses: this.context.analyses.list() }, {});
     }
 
     // ── 받기 ────────────────────────────────────────────────────────────────
@@ -484,6 +527,19 @@ export class WebSocketGateway {
 
     private async dispatch(client: Client, command: ClientCommand): Promise<void> {
         const { trails } = this.context;
+
+        if (this.context.readOnlyShare && ![
+            'trail.select', 'trail.toggleNode', 'trail.setMode', 'trail.setActiveNode',
+            'trail.exportMarkdown', 'share.prepare', 'share.export',
+            'settings.updateLocalAuthor',
+        ].includes(command.type)) {
+            this.sendError(client, {
+                code: 'UNAUTHORIZED',
+                message: '공유 읽기 모드에서는 원본 자료를 바꿀 수 없다.',
+                retryable: false,
+            }, command.commandId);
+            return;
+        }
 
         // 구조 명령은 대상 트레일과 baseRevision 이 둘 다 있어야 한다.
         // 스키마가 baseRevision 은 이미 확인했고, trailId 는 여기서 본다.
@@ -840,7 +896,7 @@ export class WebSocketGateway {
 
             case 'lsp.restart': {
                 const { language } = command.payload as {
-                    language: 'cpp' | 'csharp' | 'go' | 'rust';
+                    language: 'cpp' | 'csharp' | 'go' | 'rust' | 'typescript';
                 };
                 try {
                     await this.context.lsp.restart(language);
@@ -930,6 +986,355 @@ export class WebSocketGateway {
                     command.commandId,
                 );
                 return;
+
+            case 'settings.updateLocalAuthor': {
+                const { author } = command.payload as { author: Author };
+                await this.context.store.saveLocalAuthor(author);
+                return;
+            }
+
+            case 'analysis.create': {
+                const payload = command.payload as {
+                    title: string; purpose: string; trailIds: string[]; author: Author;
+                };
+                const analysis = await this.context.analyses.create(payload);
+                this.broadcast('analysis.snapshot', { analysis }, { commandId: command.commandId });
+                this.broadcast('analysis.persisted', { analysisId: analysis.id, revision: analysis.revision }, { commandId: command.commandId });
+                this.broadcast('analysis.listChanged', { analyses: this.context.analyses.list() }, {});
+                return;
+            }
+
+            case 'analysis.updatePlan': {
+                const payload = command.payload as Parameters<typeof this.context.analyses.updatePlan>[0];
+                const result = await this.context.analyses.updatePlan({ ...payload, commandId: command.commandId });
+                if (!result.ok) { this.sendError(client, result.error, command.commandId); return; }
+                this.broadcast('analysis.snapshot', { analysis: result.value.document }, { commandId: command.commandId });
+                this.broadcast('analysis.persisted', {
+                    analysisId: payload.analysisId, revision: result.value.persistedRevision,
+                }, { commandId: command.commandId });
+                this.broadcast('analysis.listChanged', { analyses: this.context.analyses.list() }, {});
+                return;
+            }
+
+            case 'analysis.recover': {
+                const payload = command.payload as { analysisId: string; kind: 'temporary' | 'backup' };
+                await this.context.analysisStore.recover(payload.analysisId, payload.kind);
+                const analysis = await this.context.analyses.reload(payload.analysisId);
+                if (!analysis) { this.sendError(client, { code: 'PERSISTENCE_FAILED', message: '복구한 분석 문서를 열지 못했다.', retryable: true }, command.commandId); return; }
+                this.broadcast('analysis.snapshot', { analysis }, { commandId: command.commandId });
+                this.broadcast('analysis.listChanged', { analyses: this.context.analyses.list() }, {});
+                return;
+            }
+
+            case 'annotation.create': {
+                const payload = command.payload as {
+                    analysisId: string; target: AnnotationTarget; body: string;
+                    kind: 'explanation' | 'question' | 'concern' | 'conclusion';
+                    tags: string[]; author: Author;
+                };
+                const result = await this.context.analyses.createAnnotation({ ...payload, commandId: command.commandId });
+                if (!result.ok) { this.sendError(client, result.error, command.commandId); return; }
+                this.analysisChanged('annotation.created', result.value.document, result.value.result, command.commandId);
+                return;
+            }
+
+            case 'annotation.update':
+            case 'annotation.setStatus': {
+                const payload = command.payload as {
+                    analysisId: string; annotationId: string; baseVersion: number; actorId: string;
+                    patch: { body?: string; kind?: 'explanation' | 'question' | 'concern' | 'conclusion'; tags?: string[]; status?: 'open' | 'resolved' };
+                };
+                const result = await this.context.analyses.updateAnnotation({ ...payload, commandId: command.commandId });
+                if (!result.ok) { this.sendError(client, result.error, command.commandId); return; }
+                this.analysisChanged('annotation.updated', result.value.document, result.value.result, command.commandId);
+                return;
+            }
+
+            case 'annotation.delete':
+            case 'annotation.restore': {
+                const payload = command.payload as {
+                    analysisId: string; annotationId: string; baseVersion: number; actorId: string;
+                };
+                const deleted = command.type === 'annotation.delete';
+                const result = await this.context.analyses.setDeleted({ ...payload, deleted, commandId: command.commandId });
+                if (!result.ok) { this.sendError(client, result.error, command.commandId); return; }
+                this.analysisChanged(deleted ? 'annotation.deleted' : 'annotation.restored', result.value.document, result.value.result, command.commandId);
+                return;
+            }
+
+            case 'annotation.reply': {
+                const payload = command.payload as { analysisId: string; annotationId: string; body: string; author: Author };
+                const result = await this.context.analyses.reply({ ...payload, commandId: command.commandId });
+                if (!result.ok) { this.sendError(client, result.error, command.commandId); return; }
+                this.broadcast('annotation.replyAdded', {
+                    analysisId: payload.analysisId, annotationId: payload.annotationId, replyId: result.value.result,
+                }, { commandId: command.commandId });
+                this.broadcast('analysis.snapshot', { analysis: result.value.document }, { commandId: command.commandId });
+                this.broadcast('analysis.persisted', { analysisId: payload.analysisId, revision: result.value.persistedRevision }, { commandId: command.commandId });
+                return;
+            }
+
+            case 'review.setState': {
+                const payload = command.payload as {
+                    analysisId: string; target: AnnotationTarget; baselineId: string;
+                    state: 'unreviewed' | 'reviewing' | 'reviewed' | 'needsReview';
+                    authorId: string; evidenceIds: string[];
+                };
+                const result = await this.context.analyses.setReview({ ...payload, commandId: command.commandId });
+                if (!result.ok) { this.sendError(client, result.error, command.commandId); return; }
+                this.analysisChanged('review.changed', result.value.document, result.value.result, command.commandId);
+                return;
+            }
+
+            case 'walkthrough.update': {
+                const payload = command.payload as {
+                    analysisId: string; walkthroughId?: string; baseVersion?: number;
+                    title: string; steps: WalkthroughStep[]; actorId: string;
+                };
+                const result = await this.context.analyses.updateWalkthrough({ ...payload, commandId: command.commandId });
+                if (!result.ok) { this.sendError(client, result.error, command.commandId); return; }
+                this.analysisChanged('walkthrough.changed', result.value.document, result.value.result, command.commandId);
+                return;
+            }
+
+            case 'anchor.capture': {
+                const payload = command.payload as { analysisId: string; documentId: string; range: CodeRange };
+                const grant = this.context.documents.get(payload.documentId);
+                if (!grant || grant.relPath === null) {
+                    this.sendError(client, { code: 'PATH_DENIED', message: '프로젝트 안의 문서만 기록 위치로 만들 수 있다.', retryable: false }, command.commandId);
+                    return;
+                }
+                const content = await this.context.documents.read(payload.documentId);
+                const context = contextForRange(content.text, payload.range);
+                if (!context) {
+                    this.sendError(client, { code: 'INVALID_COMMAND', message: '선택 범위가 원본 코드와 맞지 않는다.', retryable: false }, command.commandId);
+                    return;
+                }
+                const { baseline, fileId } = createBaselineFile({ relPath: grant.relPath, contentHash: content.contentHash });
+                const baselineResult = await this.context.analyses.addBaseline({
+                    analysisId: payload.analysisId, commandId: `${command.commandId}:baseline`, baseline,
+                });
+                if (!baselineResult.ok) { this.sendError(client, baselineResult.error, command.commandId); return; }
+                const result = await this.context.analyses.addAnchor({
+                    analysisId: payload.analysisId, commandId: command.commandId,
+                    baselineId: baseline.id, fileId, range: payload.range,
+                    selectedText: context.selectedText, selectedTextHash: sha256(context.selectedText),
+                    contextBefore: context.before, contextBeforeHash: context.before ? sha256(context.before) : null,
+                    contextAfter: context.after, contextAfterHash: context.after ? sha256(context.after) : null,
+                });
+                if (!result.ok) { this.sendError(client, result.error, command.commandId); return; }
+                this.analysisChanged('anchor.checked', result.value.document, result.value.result, command.commandId);
+                return;
+            }
+
+            case 'anchor.recheck': {
+                const payload = command.payload as { analysisId: string; anchorIds: string[]; actorId: string };
+                let latest = this.context.analyses.get(payload.analysisId);
+                if (!latest) { this.sendError(client, { code: 'NOT_FOUND', message: '분석 문서를 찾을 수 없다.', retryable: false }, command.commandId); return; }
+                for (const anchorId of payload.anchorIds) {
+                    const anchor = latest.anchors.find((item) => item.id === anchorId);
+                    const baseline = latest.baselines.find((item) => item.id === anchor?.baselineId);
+                    const file = baseline?.files.find((item) => item.fileId === anchor?.fileId);
+                    if (!anchor || !file) continue;
+                    const grant = await this.context.documents.grantInsideProject(file.relPath).catch(() => null);
+                    const content = grant ? await this.context.documents.read(grant.documentId).catch(() => null) : null;
+                    const checked = content ? reanchor(anchor, content.text, content.contentHash)
+                        : { state: 'missing' as const, currentRange: null, candidates: [] };
+                    for (const candidate of checked.candidates) if (grant && content) this.anchorCandidates.set(candidate.id, {
+                        analysisId: payload.analysisId, anchorId, documentId: grant.documentId,
+                        range: candidate.range, contentHash: content.contentHash,
+                    });
+                    const result = await this.context.analyses.setAnchorCheck({
+                        analysisId: payload.analysisId, commandId: `${command.commandId}:${anchorId}`,
+                        anchorId, state: checked.state, currentRange: checked.currentRange,
+                        candidateIds: checked.candidates.map((item) => item.id), actorId: payload.actorId,
+                    });
+                    if (!result.ok) { this.sendError(client, result.error, command.commandId); return; }
+                    latest = result.value.document;
+                    this.analysisChanged('anchor.checked', latest, anchorId, command.commandId);
+                }
+                return;
+            }
+
+            case 'anchor.rebind': {
+                const payload = command.payload as { analysisId: string; anchorId: string; candidateId: string; baseVersion: number; actorId: string };
+                const candidate = this.anchorCandidates.get(payload.candidateId);
+                if (!candidate || candidate.analysisId !== payload.analysisId || candidate.anchorId !== payload.anchorId) {
+                    this.sendError(client, { code: 'INVALID_COMMAND', message: '재연결 후보가 만료되었거나 맞지 않는다.', retryable: true }, command.commandId);
+                    return;
+                }
+                const content = await this.context.documents.read(candidate.documentId);
+                if (content.contentHash !== candidate.contentHash) {
+                    this.sendError(client, { code: 'STALE_REVISION', message: '재연결 중 코드가 바뀌었다.', retryable: true }, command.commandId);
+                    return;
+                }
+                const current = this.context.analyses.get(payload.analysisId);
+                const anchor = current?.anchors.find((item) => item.id === payload.anchorId);
+                const oldFile = current?.baselines.find((item) => item.id === anchor?.baselineId)?.files.find((item) => item.fileId === anchor?.fileId);
+                if (!anchor || !oldFile) return;
+                const { baseline } = createBaselineFile({ relPath: oldFile.relPath, contentHash: content.contentHash, fileId: anchor.fileId });
+                const savedBaseline = await this.context.analyses.addBaseline({ analysisId: payload.analysisId, commandId: `${command.commandId}:baseline`, baseline });
+                if (!savedBaseline.ok) { this.sendError(client, savedBaseline.error, command.commandId); return; }
+                const result = await this.context.analyses.rebindAnchor({
+                    ...payload, commandId: command.commandId, baselineId: baseline.id,
+                    range: candidate.range, selectedTextHash: sha256(contextForRange(content.text, candidate.range)?.selectedText ?? ''),
+                });
+                if (!result.ok) { this.sendError(client, result.error, command.commandId); return; }
+                this.analysisChanged('anchor.rebound', result.value.document, payload.anchorId, command.commandId);
+                this.anchorCandidates.delete(payload.candidateId);
+                return;
+            }
+
+            case 'share.prepare': {
+                const payload = command.payload as { analysisId: string; policy: Partial<ShareExportPolicy> };
+                const preview = this.context.sharing.prepare(payload.analysisId, payload.policy);
+                if (!preview) { this.sendError(client, { code: 'NOT_FOUND', message: '분석 문서를 찾을 수 없다.', retryable: false }, command.commandId); return; }
+                this.broadcast('share.prepared', { preview }, { commandId: command.commandId });
+                return;
+            }
+
+            case 'share.export': {
+                const payload = command.payload as { planId: string; format: 'ctshare' | 'markdown' | 'html' };
+                const exported = this.context.sharing.export(payload.planId);
+                if (!exported) { this.sendError(client, { code: 'STALE_REVISION', message: '내보내기 준비 뒤 분석이 바뀌었다. 다시 준비한다.', retryable: true }, command.commandId); return; }
+                const extension = payload.format === 'ctshare' ? 'ctshare.json' : payload.format === 'markdown' ? 'md' : 'html';
+                this.broadcast('share.ready', {
+                    analysisId: exported.bundle.analysis.id, format: payload.format,
+                    url: `/api/shares/${payload.planId}/${payload.format}`,
+                    fileName: `${exported.bundle.analysis.title}.${extension}`,
+                }, { commandId: command.commandId });
+                return;
+            }
+
+            case 'share.uploadStart': {
+                const payload = command.payload as { byteLength: number; sha256: string };
+                const uploadId = this.context.sharing.uploadStart(payload.byteLength, payload.sha256);
+                this.broadcast('share.uploadReady', { uploadId }, { commandId: command.commandId });
+                return;
+            }
+
+            case 'share.uploadChunk': {
+                const payload = command.payload as { uploadId: string; index: number; base64: string };
+                this.context.sharing.uploadChunk(payload.uploadId, payload.index, payload.base64);
+                return;
+            }
+
+            case 'share.uploadFinish': {
+                const { uploadId } = command.payload as { uploadId: string };
+                this.context.sharing.uploadFinish(uploadId);
+                return;
+            }
+
+            case 'share.importPreview': {
+                const { uploadId } = command.payload as { uploadId: string };
+                const bundle = this.context.sharing.uploadFinish(uploadId);
+                const merge = this.context.sharing.prepareMerge(bundle);
+                this.broadcast('share.importPreview', {
+                    uploadId, title: bundle.analysis.title,
+                    annotationCount: bundle.analysis.annotations.length,
+                    trailCount: bundle.trails.length,
+                    codeIncluded: bundle.exportPolicy.includeCode,
+                    merge: merge ? {
+                        planId: merge.id,
+                        additionCount: merge.additions.length,
+                        updateCount: merge.updates.length,
+                        deletionCount: merge.deletions.length,
+                        conflicts: merge.conflicts,
+                    } : null,
+                }, { commandId: command.commandId });
+                return;
+            }
+
+            case 'share.importCommit': {
+                const payload = command.payload as { uploadId: string; forceCopy: boolean };
+                const text = this.context.sharing.uploadedText(payload.uploadId);
+                if (!text) { this.sendError(client, { code: 'NOT_FOUND', message: '검증한 업로드가 없다.', retryable: false }, command.commandId); return; }
+                const imported = await this.context.sharing.import(text, payload.forceCopy);
+                this.context.sharing.finishUpload(payload.uploadId);
+                this.broadcast('share.imported', { analysisId: imported.analysis.id, duplicate: imported.duplicate }, { commandId: command.commandId });
+                this.broadcast('analysis.snapshot', { analysis: imported.analysis }, { commandId: command.commandId });
+                this.broadcast('analysis.listChanged', { analyses: this.context.analyses.list() }, {});
+                this.broadcast('trail.listChanged', { trails: trails.list(), activeTrailId: trails.getActiveTrailId() }, {});
+                return;
+            }
+
+            case 'share.mergeCommit': {
+                const payload = command.payload as { planId: string; actorId: string };
+                const plan = this.context.sharing.getMergePlan(payload.planId);
+                if (!plan) { this.sendError(client, { code: 'NOT_FOUND', message: '병합 계획이 없거나 만료되었다.', retryable: true }, command.commandId); return; }
+                const merged = await this.context.sharing.applyMerge(payload.planId, command.commandId, payload.actorId);
+                this.broadcast('share.merged', {
+                    analysisId: merged.id,
+                    additionCount: plan.additions.length,
+                    updateCount: plan.updates.length,
+                    deletionCount: plan.deletions.length,
+                }, { commandId: command.commandId });
+                this.broadcast('analysis.snapshot', { analysis: merged }, { commandId: command.commandId });
+                this.broadcast('analysis.listChanged', { analyses: this.context.analyses.list() }, {});
+                return;
+            }
+
+            case 'analysis.saveDraft': {
+                const payload = command.payload as { analysisId: string; draftId: string; target: AnnotationTarget; body: string };
+                await this.context.analysisStore.saveDraft(payload.analysisId, payload.draftId, payload);
+                this.broadcast('analysis.draftSaved', { analysisId: payload.analysisId, draftId: payload.draftId }, { commandId: command.commandId });
+                return;
+            }
+
+            case 'ai.generate': {
+                const payload = command.payload as {
+                    requestId: string; analysisId: string; documentId: string; range: CodeRange; purpose: string;
+                };
+                try {
+                    const preview = await this.context.ai.generate(payload);
+                    this.broadcast('ai.draftReady', {
+                        requestId: payload.requestId,
+                        ...preview,
+                    }, { commandId: command.commandId });
+                    const document = this.context.analyses.get(payload.analysisId);
+                    if (document) {
+                        this.broadcast('analysis.snapshot', { analysis: document }, { commandId: command.commandId });
+                        this.broadcast('analysis.persisted', { analysisId: document.id, revision: document.revision }, { commandId: command.commandId });
+                    }
+                } catch (error) {
+                    this.sendError(client, {
+                        code: 'INVALID_COMMAND',
+                        message: error instanceof Error ? error.message : 'AI 설명 초안을 만들지 못했다.',
+                        retryable: true,
+                    }, command.commandId);
+                }
+                return;
+            }
+
+            case 'ai.cancel': {
+                const { requestId } = command.payload as { requestId: string };
+                this.broadcast('ai.cancelled', {
+                    requestId,
+                    cancelled: this.context.ai.cancel(requestId),
+                }, { commandId: command.commandId });
+                return;
+            }
+
+            case 'ai.accept': {
+                const payload = command.payload as { analysisId: string; draftId: string; author: Author };
+                try {
+                    const accepted = await this.context.ai.accept({ ...payload, commandId: command.commandId });
+                    this.broadcast('ai.accepted', {
+                        analysisId: payload.analysisId,
+                        draftId: payload.draftId,
+                        annotationId: accepted.annotationId,
+                    }, { commandId: command.commandId });
+                    const document = this.context.analyses.get(payload.analysisId);
+                    if (document) this.analysisChanged('annotation.created', document, accepted.annotationId, command.commandId);
+                } catch (error) {
+                    this.sendError(client, {
+                        code: 'INVALID_COMMAND',
+                        message: error instanceof Error ? error.message : 'AI 초안을 채택하지 못했다.',
+                        retryable: true,
+                    }, command.commandId);
+                }
+                return;
+            }
 
             default: {
                 const exhaustive: never = command.type;

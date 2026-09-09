@@ -56,7 +56,7 @@ textDocument/typeDefinition    정의를 못 찾았을 때의 폴백
 ```
 
 전부 표준 LSP 기능이라, 이 넷에 답하는 언어 서버라면 붙는다.
-지금 지원하는 언어와 서버는 넷이다.
+지금 지원하는 언어와 서버는 다섯이다.
 
 | 언어 | 언어 서버 | 어디서 찾나 |
 | --- | --- | --- |
@@ -64,6 +64,7 @@ textDocument/typeDefinition    정의를 못 찾았을 때의 폴백
 | C# | roslyn-language-server | 설정 → `PATH` |
 | Go | gopls | 설정 → `PATH` → `GOBIN` → `GOPATH/bin` |
 | Rust | rust-analyzer | 설정 → `PATH` → rustup(`CARGO_HOME`) |
+| TypeScript / JavaScript | typescript-language-server | 설정 → `PATH` → 전역 npm 패키지 진입점 |
 
 **언어 서버를 대신 내려받지 않는다.** 이미 설치된 것을 찾거나 설정에 적힌 경로를 쓴다.
 설치 명령은 `진단` 탭이 안내만 하고 우리가 실행하지 않는다 —
@@ -77,7 +78,7 @@ textDocument/typeDefinition    정의를 못 찾았을 때의 폴백
 ### C# 참고
 
 C# 독립 언어 서버는 배포 규약이 아직 안정되지 않았다. 직접 설치한 뒤
-`.code-trail/settings.json` 의 `languages.csharp.executable` 에 경로를 적는다.
+`.code-trail/local/settings.json` 의 `languages.csharp.executable` 에 경로를 적는다.
 
 솔루션 후보(`.sln`, `.csproj`)가 여럿이면 **우리가 고르지 않는다.**
 `진단` 탭의 **솔루션** 칸에서 고르면 `languages.csharp.solutionPath` 에
@@ -110,6 +111,7 @@ npm uninstall -g code-trail
 | `--port <번호>` | 쓸 포트. 생략하면 빈 포트를 고른다 |
 | `--no-open` | 브라우저를 자동으로 열지 않는다 |
 | `--trail <trail-id>` | 시작한 뒤 이 트레일을 고른다 |
+| `--read-share <파일>` | 프로젝트·언어 서버 없이 공유 묶음을 읽기 전용으로 연다 |
 | `--log-level <level>` | `error` \| `warn` \| `info` \| `debug` (기본 `info`) |
 | `-v`, `--version` | 버전 |
 | `-h`, `--help` | 도움말 |
@@ -120,8 +122,9 @@ npm uninstall -g code-trail
 
 같은 프로젝트에 서버가 이미 떠 있으면 새로 띄우지 않고 그 주소를 열어준다.
 
-프로젝트 안 `.code-trail/` 에 설정과 트레일이 저장된다.
-`.code-trail/runtime/` 은 스스로 `.gitignore` 를 두어 감춘다 —
+프로젝트 안 `.code-trail/` 에 설정·트레일·분석 기록이 저장된다.
+`.code-trail/local/`에는 기계별 실행 설정·작성자·초안이, `runtime/`에는 실행 부산물이
+들어가며 각각 자체 `.gitignore`로 감춘다 —
 **프로젝트 루트의 `.gitignore` 는 우리가 고치지 않는다.**
 
 ## 사용법
@@ -143,11 +146,56 @@ npm uninstall -g code-trail
 | 크기 되돌리기 | **줄 번호 칸 더블클릭** |
 | 새 루트로 떼어내기 | 노드 헤더의 **`⇱`** (하위 노드도 함께 올라온다) |
 | 트레일 여러 개 | 앱 바의 `＋ 새 트레일` · 목록 · `✎ 이름` · `🗑` |
-| 기록 남기기 | 툴바 `Markdown` → 트리 전체가 코드 블록 포함 문서로 |
+| 분석 기록 남기기 | `분석 기록` 탭에서 트레일·노드·선택한 코드 범위에 설명·질문·우려·결론 저장 |
+| 변경에서 시작하기 | 파일 탐색기 아래 `변경 목록`에서 staged·unstaged·추적되지 않은 파일 선택 |
+| 공유하기 | `공유 내용 확인` 뒤 공유 묶음·Markdown·정적 HTML 내려받기 |
+| 프로젝트 없이 읽기 | `code-trail --read-share <공유 파일>` |
+| 회신 합치기 | 회신 공유 묶음을 가져와 추가·수정·삭제와 충돌을 확인한 뒤 `검토한 변경 합치기` |
+| AI 설명 초안 | 코드 범위를 선택한 뒤 `분석 기록` 탭에서 로컬 제공자에게 초안을 요청하고 검토 후 채택 |
 | 언어 서버 상태 | `진단` 탭 |
 
 트레일은 **자동으로 저장된다.** 저장·불러오기 버튼이 없다 —
 브라우저를 닫았다 열어도, 서버를 다시 띄워도 마지막 상태 그대로다.
+
+### 분석 기록과 공유
+
+`분석 기록` 화면에서 분석 하나를 만든 뒤 트레일 전체, 현재 노드, 드래그한 정확한 코드
+범위 중 하나를 대상으로 고른다. 기록 종류와 태그를 정하고 `Ctrl/Cmd+Enter`로 저장한다.
+질문을 해결로 표시해도 코드 검토가 자동 완료되지는 않는다. 범위별 `미검토`·`확인 중`·
+`확인함`·`재검토 필요`는 별도 상태다.
+
+코드가 바뀌면 `위치 다시 확인`으로 기준 해시와 현재 내용을 비교한다. 범위 기록의 `코드 비교`는
+기록 당시 코드와 현재 코드를 나란히 보여준다. 동일한 후보가 여러 곳이면 자동 연결하지 않으며,
+확인했던 코드가 바뀌면 `재검토 필요`가 된다. 작성 중 입력은
+브라우저와 `.code-trail/local/drafts/`에 정본과 분리해 남긴다.
+
+공유 전에는 코드 본문 포함 여부, 트레일·노드·기록 수, 예상 크기와 자유 입력 경고를 먼저
+보여준다. 기본값은 코드 미포함이다. 공유 묶음은 무결성 해시와 엄격한 참조 검사를 거쳐
+별도 로컬 ID의 복사본으로 들어온다. Markdown과 정적 HTML은 일반 도구나 브라우저에서
+읽을 수 있으며 외부 통신이나 사용자 코드 실행 기능이 없다.
+안내 단계와 기록 링크는 공유 묶음의 원래 ID를 사용하므로 가져온 복사본에서도 같은 대상을
+찾으며, 링크에는 세션 토큰이 들어가지 않는다.
+
+가져온 복사본에서 기록·답글을 고쳐 다시 내보내면 원본 계보와 기준 내용이 함께 간다.
+원 작성자는 추가·수정·삭제를 세 방향 비교로 확인하고 충돌 없는 변경만 합칠 수 있다.
+양쪽이 같은 본문을 고쳤거나 삭제와 수정이 겹치면 자동으로 고르지 않고 두 내용을 모두
+보여준다. 같은 회신을 다시 적용해도 기록이나 답글이 늘어나지 않는다.
+
+### 선택적 AI 설명 초안
+
+AI 기능은 기본으로 꺼져 있으며 로컬 Ollama만 지원한다. `.code-trail/local/settings.json`의
+`ai.enabled`, `ai.model`을 사용자가 직접 정한 경우에만 현재 선택한 코드 범위를
+Ollama 공식 [`POST /api/generate`](https://docs.ollama.com/api/generate) 계약으로 보낸다.
+endpoint는 `localhost`, `127.0.0.1`, `[::1]`만 허용한다.
+전체 저장소·다른 파일·분석 기록을 자동으로 보내지 않으며 비밀키 설정도 없다.
+
+결과는 `AI 초안`으로 표시되고 모델이 만든 근거 ID는 믿지 않는다. 서버가 실제 선택 범위에
+만든 기록 위치에만 근거를 연결한다. 사용자가 `검토하고 분석 기록으로 채택`을 눌러야 일반
+분석 기록이 되며, 그때도 검토 상태를 자동으로 `확인함`으로 올리지 않는다. 생성 중 취소,
+입력 바이트 상한, 제한 시간, 생성 중 코드 변경 검사를 적용한다. Ollama가 없어도 나머지
+기능은 모두 동작한다.
+
+언어 서버 없이 흐름을 확인하려면 [첫 분석과 공유 안내](docs/first-review-guide.md)를 따른다.
 
 ### 인터페이스 · 가상 함수 — 선언만 나올 때
 
@@ -240,7 +288,9 @@ npm uninstall -g code-trail
 
 ## 설정
 
-프로젝트 안의 `.code-trail/settings.json` 하나다. 형상 관리에 넣어도 되는 파일이다.
+공유 가능한 값은 `.code-trail/settings.json`, 기계·개인 값은
+`.code-trail/local/settings.json`에 나뉜다. 적용 순서는 `기본값 → 프로젝트 설정 → 로컬 설정`이다.
+1.0의 단일 설정은 처음 열 때 `.pre-local-settings.bak`으로 백업한 뒤 자동 분리한다.
 
 | 키 | 기본값 | 설명 |
 | --- | --- | --- |
@@ -254,16 +304,24 @@ npm uninstall -g code-trail
 | `ui.fontSize` | `0` | 코드 글자 크기(px). 0보다 크면 폭 맞춤보다 우선한다 |
 | `ui.autoFollowSingleImplementation` | `true` | 선언만 열렸고 구현이 **하나뿐**이면 그 구현까지 자동으로 펼침 |
 | `ui.revealInExternalEditorOnAdd` | `false` | 노드 추가 시 외부 에디터도 같이 그 위치를 연다 |
-| `editor.executable` | `null` | 외부 에디터 실행 파일. `null` 이면 열기 기능을 끈다 |
-| `editor.args` | `[]` | 실행 인자. `{path}`, `{line}`, `{column}`, `{project}` 만 쓴다 |
+| `editor.executable` | `null` | **로컬 설정.** 외부 에디터 실행 파일. `null` 이면 열기 기능을 끈다 |
+| `editor.args` | `[]` | **로컬 설정.** 실행 인자. `{path}`, `{line}`, `{column}`, `{project}` 만 쓴다 |
 | `languages.<언어>.enabled` | `true` | 그 언어의 서버를 쓸지 |
-| `languages.<언어>.executable` | `null` | 실행 파일 경로. `null` 이면 자동 탐지 |
-| `languages.<언어>.args` | `[]` | 실행 인자. 셸을 거치지 않고 그대로 넘긴다 |
-| `languages.<언어>.env` | `{}` | 덮어쓸 환경 변수만. 비밀값을 넣지 않는다 |
-| `languages.<언어>.initializationOptions` | `null` | LSP `initialize` 에 그대로 실린다 |
+| `languages.<언어>.executable` | `null` | **로컬 설정.** 실행 파일 경로. `null` 이면 자동 탐지 |
+| `languages.<언어>.args` | `[]` | **로컬 설정.** 실행 인자. 셸을 거치지 않고 그대로 넘긴다 |
+| `languages.<언어>.env` | `{}` | **로컬 설정.** 덮어쓸 환경 변수만 |
+| `languages.<언어>.initializationOptions` | `null` | **로컬 설정.** LSP `initialize` 에 그대로 실린다 |
 | `languages.csharp.solutionPath` | `null` | 열 솔루션. **프로젝트 상대경로.** 후보가 여럿이면 우리가 고르지 않는다 |
+| `ai.enabled` | `false` | **로컬 설정.** 선택한 범위의 AI 설명 초안을 명시적으로 켠다 |
+| `ai.provider` | `ollama` | **로컬 설정.** 현재 지원하는 로컬 제공자 |
+| `ai.endpoint` | `http://127.0.0.1:11434` | **로컬 설정.** loopback origin만 허용한다 |
+| `ai.model` | `""` | **로컬 설정.** 사용할 Ollama 모델. 빈 값이면 기능을 끈다 |
+| `ai.maxInputBytes` | `65536` | **로컬 설정.** 한 번에 보낼 선택 코드의 UTF-8 바이트 상한 |
+| `ai.timeoutMs` | `60000` | **로컬 설정.** 생성 제한 시간 |
 
-`<언어>` 는 `cpp`, `csharp`, `go`, `rust` 넷이다.
+`<언어>` 는 `cpp`, `csharp`, `go`, `rust`, `typescript` 다섯이다. `typescript` 어댑터가
+TypeScript·TSX·JavaScript·JSX를 함께 맡는다. Windows에서는 npm의 `.cmd` shim을 셸로
+실행하지 않고 전역 패키지의 `lib/cli.mjs`를 Node로 직접 띄운다.
 
 `editor.executable` 을 직접 적지 않아도 된다. `진단` 탭의 **외부 에디터** 칸이
 `PATH` 에서 찾은 후보(VS Code, Cursor, Zed, Sublime, JetBrains, Helix, Emacs, Vim …)를
@@ -285,6 +343,7 @@ npm uninstall -g code-trail
 - 브라우저는 파일 경로를 모른다. 서버가 발급한 불투명한 `documentId` 로만 문서를 요청한다.
   프로젝트 밖 파일은 언어 서버가 결과로 돌려줬을 때만 일시 권한을 얻고, 서버를 다시 띄우면 사라진다.
 - 자식 프로세스(언어 서버, 외부 에디터)를 셸 없이 띄운다.
+- AI endpoint는 loopback으로 제한하고 선택 코드만 전송하며, 코드 속 지시문을 명령으로 실행하지 않는다.
 - 오류 응답에 절대경로·코드 본문·환경 변수·토큰을 담지 않는다.
 
 ## 개발

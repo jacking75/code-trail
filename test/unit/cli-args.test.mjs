@@ -24,6 +24,15 @@ test('기본값은 빈 포트 자동 선택과 브라우저 열기다', () => {
     assert.equal(args.logLevel, 'info');
     assert.equal(args.trailId, null);
     assert.equal(args.configPath, null);
+    assert.equal(args.readSharePath, null);
+});
+
+test('--read-share 는 프로젝트 없는 읽기 전용 실행을 고른다', () => {
+    const args = parseArgs(['--read-share', 'review.code-trail-share']);
+    assert.equal(args.readSharePath, 'review.code-trail-share');
+    assert.throws(() => parseArgs(['project', '--read-share', 'review.json']), CliArgsError);
+    assert.throws(() => parseArgs(['--read-share', 'review.json', '--config', 'settings.json']), CliArgsError);
+    assert.match(USAGE, /--read-share/);
 });
 
 test('프로젝트 경로를 위치 인자로 받는다', () => {

@@ -197,7 +197,7 @@ if (browser !== null) {
 
         console.log('\n[트리 모드]');
         t0 = performance.now();
-        await page.locator('.pane-tabs .tab').nth(1).click();
+        await page.locator('.pane-tabs .tab', { hasText: '트레일' }).click();
         await page.waitForFunction(
             (count) => document.querySelectorAll('.node').length >= count,
             NODE_COUNT,

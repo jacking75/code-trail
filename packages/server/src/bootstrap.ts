@@ -19,6 +19,11 @@ import { TrailService } from './trails/service.js';
 import { DocumentRegistry } from './workspace/documents.js';
 import { WorkspaceTree } from './workspace/tree.js';
 import { WorkspaceWatcher } from './workspace/watcher.js';
+import { AnalysisStore } from './persistence/analysisStore.js';
+import { AnalysisService } from './analysis/service.js';
+import { SharingService } from './sharing/service.js';
+import { GitService } from './git/service.js';
+import { AiExplanationService } from './ai/service.js';
 
 /**
  * 시작과 종료 (구현서 7.2, 7.3).
@@ -49,6 +54,8 @@ export interface StartServerOptions {
     lspRestartDelaysMs?: readonly number[];
     /** 언어 서버가 이만큼 버티면 재시도 횟수를 되돌린다. 테스트에서 줄인다. */
     lspStableAfterMs?: number;
+    /** 프로젝트 없이 가져온 공유 자료만 읽는 서버다. */
+    readOnlyShare?: boolean;
 }
 
 export interface RunningServer {
@@ -82,6 +89,10 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     const scheduler = new SaveScheduler({ logger });
     const trails = new TrailService({ store, scheduler, logger });
     await trails.load();
+    const analysisStore = new AnalysisStore(store.dir, logger);
+    await analysisStore.initialize();
+    const analyses = new AnalysisService(analysisStore, logger);
+    await analyses.load();
 
     const tree = new WorkspaceTree({ projectRoot });
     const documents = new DocumentRegistry(projectRoot);
@@ -126,6 +137,9 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         logger,
         getSettings: () => store.getSettings(),
     });
+    const sharing = new SharingService(analyses, trails, projectName, '1.1.0');
+    const git = new GitService(projectRoot);
+    const ai = new AiExplanationService(documents, analyses, () => store.getAiSettings());
 
     const context: ServerContext = {
         projectRoot,
@@ -138,6 +152,12 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         lsp,
         resolveFlow,
         editor,
+        analysisStore,
+        analyses,
+        sharing,
+        git,
+        ai,
+        readOnlyShare: options.readOnlyShare ?? false,
     };
 
     // 설정을 바꾸면 실행 파일을 다시 찾는다. 안 그러면 경로를 고쳐도
@@ -191,7 +211,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
             }
         },
     });
-    watcher.start();
+    if (!context.readOnlyShare) watcher.start();
 
     // 9. 잠금 파일. **토큰은 넣지 않는다.**
     await writeLock(store.runtimeDir, {

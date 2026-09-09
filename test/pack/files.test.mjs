@@ -105,7 +105,7 @@ for (const target of PACKAGES) {
     console.log(`\n  ${packed.name}@${packed.version} — ${packed.files.length}개 파일, ${Math.round(packed.bytes / 1024)}KB`);
 
     check(`${packed.name} 이름이 맞다`, packed.name === target.expectedName, packed.name);
-    check(`${packed.name} 버전이 1.0.0 이다`, packed.version === '1.0.0', packed.version);
+    check(`${packed.name} 버전이 1.1.0 이다`, packed.version === '1.1.0', packed.version);
 
     for (const required of target.required) {
         check(

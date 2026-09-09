@@ -6,6 +6,11 @@ import type { ResolveFlow } from './trails/resolveFlow.js';
 import type { TrailService } from './trails/service.js';
 import type { DocumentRegistry } from './workspace/documents.js';
 import type { WorkspaceTree } from './workspace/tree.js';
+import type { AnalysisStore } from './persistence/analysisStore.js';
+import type { AnalysisService } from './analysis/service.js';
+import type { SharingService } from './sharing/service.js';
+import type { GitService } from './git/service.js';
+import type { AiExplanationService } from './ai/service.js';
 
 /**
  * 서버 한 대가 들고 있는 것들.
@@ -29,4 +34,11 @@ export interface ServerContext {
     resolveFlow: ResolveFlow;
     /** 외부 에디터 열기. 경로는 문서 권한에서 역조회한다. */
     editor: EditorService;
+    analysisStore: AnalysisStore;
+    analyses: AnalysisService;
+    sharing: SharingService;
+    git: GitService;
+    ai: AiExplanationService;
+    /** 프로젝트 없는 공유 읽기에서는 변경 동작과 LSP를 제한한다. */
+    readOnlyShare: boolean;
 }
