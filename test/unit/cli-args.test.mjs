@@ -11,14 +11,10 @@ const browser = await import(
 
 const { CliArgsError, USAGE, parseArgs } = cli;
 
-test('인자가 없으면 현재 디렉터리를 연다', () => {
+test('인자가 없으면 현재 디렉터리를 빈 포트에 띄우고 브라우저를 연다', () => {
     const args = parseArgs([]);
     assert.equal(args.projectDirectory, process.cwd());
     assert.equal(args.mode, 'run');
-});
-
-test('기본값은 빈 포트 자동 선택과 브라우저 열기다', () => {
-    const args = parseArgs([]);
     assert.equal(args.port, 0);
     assert.equal(args.open, true);
     assert.equal(args.logLevel, 'info');
@@ -91,7 +87,8 @@ test('호스트를 바꾸는 옵션은 없다', () => {
 });
 
 test('브라우저 열기는 플랫폼별 명령을 고른다', () => {
-    // 실제로 열지 않는다. 명령 선택만 본다.
+    // 실제로 열지 않는다. 명령 선택만 본다. URL 은 인자 배열에 통째로 들어가야
+    // 한다 — 셸 문자열로 이어 붙이면 토큰 안의 셸 특수문자가 해석된다.
     const url = 'http://127.0.0.1:5173/#token=비밀';
 
     assert.deepEqual(browser.browserCommand(url, 'win32'), {
@@ -100,12 +97,4 @@ test('브라우저 열기는 플랫폼별 명령을 고른다', () => {
     });
     assert.deepEqual(browser.browserCommand(url, 'darwin'), { command: 'open', args: [url] });
     assert.deepEqual(browser.browserCommand(url, 'linux'), { command: 'xdg-open', args: [url] });
-
-    // URL 은 인자 배열에 통째로 들어간다. 셸 문자열로 이어 붙이지 않는다 —
-    // 토큰에 셸이 해석할 문자가 있어도 그대로 전달되어야 한다.
-    for (const platform of ['win32', 'darwin', 'linux']) {
-        const picked = browser.browserCommand(url, platform);
-        assert.equal(picked.args.includes(url), true, platform);
-        assert.equal(picked.command.includes(url), false, platform);
-    }
 });

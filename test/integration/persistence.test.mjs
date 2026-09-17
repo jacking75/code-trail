@@ -237,6 +237,10 @@ test('저장 중 죽어 남은 .tmp 를 복구 후보로 알린다', async () =>
             const diagnostics = await (await authFetch(running, '/api/diagnostics')).json();
             assert.equal(diagnostics.recoveryCandidates.length, 1);
             assert.equal(diagnostics.recoveryCandidates[0].trailId, trailId);
+
+            // 최종 파일은 멀쩡하다. 남은 .tmp 가 트레일을 가리지 않는다.
+            const boot = await (await authFetch(running, '/api/bootstrap')).json();
+            assert.ok(boot.trails.some((t) => t.id === trailId), '트레일이 안 열렸다');
         });
 
         // 조용히 지우지 않는다. 최신 내용이 들어 있을 수 있다.

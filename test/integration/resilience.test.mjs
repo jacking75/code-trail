@@ -10,7 +10,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -225,6 +225,11 @@ test('모든 API 경로가 토큰을 요구한다 — 라우트 목록으로 훑
                     401,
                     `${route.path} 가 토큰 없이 ${response.status} 를 줬다`,
                 );
+
+                // 무엇이 틀렸는지는 알려주지 않는다.
+                const body = await response.json();
+                assert.equal(body.code, 'UNAUTHORIZED', route.path);
+                assert.equal(JSON.stringify(body).includes('Host'), false, route.path);
             }
         });
     } finally {
@@ -680,53 +685,6 @@ test('다시 붙으면 snapshot 으로 처음부터 다시 맞춘다', async () 
 });
 
 // ── 8. 저장 중 강제 종료 ────────────────────────────────────────────────────
-
-test('저장 중 강제 종료로 남은 .tmp 를 복구 후보로 올린다', async () => {
-    const root = await makeProject(FILES);
-    try {
-        const base = await configureFakeLsp(root);
-        let trailId;
-        {
-            const running = await server.startServer(base);
-            try {
-                const client = await connect(running);
-                const seeded = await seed(running, client);
-                trailId = seeded.trailId;
-                await client.close();
-            } finally {
-                await running.close();
-            }
-        }
-
-        // 저장 도중 죽은 흔적을 만든다. 최종 파일보다 새 `.tmp` 다.
-        const trailsDir = path.join(root, '.code-trail', 'trails');
-        const finalPath = path.join(trailsDir, `${trailId}.json`);
-        await stat(finalPath);
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        await writeFile(`${finalPath}.tmp`, '{"schemaVersion":1}', 'utf8');
-
-        const running = await server.startServer(base);
-        try {
-            const body = await (await authFetch(running, '/api/diagnostics')).json();
-            const candidate = body.recoveryCandidates.find((c) => c.trailId === trailId);
-            assert.ok(candidate !== undefined, '복구 후보로 안 올라왔다');
-
-            // **조용히 지우지 않는다.** 그 안에 최신 내용이 있을 수 있다.
-            const stillThere = await stat(`${finalPath}.tmp`).catch(() => undefined);
-            assert.ok(stillThere !== undefined, '.tmp 를 지워버렸다');
-
-            // 최종 파일은 멀쩡하다. 트레일이 그대로 열린다.
-            const client = await connect(running);
-            const snapshot = await client.wait((e) => e.type === 'trail.snapshot');
-            assert.equal(snapshot.payload.roots.length, 1);
-            await client.close();
-        } finally {
-            await running.close();
-        }
-    } finally {
-        await removeProject(root);
-    }
-});
 
 // ── 9. LSP 연속 crash ───────────────────────────────────────────────────────
 

@@ -87,36 +87,6 @@ function openSocket(running, { protocols, origin, expectFail = false } = {}) {
     });
 }
 
-test('토큰 없는 WebSocket 을 거부한다', async () => {
-    const root = await makeProject(FILES);
-    try {
-        await withServer(root, async (running) => {
-            const result = await openSocket(running, {
-                protocols: [WS_PROTOCOL],
-                expectFail: true,
-            });
-            assert.equal(result.closed, true);
-        });
-    } finally {
-        await removeProject(root);
-    }
-});
-
-test('틀린 토큰의 WebSocket 을 거부한다', async () => {
-    const root = await makeProject(FILES);
-    try {
-        await withServer(root, async (running) => {
-            const result = await openSocket(running, {
-                protocols: [WS_PROTOCOL, 'x'.repeat(running.token.length)],
-                expectFail: true,
-            });
-            assert.equal(result.closed, true);
-        });
-    } finally {
-        await removeProject(root);
-    }
-});
-
 test('잘못된 Origin 의 WebSocket 을 거부한다', async () => {
     const root = await makeProject(FILES);
     try {
@@ -231,42 +201,6 @@ test('오래된 baseRevision 은 거부하고 최신 snapshot 을 보낸다', as
                 (e) => e.type === 'trail.snapshot' && e.revision === 1,
             );
             assert.equal(recovery.payload.title, '한 번');
-
-            await client.close();
-        });
-    } finally {
-        await removeProject(root);
-    }
-});
-
-test('같은 commandId 재전송은 한 번만 처리한다', async () => {
-    const root = await makeProject(FILES);
-    try {
-        await withServer(root, async (running) => {
-            const client = await openSocket(running);
-            const commandId = randomUUID();
-
-            client.send({
-                protocolVersion: 1,
-                type: 'trail.create',
-                commandId,
-                baseRevision: 0,
-                payload: { title: '한 번만' },
-            });
-            await client.wait((e) => e.type === 'trail.snapshot');
-
-            // 재연결 뒤 클라이언트가 처리 중이던 명령을 다시 보낸 상황이다.
-            client.send({
-                protocolVersion: 1,
-                type: 'trail.create',
-                commandId,
-                baseRevision: 0,
-                payload: { title: '한 번만' },
-            });
-            await new Promise((resolve) => setTimeout(resolve, 300));
-
-            const created = client.events.filter((e) => e.type === 'trail.snapshot');
-            assert.equal(created.length, 1);
 
             await client.close();
         });

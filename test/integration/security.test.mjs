@@ -14,30 +14,6 @@ const FILES = {
     '.git/config': '[core]\n',
 };
 
-test('토큰이 없으면 API 를 거부한다', async () => {
-    const root = await makeProject(FILES);
-    try {
-        await withServer(root, async (running) => {
-            for (const url of [
-                '/api/bootstrap',
-                '/api/workspace/children?id=',
-                '/api/workspace/search?q=x',
-                '/api/diagnostics',
-                '/api/health',
-            ]) {
-                const response = await fetch(`${running.url}${url}`);
-                assert.equal(response.status, 401, url);
-                const body = await response.json();
-                assert.equal(body.code, 'UNAUTHORIZED');
-                // 무엇이 틀렸는지 알려주지 않는다.
-                assert.equal(JSON.stringify(body).includes('Host'), false);
-            }
-        });
-    } finally {
-        await removeProject(root);
-    }
-});
-
 test('틀린 토큰도 거부한다', async () => {
     const root = await makeProject(FILES);
     try {

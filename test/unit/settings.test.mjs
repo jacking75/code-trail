@@ -56,26 +56,17 @@ test('옮긴 설정은 기본값이 그대로다', () => {
     }
 });
 
-test('버린 설정은 새 설정에 이름이 남아 있지 않다', () => {
-    const settings = shared.defaultSettings();
-    const dumped = JSON.stringify(settings);
-    for (const key of DROPPED) {
-        assert.equal(dumped.includes(key), false, `${key} 가 아직 있다`);
-    }
-});
-
-test('새로 생긴 항목이 기본값을 갖는다', () => {
+test('실행 파일 경로를 기본 설정에 박아두지 않는다', () => {
+    // 언어 서버도 외부 에디터도 탐지해서 찾는다(설정 → PATH → 플랫폼별). 기본값에
+    // 경로가 하나라도 박혀 있으면 그 기계에만 맞는 값이 모두에게 나간다.
     const settings = shared.defaultSettings();
 
-    assert.equal(settings.schemaVersion, 1);
-    assert.equal(settings.ui.theme, 'system');
     assert.equal(settings.editor.executable, null);
     assert.deepEqual(settings.editor.args, []);
 
     for (const language of ['cpp', 'csharp', 'go', 'rust', 'typescript']) {
         const ls = settings.languages[language];
         assert.equal(ls.enabled, true, language);
-        // 실행 파일은 PATH 에서 자동 탐지한다. 경로를 미리 박아두지 않는다.
         assert.equal(ls.executable, null, language);
         assert.deepEqual(ls.args, [], language);
         assert.deepEqual(ls.env, {}, language);

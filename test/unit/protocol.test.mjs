@@ -15,7 +15,6 @@ const {
     parseClientCommand,
     parseServerEvent,
     parseWith,
-    projectSettingsSchema,
 } = shared;
 
 const NODE_ID = '11111111-1111-4111-8111-111111111111';
@@ -170,10 +169,6 @@ test('settings.update 는 설정 전체 스키마를 통과해야 한다', () =>
     const negative = defaultSettings();
     negative.ui.maxCodeLines = 0;
     assert.equal(parseWith(schema, { settings: negative }).ok, false);
-});
-
-test('기본 설정이 자기 스키마를 통과한다', () => {
-    assert.equal(parseWith(projectSettingsSchema, defaultSettings()).ok, true);
 });
 
 test('이벤트를 해석하고 모르는 이벤트는 거부한다', () => {

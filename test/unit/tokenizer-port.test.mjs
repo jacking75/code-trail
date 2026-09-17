@@ -39,6 +39,9 @@ test('토큰을 이어 붙이면 원본이 그대로 나온다', () => {
         'auto* p = new Foo("문자열", 42);',
         'const char* s = "a\\"b";',
         '\t\treturn it == map_.end() ? nullptr : it->second.get();',
+        // 확장은 문자열 HTML 을 만들어 <, >, & 를 이스케이프해야 했다. 이제는
+        // React 가 그리므로 토큰 텍스트에 엔티티가 섞이면 안 된다.
+        'if (a < b && c > d) { x(); }',
         '',
     ];
     for (const code of samples) {
@@ -149,13 +152,4 @@ test('토큰 종류를 구분한다', () => {
     assert.equal(kinds("let x = 'a; y", 'rust').includes("lt:'a"), true);
     assert.equal(kinds('Foo();').some((k) => k.startsWith('fn:Foo')), true);
     assert.equal(kinds('Foo bar;').some((k) => k.startsWith('ty:Foo')), true);
-});
-
-test('HTML 을 만들지 않는다 — 토큰 텍스트는 원문 그대로다', () => {
-    // 확장은 문자열 HTML 을 만들어 이스케이프해야 했다. 이제는 React 가 그린다.
-    const code = 'if (a < b && c > d) { x(); }';
-    const rejoined = rejoin(tokenize(code));
-    assert.equal(rejoined, code);
-    assert.equal(rejoined.includes('&lt;'), false);
-    assert.equal(rejoined.includes('&amp;'), false);
 });

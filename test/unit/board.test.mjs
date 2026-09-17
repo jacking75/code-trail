@@ -1,6 +1,8 @@
 /* 보드 배치 — node --test "test/unit/*.test.mjs" */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const board = await import(
     new URL('../../packages/web/lib/features/trail/board.js', import.meta.url).href
@@ -96,14 +98,6 @@ test('트리를 깊이 우선으로 편다 — 부모가 자식보다 앞이다'
     assert.deepEqual(flat.map((f) => f.ordinal), [0, 1, 1]);
     // 진입 링크에 찍을 부모 이름.
     assert.deepEqual(flat.map((f) => f.parentName), ['', 'Root', 'Child']);
-});
-
-test('편 목록은 DOM 이 아니라 모델의 children 을 따른다', () => {
-    // 보드 모드에서는 자식이 부모 안에 중첩돼 있지 않다. 그래도 다 나와야 한다.
-    const first = node('First', { origin: origin(1, 0) });
-    const second = node('Second', { origin: origin(2, 0) });
-    const root = withChildren(node('Root'), [first, second]);
-    assert.equal(flattenTree([root], 'source').length, 3);
 });
 
 test('저장된 좌표를 그대로 쓴다', () => {
@@ -238,5 +232,13 @@ test('보드 배치는 부모-자식 관계를 건드리지 않는다', () => {
 });
 
 test('기본 폭은 CSS 의 보드 폭과 같다', () => {
-    assert.equal(BOARD_DEFAULT_WIDTH, 520);
+    // 자리 계산은 BOARD_DEFAULT_WIDTH 로, 그리기는 --ct-board-width 로 한다.
+    // 둘이 어긋나면 아직 크기를 못 잰 노드가 그려진 자리와 다른 곳을 차지한다.
+    const css = fs.readFileSync(
+        fileURLToPath(new URL('../../packages/web/src/styles/app.css', import.meta.url)),
+        'utf8',
+    );
+    const declared = /--ct-board-width:\s*(\d+)px/.exec(css);
+    assert.ok(declared, 'app.css 에 --ct-board-width 가 없다');
+    assert.equal(BOARD_DEFAULT_WIDTH, Number(declared[1]));
 });

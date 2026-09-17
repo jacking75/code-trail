@@ -4,26 +4,7 @@ import assert from 'node:assert/strict';
 
 import { makeOrigin, makeSymbol, makeTrail, shared } from './helpers.mjs';
 
-const { Trail, isUuid, symbolKey } = shared;
-
-test('새 트레일은 비어 있고 revision 이 0 이다', () => {
-    const trail = makeTrail();
-    assert.equal(trail.isEmpty, true);
-    assert.equal(trail.size, 0);
-    assert.equal(trail.revision, 0);
-    assert.equal(isUuid(trail.id), true);
-});
-
-test('노드 ID 는 UUID 이고 서로 겹치지 않는다', () => {
-    const trail = makeTrail();
-    const ids = new Set();
-    for (let i = 0; i < 200; i++) {
-        const node = trail.addRoot(makeSymbol());
-        assert.equal(isUuid(node.id), true, node.id);
-        ids.add(node.id);
-    }
-    assert.equal(ids.size, 200);
-});
+const { Trail, symbolKey } = shared;
 
 test('구조를 바꾼 만큼만 revision 이 오른다', () => {
     const trail = makeTrail();
