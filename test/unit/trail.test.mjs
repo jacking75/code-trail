@@ -20,7 +20,7 @@ test('구조를 바꾼 만큼만 revision 이 오른다', () => {
     assert.equal(trail.revision, 3);
 
     // 없는 노드에 대한 명령은 아무 일도 하지 않는다
-    assert.equal(trail.remove('00000000-0000-4000-8000-000000000000'), false);
+    assert.equal(trail.remove('00000000-0000-4000-8000-000000000000'), undefined);
     assert.equal(trail.revision, 3);
 });
 
@@ -119,7 +119,8 @@ test('노드를 지우면 하위와 화면 상태까지 함께 사라진다', ()
     trail.setActiveNode(leaf.id);
 
     assert.equal(trail.size, 3);
-    assert.equal(trail.remove(mid.id), true);
+    const removed = trail.remove(mid.id);
+    assert.equal(removed.count, 2);
 
     assert.equal(trail.size, 1);
     assert.equal(trail.get(mid.id), undefined);
@@ -133,7 +134,7 @@ test('루트를 지우면 roots 에서도 빠진다', () => {
     const trail = makeTrail();
     const a = trail.addRoot(makeSymbol());
     const b = trail.addRoot(makeSymbol());
-    assert.equal(trail.remove(a.id), true);
+    assert.equal(trail.remove(a.id).index, 0);
     assert.deepEqual(trail.roots.map((n) => n.id), [b.id]);
 });
 
@@ -325,4 +326,80 @@ test('fromStructure 는 트리에 없는 활성 노드를 버린다', () => {
         nodeUi: {},
     });
     assert.equal(trail.activeNodeId, null);
+});
+
+test('지운 서브트리를 되돌리면 ID·자리·화면 상태가 그대로다', () => {
+    // 되돌리기의 값은 "지우기 전과 똑같이" 돌아오는 것이다. 노드 ID 가 바뀌면
+    // 보드 좌표와 분석 기록 대상이 끊기고, 형제 순서가 바뀌면 부모 호출부의
+    // ①②③ 이 다른 자식을 가리킨다.
+    const trail = makeTrail();
+    const root = trail.addRoot(makeSymbol({ name: 'Root' }));
+    const first = trail.addChild(root.id, makeSymbol({ name: 'First' }), makeOrigin({ line: 1 }));
+    const mid = trail.addChild(root.id, makeSymbol({ name: 'Mid' }), makeOrigin({ line: 2 }));
+    const last = trail.addChild(root.id, makeSymbol({ name: 'Last' }), makeOrigin({ line: 3 }));
+    const leaf = trail.addChild(mid.id, makeSymbol({ name: 'Leaf' }), makeOrigin({ line: 9 }));
+    trail.setNodeUi(mid.id, { boardX: 40, boardY: 80 });
+    trail.setCollapsed(leaf.id, true);
+    const before = trail.walk().map((node) => [node.id, node.parentId, node.collapsed]);
+
+    const removed = trail.remove(mid.id);
+    assert.equal(removed.index, 1);
+    assert.equal(removed.count, 2);
+    assert.deepEqual(trail.roots[0].children.map((n) => n.id), [first.id, last.id]);
+
+    const restored = trail.insertSubtree(
+        removed.parentId, removed.root, removed.index, removed.nodeUi,
+    );
+    assert.equal(restored.id, mid.id);
+    assert.deepEqual(trail.walk().map((node) => [node.id, node.parentId, node.collapsed]), before);
+    assert.deepEqual(trail.roots[0].children.map((n) => n.id), [first.id, mid.id, last.id]);
+    assert.deepEqual(trail.getNodeUi(mid.id), { boardX: 40, boardY: 80 });
+    assert.equal(trail.get(leaf.id).origin.line, 9);
+});
+
+test('부모가 사라진 뒤에는 되돌릴 자리가 없다', () => {
+    const trail = makeTrail();
+    const root = trail.addRoot(makeSymbol());
+    const mid = trail.addChild(root.id, makeSymbol(), makeOrigin());
+    const leaf = trail.addChild(mid.id, makeSymbol(), makeOrigin());
+
+    const removed = trail.remove(leaf.id);
+    trail.remove(mid.id);
+
+    assert.equal(
+        trail.insertSubtree(removed.parentId, removed.root, removed.index, removed.nodeUi),
+        undefined,
+    );
+});
+
+test('replaceSymbol 은 자식·진입 링크·접힘을 그대로 두고 재귀를 다시 센다', () => {
+    // 파일이 바뀌어 본문을 다시 읽은 것이지 다른 심볼로 간 것이 아니다.
+    // 자식을 버리면 그 아래 탐색이 통째로 사라진다.
+    const trail = makeTrail();
+    const outer = makeSymbol({ name: 'Loop', relPath: 'src/a.cpp', anchorLine: 4 });
+    const root = trail.addRoot(outer);
+    const mid = trail.addChild(root.id, makeSymbol({ name: 'Mid' }), makeOrigin({ line: 5 }));
+    const leaf = trail.addChild(mid.id, makeSymbol({ name: 'Leaf' }), makeOrigin({ line: 6 }));
+    trail.setCollapsed(mid.id, true);
+
+    const replaced = trail.replaceSymbol(mid.id, { ...outer, code: 'void Loop() { /* new */ }' });
+    assert.equal(replaced.id, mid.id);
+    assert.equal(replaced.collapsed, true);
+    assert.equal(replaced.origin.line, 5);
+    assert.deepEqual(replaced.children.map((n) => n.id), [leaf.id]);
+    // 루트와 같은 심볼이 되었으니 재귀다.
+    assert.equal(symbolKey(replaced.symbol), symbolKey(root.symbol));
+    assert.equal(trail.get(mid.id).recursive, true);
+});
+
+test('형제 정렬은 트레일에 남되 revision 을 올리지 않는다', () => {
+    const trail = makeTrail();
+    trail.addRoot(makeSymbol());
+    const before = trail.revision;
+
+    assert.equal(trail.setChildOrder('click'), true);
+    assert.equal(trail.childOrder, 'click');
+    assert.equal(trail.revision, before);
+    // 같은 값은 아무 일도 하지 않는다.
+    assert.equal(trail.setChildOrder('click'), false);
 });

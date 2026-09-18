@@ -16,11 +16,21 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 
 | 용어 | 코드 / DOM | 뜻 |
 | --- | --- | --- |
-| **앱 바** | `.app-bar` | 맨 위 줄. 프로젝트 이름 · 트레일 고르기 · 연결 상태 |
+| **앱 바** | `.app-bar` | 맨 위 줄. 파일 탐색기 접기 · 프로젝트 이름 · 트레일 고르기 · 저장 상태 · 서버 상태 표시 · 연결 상태 |
 | **파일 탐색기** | `FileTree`·`FileSearch`, `.sidebar` | 왼쪽의 프로젝트 파일 목록과 이름 검색 |
-| **코드 화면** | `CodeView`, `.code-view` | Monaco 로 파일 전체를 보여주는 읽기 전용 탭. 여기서 `Ctrl+Alt+T` 를 누른다 |
+| **코드 화면** | `CodeView`, `.code-view` | Monaco 로 파일 전체를 보여주는 읽기 전용 탭. 여기서 `Ctrl+Alt+T` 를 누르거나 문서 줄의 `▶ 트레일 시작` 을 누른다 |
+| **변경 보기** | `.code-view.diff` | 코드 화면을 `HEAD` 대비 좌우 비교로 바꾼 상태. 읽기 전용 Monaco DiffEditor |
+| **시작하기 카드** | `StartCard`, `.start-card` | 파일을 열기 전 코드 화면 자리에 보이는 준비 상태·시작 방법·바로가기 |
+| **설정 화면** | `SettingsView`, `#settings` | `ui.*`·언어 켜기·작성자·AI 안내를 편집하는 탭 |
+| **분석 기록 화면** | `AnalysisPanel`, `.analysis-panel` | 트레일·노드·코드 범위에 설명·질문·우려·결론을 남기고 검토·공유하는 탭 |
+| **읽기 시작점** | `ReadingStarts`, `.reading-starts` | 파일 탐색기 아래의 Git 변경 목록·문서 심볼·제한된 내용 검색 |
+| **AI 설명 초안** | `AiExplanationDraft`, `.ai-draft` | 선택한 코드 범위만 로컬 제공자에게 보내 받아온 채택 전 설명. 사람이 검토해 채택하기 전에는 분석 기록도 검토 완료도 아니다 |
 | **트레일 패널** (줄여서 **패널**) | `TrailView`, `.trail` | 함수 본문이 펼쳐지는 탭 **전체**. "뷰어", "윈도우", "미리보기 창"이라 부르지 않는다 |
 | **진단 화면** | `DiagnosticsView`, `#diagnostics` | 언어 서버 상태·점검 결과·로그와 외부 에디터 설정을 보여주는 탭 |
+| **서버 상태 표시** | `LspStatus`, `.lsp-status` | 앱 바와 코드 화면 문서 줄에 붙는 현재 문서 언어의 언어 서버 상태. 누르면 진단 화면의 그 언어 카드로 간다 |
+| **알림** | `Notices`, `.notices`·`.notice` | 화면 오른쪽 아래에 쌓이는 메시지. 수준(info/warn/error)과 행동 버튼을 가진다. 화면이 사람에게 말하는 **유일한** 통로다 |
+| **선택 칩** | `SelectionChip`, `.selection-chip` | 본문이나 코드 화면에서 글자를 드래그하면 선택 끝에 뜨는 버튼 묶음(`＋ 기록` · `AI 초안` · `복사`) |
+| **단축키 도움말** | `ShortcutsHelp`, `.shortcuts` | `?` 로 띄우는 키 목록 오버레이 |
 | **트레일** | `Trail` | 패널에 담긴 탐색 트리 전체. 자동 저장과 Markdown 내보내기의 단위 |
 | **루트** | `Trail.roots` | `Ctrl+Alt+T` 로 시작한 최상위 노드. 여러 개 있을 수 있다 |
 | **노드** | `TrailNode`, `.node` | 심볼 하나가 차지하는 덩어리 = 헤더 + 진입 링크 + 본문 + 자식. "카드", "박스"가 아니다 |
@@ -29,9 +39,12 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 | **진입 링크** | `TrailOrigin`, `.origin` | 헤더 밑의 `↑ A 의 127번째 줄 Find`. 누르면 부모의 호출부로 돌아간다 |
 | **호출부** | `origin.line` / `origin.char`, `.clickable.visited` | 부모 본문에서 클릭했던 그 지점. 펼쳐본 뒤에는 ①②③ 순번이 붙는다 |
 | **순번** | `.idx`(헤더), `data-idx`(호출부) | 형제 노드 번호. 부모 호출부의 ①과 자식 노드의 ①이 한 짝이다 |
-| **배지** | `.badge` | 헤더 오른쪽의 `재귀` · `선언만` · `근사` |
+| **배지** | `.badge` | 헤더 오른쪽의 `재귀` · `선언만` · `근사` · `바뀜` |
+| **기록 표시** | `.badge.notes`, `.cl.noted` | 노드 헤더의 `✎ N` 배지와 본문 줄 왼쪽의 색 띠. 그 노드·줄에 분석 기록이 있다는 뜻 |
+| **기록 열** | `AnnotationColumn`, `.annotation-column` | 트레일 패널 오른쪽의 접이식 세로 영역. 활성 노드의 기록 목록과 작성 칸이 있다 |
+| **후보 팝오버** | `ChoicePopover`, `.choice` | 정의·구현 후보를 클릭한 식별자(또는 그 노드 헤더) 바로 아래에서 고르는 창 |
 | **브레드크럼** | `#breadcrumb` | 패널 위쪽의 현재 경로 줄 |
-| **툴바** | `#toolbar` | 전체 펼치기·접기, 정렬, 보드 전환, 필터, 내보내기, 지우기 버튼 줄. 오른쪽 끝에 노드 수 |
+| **툴바** | `#toolbar` | 전체 펼치기·접기, 정렬, 보드 전환, 필터, 내보내기, 지우기 버튼 줄. 오른쪽 끝에 노드 수와 기록 수 |
 | **트리 모드 / 보드 모드** | `#root.board`, `Trail.mode` | 기본은 **트리 모드**(자식이 부모 안에 중첩). **보드 모드**는 노드를 캔버스에 자유 배치하고 헤더를 끌어 옮긴다 |
 | **연결선** | `.board-lines path` | 보드 모드에서 부모 오른쪽 → 자식 왼쪽을 잇는 곡선. 트리 모드의 가이드선에 해당한다 |
 | **폭 맞춤** | `useFitToWidth`, `--ct-code-font-size` | 가장 빠듯한 노드에 맞춰 **코드 본문** 글자만 줄이는 것. 헤더는 안 줄인다 |
@@ -48,14 +61,20 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 
 ## 지금 무엇을 하고 있나
 
-**독립 프로그램 전환이 끝났다.** 계획서는 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md)
-이고 그 문서 0장의 체크리스트가 진행의 정본이다. 단계 0~12와 최종 인수 체크가 끝났고,
-확정하지 못한 줄에는 그 자리에 이유가 적혀 있다.
+**세 가지가 끝났다.** 독립 프로그램 전환(1.0.0), 코드 이해·공유(1.1.0), 그리고
+리뷰 도구로서의 사용성 개선(1.2.0~1.4.0)이다. 지금 진행의 정본은
+[`docs/review-ux-improvement-plan.md`](docs/review-ux-improvement-plan.md) 이고,
+그 문서 0장의 U01~U20 체크리스트가 무엇이 끝났는지를 말한다.
+
+앞의 둘은 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md) 와
+[`docs/code-understanding-and-sharing-plan.md`](docs/code-understanding-and-sharing-plan.md) 에 있다.
+남은 것은 **이 기계에서 할 수 없는 확인**뿐이다 — 실제 언어 서버 다섯(T02·T23·T37),
+macOS·Linux 확인(구현서 0.13·0.14), 실제 참여자 사용성 평가(T33·T40), npm 배포.
 
 - `packages/` 가 전부다. VS Code 확장 소스(`src/`, `media/`)와 `.vsix` 흐름은 1.0.0 에서 지웠다.
   확장 마지막 상태는 태그 `v0.6.0-vscode-extension` 이고 기준선 기록은 [`docs/baseline.md`](docs/baseline.md) 다.
 - 언어 서버는 어댑터가 찾는다(설정 → PATH → 플랫폼별·GOBIN·rustup). **자동으로 내려받지 않는다.**
-- **실제 언어 서버로 검증하지 못한 것이 있다.** 이 기계에 clangd·gopls·roslyn 이 없고
+- **실제 언어 서버로 검증하지 못한 것이 있다.** 이 기계에 clangd·gopls·roslyn·typescript-language-server가 없고
   rust-analyzer 는 rustup proxy 만 있다. `npm run test:pack` · `npm run test:install` 은
   Windows 에서만 실제로 돌렸다. 어느 줄이 그런지는 구현서 0.7 · 0.13 · 0.14 에 표시해 뒀다.
 - 확장에서 되던 동작이 새 프로그램의 무엇으로 옮겨졌는지는 [`docs/e2e-port-checklist.md`](docs/e2e-port-checklist.md) 에 있다.
@@ -158,7 +177,7 @@ A 안에서 B, C를 클릭하면 둘 다 A의 형제 자식이다. 이 규칙을
 
 **진단 화면의 `지원됨` 은 프로세스가 떴다는 뜻이 아니다.** 실제 샘플 문서에서
 `documentSymbol` 과 `definition` 이 응답했다는 뜻이고, 그 확인은 `lsp.verify` 명령이
-사용자가 눌렀을 때만 돈다. 진단 화면을 여는 것만으로 네 언어 서버를 다 띄우지 않는다.
+사용자가 눌렀을 때만 돈다. 진단 화면을 여는 것만으로 다섯 언어 서버를 다 띄우지 않는다.
 
 **오류에 절대경로·코드 본문·환경 변수·토큰을 담지 않는다.** 브라우저는 신뢰 경계 밖이고,
 오류 메시지는 그 경계를 넘는 통로다. 실행 파일도 이름만 내보낸다.
@@ -171,6 +190,24 @@ A 안에서 B, C를 클릭하면 둘 다 A의 형제 자식이다. 이 규칙을
 
 **언어 서버를 자동으로 내려받지 않는다.** 설치 명령은 진단 화면이 안내만 한다.
 
+**화면이 사람에게 말하는 통로는 알림 하나다.** `Notices` 밖에 오류 표시를 새로
+만들지 않는다. 예전에는 닫을 수 없는 패널 오류와 서로 덮어쓰는 토스트가 따로 있었고,
+같은 `command.error` 를 두 모양으로 보여줬다. 목록 자체를 못 읽은 경우처럼 **그 자리에
+적어야 뜻이 통하는 것**만 예외다(`.tree-error`).
+
+**오류는 다음 행동까지 말한다.** 해석이 실패하면 `CommandError.context` 에 언어·서버
+상태·`action` 을 실어 보내고, 화면은 그것으로 버튼을 만든다. "언어 서버가 켜져 있는지
+확인한다" 한 줄로는 사용자가 무엇을 할지 모른다. **맥락에 경로·실행 파일 위치를 담지
+않는다** — 담는 것은 상태뿐이다.
+
+**되돌릴 수 없는 삭제에만 확인을 붙인다.** `지우기` 와 `✕ 트레일` 은 인라인 확인을
+거치고, 노드 삭제는 확인 대신 되돌리기(8초 알림 / 서버 버퍼 60초)다. 리뷰 중 수십 번
+일어나는 일에 매번 확인을 띄우면 사람은 곧 읽지 않고 누른다.
+
+**되돌리기 버퍼는 한 단계다.** 삭제 뒤 다른 구조 명령이 들어오면 원래 자리가 더 이상
+그 자리가 아니므로 `TrailService.mutate` 가 버퍼를 비운다. 여러 단계를 쌓으려면 트리
+변경 이력을 통째로 들고 있어야 한다.
+
 **CI 를 두지 않는다.** 저장소 주인의 결정이다. `.github/workflows/` 를 만들지 않고,
 계획 문서에도 CI 항목을 넣지 않는다. 플랫폼별 확인이 필요하면 그 환경에서
 `npm test` · `npm run test:e2e` · `npm run test:install` 을 손으로 돌린다.
@@ -182,7 +219,8 @@ npm workspaces. 배포하는 것은 `packages/cli` 의 `code-trail` 이다.
 
 ```
 packages/shared/src/domain/     ResolvedSymbol, Trail, 설정, 저장 스키마, Markdown, UUID
-packages/shared/src/protocol/   명령·이벤트 타입과 Zod 런타임 스키마
+                                analysis.ts(분석 기록), share.ts(공유 묶음), ai.ts
+packages/shared/src/protocol/   명령·이벤트 타입과 Zod 런타임 스키마, analysisSchemas.ts
 
 packages/server/src/security/   토큰, Host·Origin 검사, 경로 경계, CSP
 packages/server/src/persistence/ .code-trail/ 저장소, 원자적 쓰기, debounce, 잠금 파일
@@ -195,24 +233,43 @@ packages/server/src/lsp/        JSON-RPC 전송, 문서 동기화, 상태 머신
 packages/server/src/lsp/adapters/  언어별 탐지·진단. 언어를 아는 유일한 자리다
 packages/server/src/symbols/    평탄화, 심볼 선택, 본문 범위, 선언만 판정
 packages/server/src/editor/     외부 에디터 탐지와 실행 (shell 없이, documentId 역조회)
+packages/server/src/analysis/   분석 기록 정본, 기준 해시, 위치 재탐색
+packages/server/src/sharing/    공유 묶음 내보내기·검증·가져오기·병합
+packages/server/src/git/        변경 목록과 hunk (셸 없는 git 호출)
+packages/server/src/ai/         선택 범위만 보내는 loopback Ollama 제공자
+packages/server/src/workspace/contentSearch.ts  제한된 내용 검색
 
 packages/web/src/app/           화면 뼈대. 앱 바, 탭, 소켓 이벤트 배분
 packages/web/src/api/           토큰 부트스트랩, HTTP, WebSocket, 명령 보내기
 packages/web/src/tokenizer/     하이라이팅 + 식별자에 좌표 심기 (순수 함수)
 packages/web/src/features/      파일 탐색기, 검색, 코드 화면, 트레일 화면, 진단 화면
-packages/web/src/features/trail/board.ts  보드 배치 계산 (순수 함수. 브라우저 없이 테스트한다)
+packages/web/src/features/annotations/  분석 기록 화면, 기록 카드·작성 칸·기록 열
+packages/web/src/features/changes/      읽기 시작점 (변경 목록·hunk·문서 심볼·내용 검색)
+packages/web/src/features/notices/      알림 하나로 합친 메시지 통로
+packages/web/src/features/selection/    선택 칩
+packages/web/src/features/settings/     설정 화면
+packages/web/src/features/start/        시작하기 카드
+packages/web/src/features/help/         단축키 도움말
+packages/web/src/features/trail/board.ts           보드 배치 계산 (순수 함수)
+packages/web/src/features/trail/annotationIndex.ts 기록 색인 (순수 함수)
+packages/web/src/features/trail/keyboard.ts        키보드 이동 (순수 함수)
 packages/web/src/styles/        app.css(변수·뼈대) 와 trail.css(노드·보드)
 packages/cli/src/               인자 해석, 서버 재사용 감지, 브라우저 열기
 
-test/unit/                      도메인·프로토콜·심볼 선택·보드 배치·CLI 인자 (node:test)
+test/unit/                      도메인·프로토콜·심볼 선택·보드 배치·기록 색인·키보드 이동·CLI 인자 (node:test)
 test/integration/               진짜 서버 + 가짜 언어 서버 + 외부 에디터 + 경계 (node:test)
 test/e2e/                       진짜 브라우저까지 (playwright)
 test/fake-lsp/                  나쁜 언어 서버를 흉내내는 stdio fixture
 test/smoke/                     실제 언어 서버 스모크 (설치된 언어만)
 test/pack/                      배포물 파일 목록과 설치 스모크
-test/perf/                      1,000개 노드 성능 측정 (결과는 docs/perf-1000-nodes.md)
+test/perf/                      1,000개 노드 성능 측정과 분석 규모 측정
 test/fixtures/                  확장 시절 데이터를 굳혀 둔 것. **고치지 않는다**
 ```
+
+브라우저 없이 테스트하는 웹 모듈(`board.ts`·`annotationIndex.ts`·`keyboard.ts`·
+`tokenizer/`)은 `packages/web/tsconfig.lib.json` 의 `include` 에 있어야 한다.
+`npm run build:lib` 가 그것만 `packages/web/lib/` 로 내보내고 `test/unit/` 이 그걸 읽는다.
+**순수 함수를 새로 만들면 그 목록에 넣는다** — 안 넣으면 테스트가 모듈을 못 찾는다.
 
 `packages/shared` 는 파일 시스템·네트워크·DOM 어디에도 의존하지 않는다.
 서버·CLI·브라우저가 함께 쓰기 때문이다. 둘이 지킨다 —
@@ -242,7 +299,12 @@ test/fixtures/                  확장 시절 데이터를 굳혀 둔 것. **고
 | 보드 배치 규칙 (`features/trail/board.ts`) | `test/unit/board.test.mjs`, `test/e2e/trail.e2e.mjs` 의 `[보드 모드]`, 무거워졌으면 `docs/perf-1000-nodes.md` |
 | 외부 에디터 실행 경로 (`server/src/editor/`) | `test/integration/editor.test.mjs` 에 셸 특수문자 한 줄. 자리표시자를 늘리면 README `## 설정` 과 구현서 17.1 |
 | 진단 화면에 항목 추가 | `LspSessionInfo` → `/api/diagnostics` → `LanguageDiagnostics` → `DiagnosticsView` 넷을 한 벌로, 그리고 구현서 18 |
-| `.code-trail/settings.json` 항목 추가 | `shared/domain/settings.ts`, `protocol/schemas.ts`, README `## 설정` |
+| `.code-trail/settings.json` 항목 추가 | `shared/domain/settings.ts`, `protocol/schemas.ts`, `features/settings/SettingsView.tsx`, README `## 설정` |
+| 분석 기록 도메인·스키마 (`domain/analysis.ts`, `analysisSchemas.ts`) | `docs/share-format.md`, `docs/data-and-recovery.md`, `test/unit/analysis-sharing.test.mjs` |
+| 공유 묶음에 들어가는 필드 | `docs/share-format.md` 의 포함 정책, `examples/first-review.ctshare.json` 무결성 재계산 |
+| 기록이 노드·줄에 붙는 규칙 (`features/trail/annotationIndex.ts`) | `test/unit/annotation-index.test.mjs`, `test/e2e/analysis.e2e.mjs` |
+| 키보드 이동 규칙 (`features/trail/keyboard.ts`) | `test/unit/keyboard.test.mjs`, `features/help/ShortcutsHelp.tsx`, README `## 사용법` 의 키 표 |
+| 알림을 새로 띄우는 자리 | `features/notices/useNotices.ts` 를 지난다. 새 표시 요소를 만들지 않는다 |
 | `package.json` 의 `files`·`bin`·의존성 | `npm run test:pack` 과 `npm run test:install` 을 돌린다. 새 런타임 의존성은 `THIRD-PARTY-NOTICES.md` 에도 |
 | CLI 인자 추가 | `packages/cli/src/args.ts` 의 `USAGE`, README `## 설치와 실행` 표, `test/unit/cli-args.test.mjs` |
 | 언어 서버 예외 처리 추가 | 아래 `## 언어 서버별 함정` |
@@ -284,3 +346,6 @@ API 인증(`test/integration/resilience.test.mjs`), 배포물 목록(`npm run te
 - **Windows 의 `.cmd`/`.bat` shim** 은 `shell: false` 로 못 띄운다(Node CVE-2024-27980 대응).
   탐지에서 빼고, 설정에 적혀 있으면 그 이유를 알린다. `cmd /c` 로 우회하지 않는다 —
   인자가 셸 문법으로 해석되면 "셸을 거치지 않는다" 규칙이 무너진다.
+- **typescript-language-server의 Windows npm shim도 같은 예외다.** 전역 패키지의
+  `lib/cli.mjs`를 찾았을 때만 현재 Node 실행 파일로 직접 `--stdio` 기동한다. 프로젝트의
+  `node_modules`를 자동 실행하지 않는다.

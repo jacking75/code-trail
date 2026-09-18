@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, type JSX } from 'react';
 
 import type { ClickTarget } from '../../tokenizer/tokenize.js';
+import {
+    countForNode,
+    describeCount,
+    marksInRange,
+    type AnnotationIndex,
+} from './annotationIndex.js';
 import { sortChildren, type BoardPoint } from './board.js';
 import { CodeBody, callSiteKey } from './CodeBody.js';
 import {
@@ -49,6 +55,10 @@ export interface TrailNodeProps {
     positions: Readonly<Record<string, BoardPoint>>;
     /** 노드별로 저장된 본문 높이·코드 글자 크기. */
     nodeUi: Readonly<Record<string, NodeUiView>>;
+    /** 활성 분석의 기록 색인. 헤더 배지와 본문 줄 표시가 쓴다(U10). */
+    annotations: AnnotationIndex;
+    /** 파일이 바뀌어 옛 코드를 보여주고 있는 노드(U08). */
+    staleNodeIds: ReadonlySet<string>;
 
     onToggle: (node: TrailNodeView) => void;
     onRemove: (node: TrailNodeView) => void;
@@ -63,12 +73,26 @@ export interface TrailNodeProps {
         text: string,
         modifiers: { alt: boolean; ctrl: boolean },
     ) => void;
-    onRangeSelect?: (node: TrailNodeView, range: {
-        start: { line: number; char: number };
-        end: { line: number; char: number };
-    }) => void;
+    onRangeSelect?: (
+        node: TrailNodeView,
+        range: {
+            start: { line: number; char: number };
+            end: { line: number; char: number };
+        },
+        anchor: { x: number; y: number } | null,
+    ) => void;
     /** 본문 높이를 사용자가 바꿨을 때. 값은 서버에 저장된다. */
     onNodeUi: (nodeId: string, patch: { bodyHeight?: number | null }) => void;
+    /** 헤더의 `＋` — 이 노드에 기록 남기기(U10). */
+    onNote: (node: TrailNodeView) => void;
+    /** 헤더의 `✎ N` 배지 — 이 노드의 기록 보기. */
+    onShowNotes: (node: TrailNodeView) => void;
+    /** 헤더의 `↻` — 현재 코드로 다시 읽기(U08). */
+    onRefresh: (node: TrailNodeView) => void;
+    /** 본문 줄의 색 띠를 눌렀다. 그 기록으로 간다. */
+    onOpenAnnotation: (annotationId: string) => void;
+    /** 이 노드에 포커스가 들어왔다. roving tabindex 를 옮긴다. */
+    onFocusHeader: (nodeId: string) => void;
 }
 
 /** 본문 높이 저장을 몰아 보내는 간격. 끄는 동안 매 프레임 보내지 않는다. */
@@ -165,7 +189,24 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
     const parts = splitName(node.symbol);
     const kind = kindName(node.symbol.kind);
     const busy = props.busyNodeIds.has(node.id);
+    const stale = props.staleNodeIds.has(node.id);
     const board = props.layout === 'board';
+    const lineCount = node.symbol.code === '' ? 0 : node.symbol.code.split(/\r?\n/).length;
+    const bodyEnd = node.symbol.startLine + Math.max(0, lineCount - 1);
+    const noteCount = countForNode(
+        props.annotations,
+        node.id,
+        node.symbol.relPath,
+        node.symbol.startLine,
+        bodyEnd,
+    );
+    const marks = marksInRange(
+        props.annotations,
+        node.symbol.relPath,
+        node.symbol.startLine,
+        bodyEnd,
+    );
+    const active = props.activeNodeId === node.id;
     const spot = props.positions[node.id];
     const style = board && spot !== undefined
         ? { left: `${Math.round(spot.x)}px`, top: `${Math.round(spot.y)}px` }
@@ -182,6 +223,15 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
         >
             <div
                 className="hd"
+                // 활성 노드의 헤더만 탭 순서에 둔다(roving tabindex). 전부 넣으면
+                // `Tab` 한 번에 한 노드씩 지나가느라 트리를 건너다닐 수 없다.
+                tabIndex={active ? 0 : -1}
+                role={board ? 'listitem' : 'treeitem'}
+                aria-expanded={node.collapsed ? false : undefined}
+                aria-level={props.depth + 1}
+                aria-selected={active}
+                data-node-header={node.id}
+                onFocus={() => props.onFocusHeader(node.id)}
                 onClick={(event) => {
                     // 헤더 버튼을 눌렀으면 접기까지 하지 않는다.
                     if ((event.target as HTMLElement).closest('button')) {
@@ -227,9 +277,62 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
                         근사
                     </span>
                 ) : null}
-                {busy ? <span className="badge busy">…</span> : null}
+                {stale ? (
+                    <span
+                        className="badge stale"
+                        title="이 노드의 파일이 바뀌었다. ↻ 로 현재 코드를 다시 읽는다."
+                    >
+                        바뀜
+                    </span>
+                ) : null}
+                {noteCount.total > 0 ? (
+                    <button
+                        type="button"
+                        className={`badge notes${noteCount.open > 0 ? ' open' : ''}`}
+                        data-act="notes"
+                        title={describeCount(noteCount)}
+                        onClick={() => props.onShowNotes(node)}
+                    >
+                        {`✎ ${noteCount.total}`}
+                    </button>
+                ) : null}
+                {busy ? (
+                    <span
+                        className="badge busy"
+                        title="언어 서버 응답을 기다리는 중이다."
+                    >
+                        …
+                    </span>
+                ) : null}
 
                 <span className="spacer" />
+
+                {/*
+                  * 버튼은 한 묶음이다. 낱개로 두면 자리가 모자랄 때 마지막 하나만
+                  * 다음 줄로 떨어져 나가 헤더가 깨져 보인다. 줄바꿈은 묶음 단위로 한다.
+                  */}
+                <span className="acts">
+                <button
+                    type="button"
+                    className="act"
+                    data-act="note"
+                    title="이 노드에 기록 남기기"
+                    onClick={() => props.onNote(node)}
+                >
+                    ＋
+                </button>
+
+                {stale ? (
+                    <button
+                        type="button"
+                        className="act hot"
+                        data-act="refresh"
+                        title="현재 코드로 다시 읽기"
+                        onClick={() => props.onRefresh(node)}
+                    >
+                        ↻
+                    </button>
+                ) : null}
 
                 {node.symbol.callable ? (
                     <button
@@ -281,6 +384,7 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
                 >
                     ✕
                 </button>
+                </span>
             </div>
 
             {node.origin ? (
@@ -294,6 +398,9 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
                         {`↑ ${props.parentName} 의 `}
                         <code>{`${node.origin.line + 1}번째 줄 ${node.origin.text}`}</code>
                     </button>
+                    {props.staleNodeIds.has(node.parentId ?? '') ? (
+                        <span className="muted"> (줄이 달라졌을 수 있다)</span>
+                    ) : null}
                 </div>
             ) : null}
 
@@ -303,17 +410,19 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
                     clickTarget={props.clickTarget}
                     maxCodeLines={props.maxCodeLines}
                     visited={visited}
+                    marks={marks}
                     {...(ui?.codeFontSize === undefined
                         ? {}
                         : { fontSize: ui.codeFontSize })}
                     onIdentifierClick={(line, char, text, modifiers) =>
                         props.onIdentifierClick(node, line, char, text, modifiers)}
-                    onRangeSelect={(range) => props.onRangeSelect?.(node, range)}
+                    onRangeSelect={(range, anchor) => props.onRangeSelect?.(node, range, anchor)}
+                    onMarkClick={props.onOpenAnnotation}
                 />}
             </div>
 
             {board ? null : (
-                <div className="kids">
+                <div className="kids" role="group">
                     {children.map((child, index) => (
                         <TrailNode
                             {...props}

@@ -45,6 +45,27 @@ export const NODE_UI_KEYS = ['boardX', 'boardY', 'bodyHeight', 'codeFontSize'] a
 
 export type TrailMode = 'tree' | 'board';
 
+/** 같은 부모 아래 형제 노드를 늘어놓는 순서. `null` 이면 설정 기본값을 따른다. */
+export type ChildOrder = 'source' | 'click';
+
+/**
+ * 트리에서 떼어낸 서브트리.
+ *
+ * 되돌리기(`trail.undoRemove`)가 원래 자리에 그대로 되살리려면 노드만으로는
+ * 모자란다. 어느 부모의 몇 번째였는지와 그 노드들이 갖고 있던 화면 상태까지
+ * 함께 들고 있어야 순번·진입 링크·보드 좌표가 그대로 돌아온다.
+ */
+export interface RemovedSubtree {
+    /** 떼어낸 최상위 노드. 자식이 그대로 달려 있다. */
+    root: TrailNode;
+    parentId: string | null;
+    /** 부모(루트면 `roots`) 안에서의 형제 인덱스. */
+    index: number;
+    nodeUi: Record<string, NodeUiState>;
+    /** 떼어낸 노드 수. 루트를 포함한다. */
+    count: number;
+}
+
 export interface TrailInit {
     id?: string;
     title?: string;
@@ -71,6 +92,11 @@ export class Trail {
     readonly createdAt: string;
     updatedAt: string;
     mode: TrailMode = 'tree';
+    /**
+     * 이 트레일에서 고른 형제 정렬. `null` 이면 `settings.ui.childOrder` 를 따른다.
+     * 트리 모양을 바꾸지 않는 화면 상태다 — revision 을 올리지 않는다.
+     */
+    childOrder: ChildOrder | null = null;
     activeNodeId: string | null = null;
     roots: TrailNode[] = [];
 
@@ -174,19 +200,33 @@ export class Trail {
         return parent.children.find((c) => symbolKey(c.symbol) === key);
     }
 
-    remove(id: string): boolean {
+    /**
+     * 노드와 하위 노드를 떼어낸다.
+     *
+     * 떼어낸 것을 그대로 돌려준다. 되돌리기가 원래 자리·원래 ID·원래 화면
+     * 상태로 되살릴 수 있어야 하고, 그 정보는 떼어내는 이 순간에만 있다.
+     */
+    remove(id: string): RemovedSubtree | undefined {
         const node = this.index.get(id);
         if (!node) {
-            return false;
+            return undefined;
         }
         const siblings = node.parentId ? this.index.get(node.parentId)?.children : this.roots;
+        let index = -1;
         if (siblings) {
-            const i = siblings.indexOf(node);
-            if (i >= 0) {
-                siblings.splice(i, 1);
+            index = siblings.indexOf(node);
+            if (index >= 0) {
+                siblings.splice(index, 1);
             }
         }
+        const nodeUi: Record<string, NodeUiState> = {};
+        let count = 0;
         const drop = (n: TrailNode): void => {
+            count += 1;
+            const state = this.ui.get(n.id);
+            if (state) {
+                nodeUi[n.id] = { ...state };
+            }
             this.index.delete(n.id);
             this.ui.delete(n.id);
             if (this.activeNodeId === n.id) {
@@ -196,7 +236,77 @@ export class Trail {
         };
         drop(node);
         this.touch();
-        return true;
+        return {
+            root: node,
+            parentId: node.parentId,
+            index: index < 0 ? 0 : index,
+            nodeUi,
+            count,
+        };
+    }
+
+    /**
+     * 떼어냈던 서브트리를 원래 자리에 되돌린다 (`trail.undoRemove`).
+     *
+     * 같은 ID 로 되살린다. 노드 ID 는 화면 상태와 분석 기록 대상의 키라서
+     * 새로 매기면 배지와 보드 좌표가 끊긴다. 부모가 그새 사라졌으면 되돌릴
+     * 자리가 없다는 뜻이므로 `undefined` 를 준다.
+     */
+    insertSubtree(
+        parentId: string | null,
+        root: TrailNode,
+        index: number,
+        nodeUi: Record<string, NodeUiState> = {},
+    ): TrailNode | undefined {
+        if (this.index.has(root.id)) {
+            return undefined;
+        }
+        const siblings = parentId === null ? this.roots : this.index.get(parentId)?.children;
+        if (!siblings) {
+            return undefined;
+        }
+        const link = (n: TrailNode, parent: string | null): void => {
+            n.parentId = parent;
+            this.index.set(n.id, n);
+            n.children.forEach((child) => link(child, n.id));
+        };
+        link(root, parentId);
+        siblings.splice(Math.max(0, Math.min(index, siblings.length)), 0, root);
+
+        for (const [nodeId, state] of Object.entries(nodeUi)) {
+            if (this.index.has(nodeId)) {
+                this.ui.set(nodeId, { ...state });
+            }
+        }
+        // 조상 사슬은 떼어내기 전과 같으므로 재귀 표시도 같다. 그래도 다시 센다 —
+        // 저장값을 믿지 않는 `fromStructure` 와 같은 규칙이다.
+        const parent = parentId === null ? undefined : this.index.get(parentId);
+        root.recursive = parent === undefined
+            ? false
+            : this.isAncestorSymbol(parent, root.symbol);
+        this.recomputeRecursive(root);
+        this.touch();
+        return root;
+    }
+
+    /**
+     * 노드가 감싼 심볼만 새 것으로 바꾼다 (`trail.refreshNode`).
+     *
+     * 자식·진입 링크·접힘 상태는 그대로 둔다. 파일이 바뀌어 본문을 다시 읽은
+     * 것이지 다른 심볼로 간 것이 아니다. 조상 사슬은 그대로지만 심볼 키가
+     * 달라질 수 있으므로 재귀 표시는 다시 센다.
+     */
+    replaceSymbol(id: string, symbol: ResolvedSymbol): TrailNode | undefined {
+        const node = this.index.get(id);
+        if (!node) {
+            return undefined;
+        }
+        node.symbol = symbol;
+        const parent = node.parentId === null ? undefined : this.index.get(node.parentId);
+        node.recursive = parent === undefined ? false : this.isAncestorSymbol(parent, symbol);
+        this.recomputeRecursive(node);
+        this.touch();
+        return node;
     }
 
     /**
@@ -257,6 +367,16 @@ export class Trail {
             return false;
         }
         this.mode = mode;
+        this.touch(false);
+        return true;
+    }
+
+    /** 형제 정렬. 접기와 같은 화면 상태라 revision 을 올리지 않는다. */
+    setChildOrder(order: ChildOrder | null): boolean {
+        if (this.childOrder === order) {
+            return false;
+        }
+        this.childOrder = order;
         this.touch(false);
         return true;
     }
@@ -397,6 +517,7 @@ export class Trail {
         updatedAt: string;
         revision: number;
         mode: TrailMode;
+        childOrder?: ChildOrder | null;
         activeNodeId: string | null;
         roots: TrailNode[];
         nodeUi: Record<string, NodeUiState>;
@@ -411,6 +532,7 @@ export class Trail {
         trail.updatedAt = args.updatedAt;
         trail.revisionValue = args.revision;
         trail.mode = args.mode;
+        trail.childOrder = args.childOrder ?? null;
         trail.roots = args.roots;
 
         const link = (n: TrailNode, parentId: string | null): void => {

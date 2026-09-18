@@ -6,11 +6,14 @@ import {
     useRef,
     useState,
     type JSX,
+    type KeyboardEvent as ReactKeyboardEvent,
     type PointerEvent as ReactPointerEvent,
     type MouseEvent as ReactMouseEvent,
+    type ReactNode,
 } from 'react';
 
 import type { ClickTarget } from '../../tokenizer/tokenize.js';
+import type { AnnotationIndex } from './annotationIndex.js';
 import {
     BOARD_DEFAULT_HEIGHT,
     BOARD_DEFAULT_WIDTH,
@@ -21,11 +24,16 @@ import {
     type BoardPoint,
     type BoardRect,
     type BoardSize,
+    type ChildOrder,
 } from './board.js';
+import { ChoicePopover } from './ChoicePopover.js';
+import { ConfirmPopover } from './ConfirmPopover.js';
+import { firstChild, nextVisible, parentOf, prevVisible, visibleOrder } from './keyboard.js';
 import { TrailNode } from './TrailNode.js';
 import { BASE_CODE_FONT_SIZE, useFitToWidth } from './useFitToWidth.js';
 import {
     ancestorsOf,
+    findNode,
     splitName,
     type DefinitionChoice,
     type NodeUiView,
@@ -36,7 +44,7 @@ import {
 /**
  * 트레일 화면 (구현서 16.1, 16.3, 16.4).
  *
- * 툴바 · 브레드크럼 · 트리 세 부분이다.
+ * 툴바 · 브레드크럼 · 트리 세 부분이고, 오른쪽에 접이식 기록 열이 붙는다.
  *
  * **트리 모드**의 배치는 CSS 가 만든다 — 부모가 위, 자식이 그 아래 같은 행에
  * 좌우로 놓인다. 자식이 부모 DOM 안에 중첩돼 있다.
@@ -50,6 +58,7 @@ import {
 export interface TrailViewProps {
     trail: TrailSnapshot;
     busyNodeIds: ReadonlySet<string>;
+    staleNodeIds: ReadonlySet<string>;
     clickTarget: ClickTarget;
     maxCodeLines: number;
     /** 코드 글자 크기 관련 설정. 폭 맞춤은 코드 본문에만 건다. */
@@ -59,6 +68,14 @@ export interface TrailViewProps {
     /** 이 언어 서버가 구현 찾기를 지원하는지. */
     implementationSupported: boolean;
     choice: DefinitionChoice | null;
+    /** 활성 분석의 기록 색인. 헤더 배지와 줄 표시가 쓴다. */
+    annotations: AnnotationIndex;
+    /** `settings.ui.childOrder`. 트레일이 따로 고르지 않았을 때 쓴다. */
+    childOrderDefault: ChildOrder;
+    /** 이 탭이 시킨 활성 노드 변경. 이때만 화면을 움직인다. */
+    focusRequest: { nodeId: string; seq: number } | null;
+    /** 열려 있으면 트리 오른쪽에 붙는다. */
+    annotationColumn?: ReactNode;
 
     onToggle: (node: TrailNodeView) => void;
     onToggleAll: (collapsed: boolean) => void;
@@ -66,6 +83,10 @@ export interface TrailViewProps {
     onPromote: (node: TrailNodeView) => void;
     onImplementations: (node: TrailNodeView) => void;
     onOpenInEditor: (node: TrailNodeView) => void;
+    onNote: (node: TrailNodeView) => void;
+    onShowNotes: (node: TrailNodeView) => void;
+    onRefresh: (node: TrailNodeView) => void;
+    onOpenAnnotation: (annotationId: string) => void;
     onIdentifierClick: (
         node: TrailNodeView,
         line: number,
@@ -73,16 +94,22 @@ export interface TrailViewProps {
         text: string,
         modifiers: { alt: boolean; ctrl: boolean },
     ) => void;
-    onRangeSelect?: (node: TrailNodeView, range: {
-        start: { line: number; char: number };
-        end: { line: number; char: number };
-    }) => void;
+    onRangeSelect?: (
+        node: TrailNodeView,
+        range: {
+            start: { line: number; char: number };
+            end: { line: number; char: number };
+        },
+        anchor: { x: number; y: number } | null,
+    ) => void;
     onFocusNode: (nodeId: string) => void;
     onClear: () => void;
     onExportMarkdown: () => void;
     onChooseCandidate: (choiceId: string, candidateId: string) => void;
+    onAttachAllImplementations: (nodeId: string) => void;
     onDismissChoice: () => void;
     onSetMode: (mode: 'tree' | 'board') => void;
+    onSetChildOrder: (order: ChildOrder) => void;
     onNodeUi: (
         nodeId: string,
         patch: {
@@ -137,13 +164,19 @@ interface DragState {
     moved: boolean;
 }
 
+/** 활성 노드를 강조하는 시간. 눈이 따라갈 만큼만 (U06). */
+const FLASH_MS = 800;
+
 export function TrailView(props: TrailViewProps): JSX.Element {
     const { trail } = props;
     const [filter, setFilter] = useState('');
-    const [childOrder, setChildOrder] = useState<'source' | 'click'>('source');
+    const [confirmClear, setConfirmClear] = useState(false);
+    const filterRef = useRef<HTMLInputElement | null>(null);
 
     const rootRef = useRef<HTMLDivElement | null>(null);
     const board = trail.mode === 'board';
+    // 트레일이 따로 고르지 않았으면 설정 기본값을 따른다(U17).
+    const childOrder: ChildOrder = trail.childOrder ?? props.childOrderDefault;
 
     const visibleIds = useMemo(() => filterIds(trail.roots, filter), [trail.roots, filter]);
 
@@ -416,6 +449,37 @@ export function TrailView(props: TrailViewProps): JSX.Element {
     );
 
     /**
+     * 활성 노드를 화면에 들인다 (U06).
+     *
+     * 이미 펼친 식별자를 다시 눌렀을 때 예전에는 활성 표시만 바뀌고 화면은
+     * 그대로였다. 긴 트레일에서는 어디로 갔는지 찾아 스크롤해야 했다.
+     *
+     * **이 탭이 시킨 것만 따라간다.** 옆 탭의 조작으로 화면이 튀면 방해다.
+     */
+    useEffect(() => {
+        const request = props.focusRequest;
+        const host = rootRef.current;
+        if (request === null || host === null) {
+            return undefined;
+        }
+        const box = host.querySelector<HTMLElement>(`[data-id="${request.nodeId}"]`);
+        const header = box?.querySelector<HTMLElement>(':scope > .hd');
+        if (!box || !header) {
+            return undefined;
+        }
+        const hostBox = host.getBoundingClientRect();
+        const headerBox = header.getBoundingClientRect();
+        const inside = headerBox.top >= hostBox.top && headerBox.bottom <= hostBox.bottom
+            && headerBox.left >= hostBox.left && headerBox.right <= hostBox.right;
+        if (!inside) {
+            header.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+        }
+        box.classList.add('flash');
+        const timer = window.setTimeout(() => box.classList.remove('flash'), FLASH_MS);
+        return () => window.clearTimeout(timer);
+    }, [props.focusRequest]);
+
+    /**
      * 진입 링크를 누르면 부모의 그 호출 지점으로 간다.
      *
      * 부모 노드를 활성으로 만들고 화면에 보이게 한다. 호출부에는 이미 ①이
@@ -440,14 +504,151 @@ export function TrailView(props: TrailViewProps): JSX.Element {
         onToggle(node);
     }, [onToggle]);
 
+    // ── 키보드 ──────────────────────────────────────────────────────────────
+
+    const order = useMemo(
+        () => visibleOrder(trail.roots, childOrder, visibleIds),
+        [trail.roots, childOrder, visibleIds],
+    );
+
+    /** 활성 노드의 헤더에 포커스를 준다. roving tabindex 의 짝이다. */
+    const focusHeader = useCallback((nodeId: string): void => {
+        window.setTimeout(() => {
+            rootRef.current
+                ?.querySelector<HTMLElement>(`[data-node-header="${nodeId}"]`)
+                ?.focus({ preventScroll: true });
+        }, 0);
+    }, []);
+
+    const move = useCallback((nodeId: string | null): void => {
+        if (nodeId === null) {
+            return;
+        }
+        props.onFocusNode(nodeId);
+        focusHeader(nodeId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [props.onFocusNode, focusHeader]);
+
+    const onTreeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>): void => {
+        const target = event.target as HTMLElement;
+        const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
+        if (typing) {
+            return;
+        }
+        const activeId = trail.activeNodeId;
+        const node = activeId === null ? undefined : findNode(trail.roots, activeId);
+
+        switch (event.key) {
+            case 'ArrowDown':
+                event.preventDefault();
+                move(nextVisible(order, activeId));
+                return;
+            case 'ArrowUp':
+                event.preventDefault();
+                move(prevVisible(order, activeId));
+                return;
+            case 'ArrowRight':
+                event.preventDefault();
+                if (node === undefined) return;
+                if (node.collapsed) {
+                    props.onToggle(node);
+                } else {
+                    move(firstChild(order, activeId));
+                }
+                return;
+            case 'ArrowLeft':
+                event.preventDefault();
+                if (node === undefined) return;
+                if (!node.collapsed && node.children.length > 0) {
+                    props.onToggle(node);
+                } else {
+                    move(parentOf(order, activeId));
+                }
+                return;
+            case 'Home':
+                event.preventDefault();
+                move(order[0]?.id ?? null);
+                return;
+            case 'End':
+                event.preventDefault();
+                move(order[order.length - 1]?.id ?? null);
+                return;
+            case 'Enter':
+            case ' ':
+                if (target.closest('.clickable') !== null) return;
+                event.preventDefault();
+                if (node) props.onToggle(node);
+                return;
+            case 'Delete':
+                event.preventDefault();
+                if (node) props.onRemove(node);
+                return;
+            case 'Tab': {
+                if (event.shiftKey || target.closest('.clickable') !== null) return;
+                const first = rootRef.current?.querySelector<HTMLElement>(
+                    `[data-id="${activeId}"] .clickable`,
+                );
+                if (first) {
+                    event.preventDefault();
+                    first.focus();
+                }
+                return;
+            }
+            case 'Escape':
+                if (target.closest('.clickable') !== null && activeId !== null) {
+                    event.preventDefault();
+                    focusHeader(activeId);
+                }
+                return;
+            case '/':
+                event.preventDefault();
+                filterRef.current?.focus();
+                return;
+            default:
+                break;
+        }
+
+        if (node === undefined || event.ctrlKey || event.metaKey || event.altKey) {
+            return;
+        }
+        switch (event.key) {
+            case 'f':
+                event.preventDefault();
+                if (node.symbol.callable && props.implementationSupported) {
+                    props.onImplementations(node);
+                }
+                return;
+            case 'o':
+                event.preventDefault();
+                props.onOpenInEditor(node);
+                return;
+            case 'p':
+                event.preventDefault();
+                jumpToOrigin(node);
+                return;
+            case 'r':
+                event.preventDefault();
+                if (node.parentId !== null) props.onPromote(node);
+                return;
+            case 'n':
+                event.preventDefault();
+                props.onNote(node);
+                return;
+            default:
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [order, trail.activeNodeId, trail.roots, move, focusHeader, jumpToOrigin, props]);
+
     const nodeCount = flat.length;
 
     const shared = {
         activeNodeId: trail.activeNodeId,
         busyNodeIds: props.busyNodeIds,
+        staleNodeIds: props.staleNodeIds,
         clickTarget: props.clickTarget,
         maxCodeLines: props.maxCodeLines,
         implementationSupported: props.implementationSupported,
+        annotations: props.annotations,
         childOrder,
         visibleIds,
         positions,
@@ -460,149 +661,164 @@ export function TrailView(props: TrailViewProps): JSX.Element {
         onJumpToOrigin: jumpToOrigin,
         onIdentifierClick: props.onIdentifierClick,
         onRangeSelect: props.onRangeSelect,
+        onNote: props.onNote,
+        onShowNotes: props.onShowNotes,
+        onRefresh: props.onRefresh,
+        onOpenAnnotation: props.onOpenAnnotation,
+        onFocusHeader: props.onFocusNode,
         onNodeUi,
     };
 
     return (
         <div className="trail">
-            <div className="toolbar" id="toolbar">
-                <button type="button" onClick={() => props.onToggleAll(false)}>⤢ 전체 펼치기</button>
-                <button type="button" onClick={() => props.onToggleAll(true)}>⤡ 전체 접기</button>
-                <button
-                    type="button"
-                    onClick={() => setChildOrder(childOrder === 'source' ? 'click' : 'source')}
-                    title="같은 부모 아래 형제 노드의 정렬 순서"
-                >
-                    {childOrder === 'source' ? '⇅ 코드 순서' : '⇅ 클릭 순서'}
-                </button>
-                <span className="sep" />
-                <button
-                    type="button"
-                    id="board-toggle"
-                    onClick={() => props.onSetMode(board ? 'tree' : 'board')}
-                    title={board
-                        ? '트리 모드로 — 부모 위, 자식 아래로 되돌린다'
-                        : '보드 모드로 — 노드를 캔버스에 자유롭게 늘어놓고 헤더를 끌어 옮긴다'}
-                >
-                    {board ? '▤ 트리' : '⬚ 보드'}
-                </button>
-                <span className="sep" />
-                <input
-                    id="filter"
-                    type="search"
-                    value={filter}
-                    placeholder="이름/경로 필터…"
-                    aria-label="이름/경로 필터"
-                    onChange={(event) => setFilter(event.target.value)}
-                />
-                <span className="sep" />
-                <button type="button" onClick={props.onExportMarkdown}>Markdown</button>
-                <button type="button" className="danger" onClick={props.onClear}>지우기</button>
-                <span className="spacer" />
-                <span className="muted">{`노드 ${nodeCount}`}</span>
-            </div>
-
-            <div className="breadcrumb" id="breadcrumb">
-                {breadcrumb.length === 0 ? (
-                    <span className="muted">노드를 고르면 여기에 경로가 나온다.</span>
-                ) : breadcrumb.map((node, index) => (
-                    <span key={node.id}>
-                        {index > 0 ? <span className="crumb-sep">›</span> : null}
+            <div className="trail-main">
+                <div className="toolbar" id="toolbar">
+                    <button type="button" onClick={() => props.onToggleAll(false)}>⤢ 전체 펼치기</button>
+                    <button type="button" onClick={() => props.onToggleAll(true)}>⤡ 전체 접기</button>
+                    <button
+                        type="button"
+                        onClick={() => props.onSetChildOrder(childOrder === 'source' ? 'click' : 'source')}
+                        title="같은 부모 아래 형제 노드의 정렬 순서"
+                    >
+                        {childOrder === 'source' ? '⇅ 코드 순서' : '⇅ 클릭 순서'}
+                    </button>
+                    <span className="sep" />
+                    <button
+                        type="button"
+                        id="board-toggle"
+                        onClick={() => props.onSetMode(board ? 'tree' : 'board')}
+                        title={board
+                            ? '트리 모드로 — 부모 위, 자식 아래로 되돌린다'
+                            : '보드 모드로 — 노드를 캔버스에 자유롭게 늘어놓고 헤더를 끌어 옮긴다'}
+                    >
+                        {board ? '▤ 트리' : '⬚ 보드'}
+                    </button>
+                    <span className="sep" />
+                    <input
+                        id="filter"
+                        type="search"
+                        ref={filterRef}
+                        value={filter}
+                        placeholder="이름/경로 필터…"
+                        aria-label="이름/경로 필터"
+                        onChange={(event) => setFilter(event.target.value)}
+                    />
+                    <span className="sep" />
+                    <button type="button" onClick={props.onExportMarkdown}>Markdown</button>
+                    <div className="toolbar-confirm">
                         <button
                             type="button"
-                            className="crumb"
-                            onClick={() => props.onFocusNode(node.id)}
+                            className="danger"
+                            onClick={() => setConfirmClear((open) => !open)}
                         >
-                            {splitName(node.symbol).name}
+                            지우기
                         </button>
-                    </span>
-                ))}
-            </div>
-
-            {props.choice !== null ? (
-                <div className="choice" role="dialog" aria-label="정의 후보">
-                    <p>
-                        정의 후보가 여러 개다. 어느 것이 실제로 도는지는 호출부만으로 알 수
-                        없으니 직접 고른다.
-                    </p>
-                    <ul>
-                        {props.choice.candidates.map((candidate) => (
-                            <li key={candidate.candidateId}>
-                                <button
-                                    type="button"
-                                    onClick={() => props.onChooseCandidate(
-                                        (props.choice as DefinitionChoice).choiceId,
-                                        candidate.candidateId,
-                                    )}
-                                >
-                                    <span className="cand-name">{candidate.name}</span>
-                                    <span className="cand-path">
-                                        {`${candidate.displayPath}:${candidate.line + 1}`}
-                                    </span>
-                                    {candidate.hasBody ? null : (
-                                        <span className="badge decl">선언만</span>
-                                    )}
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                    <button type="button" className="danger" onClick={props.onDismissChoice}>
-                        취소
-                    </button>
-                </div>
-            ) : null}
-
-            <div
-                className={board ? 'tree board' : 'tree'}
-                id="root"
-                ref={rootRef}
-                onPointerDown={onPointerDown}
-                onPointerMove={onPointerMove}
-                onPointerUp={endDrag}
-                onPointerCancel={endDrag}
-                onDoubleClick={onDoubleClick}
-            >
-                {board && trail.roots.length > 0 ? (
-                    <svg
-                        className="board-lines"
-                        width={extent.width}
-                        height={extent.height}
-                        aria-hidden="true"
-                    >
-                        {lines.map((line) => <path key={line.id} d={line.d} />)}
-                    </svg>
-                ) : null}
-
-                {trail.roots.length === 0 ? (
-                    <div className="placeholder">
-                        <p>아직 노드가 없다.</p>
-                        <p className="muted">
-                            코드 화면에서 함수 위를 누르고 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd>
-                            를 누르면 여기에 펼쳐진다.
-                        </p>
+                        {confirmClear ? (
+                            <ConfirmPopover
+                                message={`노드 ${nodeCount}개를 지운다. 되돌릴 수 없다.`}
+                                confirmLabel="지운다"
+                                onConfirm={() => {
+                                    setConfirmClear(false);
+                                    props.onClear();
+                                }}
+                                onCancel={() => setConfirmClear(false)}
+                            />
+                        ) : null}
                     </div>
-                ) : board ? flat.map((item) => (
-                    <TrailNode
-                        {...shared}
-                        key={item.node.id}
-                        node={item.node}
-                        ordinal={item.ordinal}
-                        depth={item.depth}
-                        parentName={item.parentName}
-                        layout="board"
-                    />
-                )) : trail.roots.map((root) => (
-                    <TrailNode
-                        {...shared}
-                        key={root.id}
-                        node={root}
-                        ordinal={0}
-                        depth={0}
-                        parentName=""
-                        layout="tree"
-                    />
-                ))}
+                    <span className="spacer" />
+                    <span className="muted">{`노드 ${nodeCount}`}</span>
+                    {props.annotations.total > 0 ? (
+                        <span className="muted">
+                            {`기록 ${props.annotations.total}`}
+                            {props.annotations.open > 0 ? ` · 미해결 ${props.annotations.open}` : ''}
+                        </span>
+                    ) : null}
+                </div>
+
+                <div className="breadcrumb" id="breadcrumb">
+                    {breadcrumb.length === 0 ? (
+                        <span className="muted">노드를 고르면 여기에 경로가 나온다.</span>
+                    ) : breadcrumb.map((node, index) => (
+                        <span key={node.id}>
+                            {index > 0 ? <span className="crumb-sep">›</span> : null}
+                            <button
+                                type="button"
+                                className="crumb"
+                                onClick={() => props.onFocusNode(node.id)}
+                            >
+                                {splitName(node.symbol).name}
+                            </button>
+                        </span>
+                    ))}
+                </div>
+
+                <div
+                    className={board ? 'tree board' : 'tree'}
+                    id="root"
+                    ref={rootRef}
+                    role={board ? 'list' : 'tree'}
+                    aria-label="트레일 트리"
+                    onKeyDown={onTreeKeyDown}
+                    onPointerDown={onPointerDown}
+                    onPointerMove={onPointerMove}
+                    onPointerUp={endDrag}
+                    onPointerCancel={endDrag}
+                    onDoubleClick={onDoubleClick}
+                >
+                    {board && trail.roots.length > 0 ? (
+                        <svg
+                            className="board-lines"
+                            width={extent.width}
+                            height={extent.height}
+                            aria-hidden="true"
+                        >
+                            {lines.map((line) => <path key={line.id} d={line.d} />)}
+                        </svg>
+                    ) : null}
+
+                    {props.choice !== null ? (
+                        <ChoicePopover
+                            choice={props.choice}
+                            host={rootRef.current}
+                            onChoose={props.onChooseCandidate}
+                            onAttachAll={props.onAttachAllImplementations}
+                            onDismiss={props.onDismissChoice}
+                        />
+                    ) : null}
+
+                    {trail.roots.length === 0 ? (
+                        <div className="placeholder">
+                            <p>아직 노드가 없다.</p>
+                            <p className="muted">
+                                코드 화면에서 함수 위를 누르고 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd>.
+                                트레일은 자동으로 생긴다.
+                            </p>
+                        </div>
+                    ) : board ? flat.map((item) => (
+                        <TrailNode
+                            {...shared}
+                            key={item.node.id}
+                            node={item.node}
+                            ordinal={item.ordinal}
+                            depth={item.depth}
+                            parentName={item.parentName}
+                            layout="board"
+                        />
+                    )) : trail.roots.map((root) => (
+                        <TrailNode
+                            {...shared}
+                            key={root.id}
+                            node={root}
+                            ordinal={0}
+                            depth={0}
+                            parentName=""
+                            layout="tree"
+                        />
+                    ))}
+                </div>
             </div>
+
+            {props.annotationColumn}
         </div>
     );
 }

@@ -9,6 +9,8 @@ import {
     type ClientCommand,
     type CommandError,
     type EventType,
+    type ChildOrder,
+    type RemovedSubtree,
     type Trail,
     type TrailNode,
     type AnalysisDocument,
@@ -188,6 +190,7 @@ export class WebSocketGateway {
             title: stored.title,
             revision: stored.revision,
             mode: stored.mode,
+            childOrder: stored.childOrder ?? null,
             activeNodeId: stored.activeNodeId,
             roots: trail.roots,
             nodeUi: stored.nodeUi,
@@ -426,13 +429,15 @@ export class WebSocketGateway {
                     return;
 
                 case 'none':
+                    // 왜 못 찾았는지를 그대로 전한다. 한 줄로 뭉뚱그리면 사용자가
+                    // 다음에 무엇을 할지 정할 수 없다(U01).
                     this.sendError(
                         client,
                         {
                             code: 'NOT_FOUND',
-                            message: '정의를 찾지 못했다. 해당 언어의 언어 서버가 켜져 있는지 '
-                                + '확인한다.',
-                            retryable: true,
+                            message: result.message,
+                            retryable: result.context.action === 'retry',
+                            context: result.context,
                         },
                         command.commandId,
                     );
@@ -448,9 +453,14 @@ export class WebSocketGateway {
 
                 case 'choice':
                     // **자동으로 고르지 않는다.** 사용자에게 넘긴다.
+                    // 클릭한 지점을 함께 보내 화면이 그 토큰 바로 아래에 띄운다(U09).
                     this.broadcast('trail.definitionChoice', {
                         choiceId: result.choiceId,
                         nodeId: result.nodeId,
+                        origin: result.origin,
+                        title: result.origin === null
+                            ? `정의 후보 ${result.candidates.length}개`
+                            : `『${result.origin.text}』의 정의 후보 ${result.candidates.length}개`,
                         candidates: result.candidates.map((candidate) => ({
                             candidateId: candidate.candidateId,
                             name: candidate.name,
@@ -460,6 +470,29 @@ export class WebSocketGateway {
                         })),
                     }, { commandId: command.commandId, trailId });
                     return;
+
+                case 'refreshed': {
+                    // 이 노드는 이제 현재 코드다. `바뀜` 배지를 떼라고 알린다.
+                    this.broadcast('trail.nodesStale', {
+                        trailId,
+                        nodeIds: [],
+                        cleared: [result.nodeId],
+                    }, { trailId });
+                    // 본문이 통째로 바뀌었다. 부분 갱신 대신 다시 그리게 한다.
+                    const refreshed = this.context.trails.get(trailId);
+                    if (refreshed) {
+                        this.broadcast(
+                            'trail.snapshot',
+                            await this.snapshotPayloadWithGrants(refreshed),
+                            {
+                                commandId: command.commandId,
+                                trailId,
+                                revision: result.revision,
+                            },
+                        );
+                    }
+                    return;
+                }
 
                 case 'added': {
                     const eventType = result.parentId === ''
@@ -517,10 +550,19 @@ export class WebSocketGateway {
             return;
         }
         if (followed.candidateCount > 1) {
+            // 고르지는 않되, 고를 수 있게 목록을 그 자리에 띄운다(U09).
+            // `⚑` 를 한 번 더 누르라고만 알리던 자리다.
+            const choice = this.context.resolveFlow.rememberImplementationChoice({
+                trailId,
+                nodeId,
+                symbols: followed.candidates,
+            });
             this.broadcast('trail.implementationChoice', {
                 nodeId,
+                choiceId: choice.choiceId,
+                title: `『${node.symbol.name}』의 구현 ${choice.candidates.length}개`,
                 truncated: false,
-                candidates: [],
+                candidates: choice.candidates,
             }, { commandId, trailId });
         }
     }
@@ -530,6 +572,7 @@ export class WebSocketGateway {
 
         if (this.context.readOnlyShare && ![
             'trail.select', 'trail.toggleNode', 'trail.setMode', 'trail.setActiveNode',
+            'trail.setChildOrder',
             'trail.exportMarkdown', 'share.prepare', 'share.export',
             'settings.updateLocalAuthor',
         ].includes(command.type)) {
@@ -631,16 +674,86 @@ export class WebSocketGateway {
             case 'trail.removeNode': {
                 const trailId = command.trailId as string;
                 const { nodeId } = command.payload as { nodeId: string };
+                let removed: RemovedSubtree | undefined;
                 const result = await trails.mutate(
                     trailId,
                     command.baseRevision as number,
-                    (trail) => trail.remove(nodeId),
+                    (trail) => {
+                        removed = trail.remove(nodeId);
+                        return removed !== undefined;
+                    },
                 );
                 if (!result.ok) {
                     this.sendStaleRecovery(client, trailId, result.error, command.commandId);
                     return;
                 }
-                this.broadcast('trail.nodeRemoved', { nodeId }, {
+                // 되돌리기는 서버가 한다. 정본이 서버에 있으니 다른 탭에서 지운 것도
+                // 같은 길로 되살아난다(U03).
+                if (removed) {
+                    trails.rememberRemoved(trailId, removed);
+                }
+                this.broadcast('trail.nodeRemoved', {
+                    nodeId,
+                    ...(removed ? { name: removed.root.symbol.name, count: removed.count } : {}),
+                    undoable: removed !== undefined,
+                }, {
+                    commandId: command.commandId,
+                    trailId,
+                    revision: result.value.revision,
+                });
+                return;
+            }
+
+            case 'trail.undoRemove': {
+                const trailId = command.trailId as string;
+                const { nodeId } = command.payload as { nodeId: string };
+                const result = await trails.undoRemove(
+                    trailId,
+                    command.baseRevision as number,
+                    nodeId,
+                );
+                if (!result.ok) {
+                    if (result.error.code === 'STALE_REVISION') {
+                        this.sendStaleRecovery(client, trailId, result.error, command.commandId);
+                        return;
+                    }
+                    this.sendError(client, result.error, command.commandId);
+                    return;
+                }
+                // 되살린 서브트리가 통째로 돌아왔다. snapshot 으로 다시 그리게 한다.
+                this.broadcast(
+                    'trail.snapshot',
+                    await this.snapshotPayloadWithGrants(result.value.trail),
+                    {
+                        commandId: command.commandId,
+                        trailId,
+                        revision: result.value.revision,
+                    },
+                );
+                return;
+            }
+
+            case 'trail.refreshNode': {
+                const trailId = command.trailId as string;
+                const { nodeId } = command.payload as { nodeId: string };
+                await this.runResolve(client, command, trailId, nodeId, () =>
+                    this.context.resolveFlow.refreshNode({
+                        trailId,
+                        baseRevision: command.baseRevision as number,
+                        nodeId,
+                    }));
+                return;
+            }
+
+            case 'trail.setChildOrder': {
+                const trailId = command.trailId as string;
+                const { childOrder } = command.payload as { childOrder: ChildOrder | null };
+                const result = await trails.setChildOrder(trailId, childOrder);
+                if (!result.ok) {
+                    this.sendError(client, result.error, command.commandId);
+                    return;
+                }
+                this.broadcast('trail.childOrderChanged', { childOrder }, {
                     commandId: command.commandId,
                     trailId,
                     revision: result.value.revision,
@@ -866,9 +979,9 @@ export class WebSocketGateway {
                             client,
                             {
                                 code: 'NOT_FOUND',
-                                message: '구현을 찾지 못했다. 언어 서버가 프로젝트 전체를 '
-                                    + '읽었는지 확인한다.',
-                                retryable: true,
+                                message: `구현을 찾지 못했다. ${result.message}`,
+                                retryable: result.context.action === 'retry',
+                                context: result.context,
                             },
                             command.commandId,
                         );
@@ -884,6 +997,8 @@ export class WebSocketGateway {
                     if (result.truncated) {
                         this.broadcast('trail.implementationChoice', {
                             nodeId,
+                            // 고를 것이 아니라 잘렸다는 알림이다.
+                            choiceId: null,
                             truncated: true,
                             candidates: [],
                         }, { commandId: command.commandId, trailId });

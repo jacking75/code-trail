@@ -197,6 +197,34 @@ test('프로젝트 밖 경로와 .. 를 거부한다', async () => {
     }
 });
 
+test('변경 API 도 경로 경계와 변경 목록을 둘 다 통과해야 한다', async () => {
+    // 문서 권한만으로는 모자란다. 그것만 보면 프로젝트 안 아무 파일의 이력과
+    // 원본을 꺼낼 수 있다 — 지금 변경 목록에 있는 파일만 허용한다(U14).
+    const root = await makeProject(FILES);
+    try {
+        await withServer(root, async (running) => {
+            for (const relPath of ['../../etc/passwd', 'src/../../outside', '/etc/passwd']) {
+                for (const api of ['hunks', 'original']) {
+                    const response = await authFetch(
+                        running,
+                        `/api/changes/${api}?relPath=${encodeURIComponent(relPath)}`,
+                    );
+                    assert.equal(response.status, 403, `${api} ${relPath}`);
+                    assert.equal(JSON.stringify(await response.json()).includes(root), false);
+                }
+            }
+            // 프로젝트 안이지만 바뀌지 않은 파일도 막는다.
+            const unchanged = await authFetch(
+                running,
+                '/api/changes/hunks?relPath=src%2FREADME.md',
+            );
+            assert.equal(unchanged.status, 403);
+        });
+    } finally {
+        await removeProject(root);
+    }
+});
+
 test('심볼릭 링크로 프로젝트 밖을 가리켜도 거부한다', async () => {
     const outside = await makeProject({ 'secret.txt': '비밀\n' });
     const root = await makeProject(FILES);

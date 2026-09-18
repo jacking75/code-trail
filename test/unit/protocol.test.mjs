@@ -51,9 +51,9 @@ test('구현서 14.2 의 명령이 전부 있다', () => {
         'trail.create', 'trail.rename', 'trail.delete', 'trail.select',
         'trail.addRootAt', 'trail.addRootFromSymbol', 'trail.resolve',
         'trail.resolveImplementations', 'trail.chooseCandidate',
-        'trail.removeNode', 'trail.toggleNode',
+        'trail.removeNode', 'trail.toggleNode', 'trail.undoRemove', 'trail.refreshNode',
         'trail.promoteToRoot', 'trail.setMode', 'trail.setNodeUi',
-        'trail.setActiveNode', 'trail.clear', 'trail.exportMarkdown',
+        'trail.setActiveNode', 'trail.setChildOrder', 'trail.clear', 'trail.exportMarkdown',
         'workspace.openDocument', 'workspace.searchFiles', 'editor.openLocation',
         'settings.update', 'lsp.restart', 'lsp.verify',
         'settings.updateLocalAuthor',
@@ -188,17 +188,54 @@ test('이벤트를 해석하고 모르는 이벤트는 거부한다', () => {
     assert.equal(parseServerEvent({ ...event, payload: { nodeId: NODE_ID } }).ok, false);
 });
 
-test('구현 후보 이벤트는 잘림 여부를 함께 싣는다', () => {
+test('구현 후보 이벤트는 고를 값과 잘림 여부를 함께 싣는다', () => {
     const schema = EVENT_PAYLOADS['trail.implementationChoice'];
     const parsed = parseWith(schema, {
         nodeId: NODE_ID,
-        truncated: true,
+        choiceId: 'choice-1',
+        truncated: false,
         candidates: [
             { candidateId: 'c1', name: 'Impl', displayPath: 'proj/a.cs', line: 10, hasBody: true },
         ],
     });
     assert.equal(parsed.ok, true);
-    assert.equal(parsed.value.truncated, true);
+    assert.equal(parsed.value.choiceId, 'choice-1');
+
+    // 잘림만 알릴 때는 고를 것이 없다.
+    const notice = parseWith(schema, {
+        nodeId: NODE_ID, choiceId: null, truncated: true, candidates: [],
+    });
+    assert.equal(notice.ok, true);
+});
+
+test('오류 맥락은 없어도 있어도 통과한다', () => {
+    // 전부 선택이라 맥락을 모르는 옛 화면도 그대로 받는다(U01).
+    const schema = EVENT_PAYLOADS['command.error'];
+    const bare = parseWith(schema, {
+        error: { code: 'NOT_FOUND', message: '정의를 찾지 못했다.', retryable: true },
+    });
+    assert.equal(bare.ok, true);
+
+    const rich = parseWith(schema, {
+        error: {
+            code: 'NOT_FOUND',
+            message: '언어 서버가 뜨는 중이다.',
+            retryable: true,
+            context: {
+                language: 'cpp', lspState: 'starting', verified: false, action: 'retry',
+            },
+        },
+    });
+    assert.equal(rich.ok, true);
+    assert.equal(rich.value.error.context.action, 'retry');
+
+    // 모르는 행동은 받지 않는다. 화면이 못 그리는 버튼을 붙이게 된다.
+    const wrong = parseWith(schema, {
+        error: {
+            code: 'NOT_FOUND', message: 'x', retryable: false, context: { action: '아무거나' },
+        },
+    });
+    assert.equal(wrong.ok, false);
 });
 
 test('Markdown 은 이벤트에 본문을 싣지 않고 URL 만 준다', () => {

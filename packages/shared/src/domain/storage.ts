@@ -1,4 +1,4 @@
-import type { NodeUiState, TrailMode, TrailNode } from './trail.js';
+import type { ChildOrder, NodeUiState, TrailMode, TrailNode } from './trail.js';
 import { NODE_UI_KEYS, Trail } from './trail.js';
 import type { ResolvedSymbol } from './symbol.js';
 
@@ -36,6 +36,11 @@ export interface StoredTrail {
     revision: number;
     activeNodeId: string | null;
     mode: TrailMode;
+    /**
+     * 이 트레일에서 고른 형제 정렬. 옛 저장 파일에는 없고, 없으면 화면이
+     * `settings.ui.childOrder` 를 쓴다. 저장 버전은 1 그대로다.
+     */
+    childOrder?: ChildOrder | null;
     roots: StoredTrailNode[];
     nodeUi: Record<string, NodeUiState>;
 }
@@ -124,6 +129,7 @@ export function toStoredTrail(trail: Trail): StoredTrail {
         revision: trail.revision,
         activeNodeId: trail.activeNodeId,
         mode: trail.mode,
+        childOrder: trail.childOrder,
         roots: trail.roots.map(storeNode),
         nodeUi,
     };
@@ -141,6 +147,7 @@ export function fromStoredTrail(stored: StoredTrail, now?: () => string): Trail 
         updatedAt: stored.updatedAt,
         revision: stored.revision,
         mode: stored.mode,
+        childOrder: stored.childOrder ?? null,
         activeNodeId: stored.activeNodeId,
         roots: (stored.roots ?? []).map(loadNode),
         nodeUi,

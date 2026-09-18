@@ -5,7 +5,7 @@ import { PROTOCOL_VERSION, textForRange } from '@code-trail/shared';
 import type { ServerContext } from '../context.js';
 import { findSolutionCandidates } from '../lsp/adapters/index.js';
 import { toPublicState } from '../lsp/types.js';
-import type { SupportedLanguage } from '../workspace/languages.js';
+import { supportedLanguageFor, type SupportedLanguage } from '../workspace/languages.js';
 import { PathDeniedError } from '../security/paths.js';
 import { DocumentTooLargeError } from '../workspace/documents.js';
 import { searchFiles } from '../workspace/search.js';
@@ -28,6 +28,27 @@ function denyStatus(reason: PathDeniedError['reason']): number {
     return reason === 'notFound' ? 404 : 403;
 }
 
+/**
+ * 변경 관련 API 가 받아들이는 경로.
+ *
+ * 두 관문을 다 지나야 한다 — 문서 권한(경계·심볼릭 링크)과 "지금 변경 목록에
+ * 있는가". 앞의 것만으로는 프로젝트 안 아무 파일의 이력이나 원본을 꺼낼 수 있다.
+ */
+async function allowedChangedPath(
+    context: ServerContext,
+    raw: string,
+): Promise<string | null> {
+    const grant = await context.documents.grantInsideProject(raw).catch(() => null);
+    if (grant === null || grant.relPath === null) {
+        return null;
+    }
+    const changes = await context.git.workingChanges().catch(() => []);
+    return changes.some((change) => change.relPath === grant.relPath
+        || change.oldRelPath === grant.relPath)
+        ? grant.relPath
+        : null;
+}
+
 export async function registerRoutes(app: FastifyInstance, context: ServerContext): Promise<void> {
     app.get('/api/health', async () => ({
         status: 'ok' as const,
@@ -37,6 +58,12 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
     app.get('/api/bootstrap', async () => ({
         protocolVersion: PROTOCOL_VERSION,
         project: { name: context.projectName },
+        /**
+         * 언어별 파일 수. 시작하기 카드가 "이 프로젝트가 되는지" 를 먼저 보여준다.
+         * 세다가 실패해도 시작을 막지 않는다 — 그냥 요약이 비는 것뿐이다.
+         */
+        languageSummary: await context.tree.languageSummary()
+            .catch(() => ({ languages: [], truncated: false })),
         settings: context.store.getSettings(),
         localAuthor: context.store.getLocalAuthor(),
         trails: context.trails.list(),
@@ -197,7 +224,15 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
         const relPath = request.query.relPath ?? '';
         try {
             const grant = await context.documents.grantInsideProject(relPath);
-            return await context.documents.read(grant.documentId);
+            const content = await context.documents.read(grant.documentId);
+            return {
+                ...content,
+                /**
+                 * 이 파일 형식에 심볼 해석이 되는지. `null` 이면 언어 서버에
+                 * 물을 것이 없다 — 화면이 서버 왕복 없이 바로 안내한다.
+                 */
+                supportedLanguage: supportedLanguageFor(content.languageId),
+            };
         } catch (error) {
             if (error instanceof DocumentTooLargeError) {
                 return reply.code(413).send({
@@ -243,6 +278,56 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
             return reply.code(200).send({ repository: false, changes: [], message: 'Git 변경 정보를 읽을 수 없다.' });
         }
     });
+
+    /**
+     * 그 파일에서 바뀐 줄 덩어리 (U14).
+     *
+     * 경로는 문서 권한 경계를 다시 통과시키고, 지금 변경 목록에 있는 파일만
+     * 허용한다. 브라우저가 임의 파일의 diff 를 꺼내 가는 통로를 만들지 않는다.
+     */
+    app.get<{ Querystring: { relPath?: string; from?: string; to?: string } }>(
+        '/api/changes/hunks',
+        async (request, reply) => {
+            const relPath = await allowedChangedPath(context, request.query.relPath ?? '');
+            if (relPath === null) {
+                return reply.code(403).send({
+                    code: 'PATH_DENIED', message: '변경 목록에 없는 파일이다.', retryable: false,
+                });
+            }
+            try {
+                const hunks = await context.git.hunks(
+                    relPath,
+                    request.query.from,
+                    request.query.to,
+                );
+                return { relPath, hunks };
+            } catch {
+                return reply.code(200).send({ relPath, hunks: [] });
+            }
+        },
+    );
+
+    /** `HEAD`(또는 커밋 해시) 시점의 본문. 좌우 비교가 왼쪽에 넣는다. */
+    app.get<{ Querystring: { relPath?: string; ref?: string } }>(
+        '/api/changes/original',
+        async (request, reply) => {
+            const relPath = await allowedChangedPath(context, request.query.relPath ?? '');
+            if (relPath === null) {
+                return reply.code(403).send({
+                    code: 'PATH_DENIED', message: '변경 목록에 없는 파일이다.', retryable: false,
+                });
+            }
+            try {
+                return await context.git.originalText(request.query.ref ?? 'HEAD', relPath);
+            } catch {
+                return reply.code(400).send({
+                    code: 'INVALID_COMMAND',
+                    message: '이 기준에서 원본을 읽을 수 없다.',
+                    retryable: false,
+                });
+            }
+        },
+    );
 
     app.get<{ Querystring: { q?: string; scope?: string; case?: string } }>(
         '/api/workspace/content-search',

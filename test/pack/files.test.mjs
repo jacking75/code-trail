@@ -12,6 +12,7 @@
  * `npm pack` 은 느리므로 단위 테스트 묶음에 넣지 않고 따로 돌린다.
  */
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -98,6 +99,11 @@ const PACKAGES = [
     },
 ];
 
+/** 네 패키지가 같은 버전이어야 한다. 기준은 워크스페이스 루트다. */
+const EXPECTED_VERSION = JSON.parse(
+    readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+).version;
+
 console.log('\n[배포물 파일 목록]');
 
 for (const target of PACKAGES) {
@@ -105,7 +111,12 @@ for (const target of PACKAGES) {
     console.log(`\n  ${packed.name}@${packed.version} — ${packed.files.length}개 파일, ${Math.round(packed.bytes / 1024)}KB`);
 
     check(`${packed.name} 이름이 맞다`, packed.name === target.expectedName, packed.name);
-    check(`${packed.name} 버전이 1.1.0 이다`, packed.version === '1.1.0', packed.version);
+    // 기대 버전을 손으로 적지 않는다. 적어 두면 올릴 때마다 여기가 빠진다.
+    check(
+        `${packed.name} 버전이 ${EXPECTED_VERSION} 이다`,
+        packed.version === EXPECTED_VERSION,
+        packed.version,
+    );
 
     for (const required of target.required) {
         check(

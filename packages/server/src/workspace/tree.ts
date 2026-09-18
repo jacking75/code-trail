@@ -40,6 +40,9 @@ export const DEFAULT_EXCLUDED_DIRS: readonly string[] = [
 /** 한 디렉터리에서 돌려줄 최대 항목 수. 넘으면 잘리고 검색을 쓰라고 알린다. */
 export const MAX_ENTRIES_PER_DIRECTORY = 500;
 
+/** 언어 요약을 셀 때 방문하는 최대 디렉터리 수. 큰 저장소에서 시작을 붙잡지 않는다. */
+export const MAX_SUMMARY_DIRECTORIES = 5_000;
+
 export interface WorkspaceTreeOptions {
     projectRoot: string;
     /** 기본 목록에 더할 제외 디렉터리 이름. */
@@ -138,6 +141,56 @@ export class WorkspaceTree {
         return {
             entries: all.slice(0, MAX_ENTRIES_PER_DIRECTORY),
             truncated: all.length > MAX_ENTRIES_PER_DIRECTORY,
+        };
+    }
+
+    /**
+     * 확장자로 센 언어별 파일 수 (U19 — 시작하기 카드).
+     *
+     * "이 프로젝트가 되는지" 를 파일을 열기 전에 알려주는 값이다. 정확한 통계가
+     * 아니라 **첫인상**이므로 방문 상한에서 끊고, 그 사실을 `truncated` 로 알린다.
+     */
+    async languageSummary(): Promise<{
+        languages: Array<{ languageId: string; fileCount: number }>;
+        truncated: boolean;
+    }> {
+        const counts = new Map<string, number>();
+        const queue: string[] = [''];
+        let visited = 0;
+
+        while (queue.length > 0 && visited < MAX_SUMMARY_DIRECTORIES) {
+            const current = queue.shift() as string;
+            visited += 1;
+            const dir = await resolveInsideProject(this.projectRoot, current).catch(() => null);
+            if (dir === null) {
+                continue;
+            }
+            const raw = await readdir(dir, { withFileTypes: true }).catch(() => []);
+            for (const entry of raw) {
+                const childRel = current === '' ? entry.name : `${current}/${entry.name}`;
+                if (entry.isDirectory()) {
+                    if (this.excluded.has(entry.name) || this.isExcludedRelPath(childRel)) {
+                        continue;
+                    }
+                    queue.push(childRel);
+                    continue;
+                }
+                if (!entry.isFile()) {
+                    continue;
+                }
+                const languageId = languageIdFor(entry.name);
+                if (languageId === null) {
+                    continue;
+                }
+                counts.set(languageId, (counts.get(languageId) ?? 0) + 1);
+            }
+        }
+
+        return {
+            languages: [...counts.entries()]
+                .map(([languageId, fileCount]) => ({ languageId, fileCount }))
+                .sort((a, b) => b.fileCount - a.fileCount || a.languageId.localeCompare(b.languageId)),
+            truncated: queue.length > 0,
         };
     }
 }

@@ -14,6 +14,8 @@
   "include": [
     "src/tokenizer/**/*.ts",
     "src/features/trail/types.ts",
-    "src/features/trail/board.ts"
+    "src/features/trail/board.ts",
+    "src/features/trail/annotationIndex.ts",
+    "src/features/trail/keyboard.ts"
   ]
 }

@@ -12,8 +12,29 @@ import type { TrailSocket } from './socket.js';
 
 export const PROTOCOL_VERSION = 1;
 
+/**
+ * 이 탭이 보낸 명령.
+ *
+ * 이벤트는 열려 있는 모든 탭에 나간다. "내가 시킨 결과인가" 를 알아야 이 탭만
+ * 활성 노드로 스크롤할 수 있다 — 옆 탭의 조작을 따라 화면이 움직이면 방해다.
+ */
+const ownCommands = new Set<string>();
+const OWN_COMMAND_LIMIT = 256;
+
+export function isOwnCommand(commandId: string | undefined): boolean {
+    return commandId !== undefined && ownCommands.has(commandId);
+}
+
 function newCommandId(): string {
-    return crypto.randomUUID();
+    const id = crypto.randomUUID();
+    ownCommands.add(id);
+    if (ownCommands.size > OWN_COMMAND_LIMIT) {
+        const oldest = ownCommands.values().next();
+        if (!oldest.done) {
+            ownCommands.delete(oldest.value);
+        }
+    }
+    return id;
 }
 
 export interface CommandContext {
@@ -83,6 +104,19 @@ export const commands = {
     removeNode: (context: CommandContext, nodeId: string) =>
         send(context, 'trail.removeNode', { nodeId }),
 
+    /**
+     * 방금 지운 노드를 되돌린다.
+     *
+     * 되돌리기도 서버가 한다. 정본이 서버에 있으므로 다른 탭에서 지운 것도
+     * 같은 길로 되살아난다.
+     */
+    undoRemove: (context: CommandContext, nodeId: string) =>
+        send(context, 'trail.undoRemove', { nodeId }),
+
+    /** 파일이 바뀐 노드를 현재 코드로 다시 읽는다. */
+    refreshNode: (context: CommandContext, nodeId: string) =>
+        send(context, 'trail.refreshNode', { nodeId }),
+
     toggleNode: (context: CommandContext, nodeId: string, collapsed: boolean) =>
         send(context, 'trail.toggleNode', { nodeId, collapsed }, { withRevision: false }),
 
@@ -93,6 +127,10 @@ export const commands = {
 
     setActiveNode: (context: CommandContext, nodeId: string | null) =>
         send(context, 'trail.setActiveNode', { nodeId }, { withRevision: false }),
+
+    /** 형제 정렬. 접기와 같은 화면 상태라 revision 을 싣지 않는다. */
+    setChildOrder: (context: CommandContext, childOrder: 'source' | 'click' | null) =>
+        send(context, 'trail.setChildOrder', { childOrder }, { withRevision: false }),
 
     /**
      * 트리 ↔ 보드 전환. 화면 상태라 revision 을 실지 않는다 —

@@ -213,6 +213,13 @@ export interface AnalysisSummary {
     unresolvedCount: number;
     reviewedCount: number;
     reviewTargetCount: number;
+    /**
+     * 이 분석이 다루는 트레일.
+     *
+     * 트레일을 고르면 짝지은 분석이 따라오게 하려면 목록만 보고도 알 수 있어야
+     * 한다. 이것이 없으면 분석마다 전체 문서를 읽어야 짝을 찾는다(U11).
+     */
+    trailIds: string[];
 }
 
 export function createAnalysis(args: {
@@ -261,6 +268,7 @@ export function summarizeAnalysis(value: AnalysisDocument): AnalysisSummary {
             (item.kind === 'question' || item.kind === 'concern') && item.status === 'open').length,
         reviewedCount: value.reviews.filter((item) => item.state === 'reviewed').length,
         reviewTargetCount: value.reviews.length,
+        trailIds: [...value.trailIds],
     };
 }
 

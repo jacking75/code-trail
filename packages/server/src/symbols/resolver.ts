@@ -139,6 +139,64 @@ export class SymbolResolver {
     }
 
     /**
+     * 같은 이름·컨테이너·종류의 심볼을 이 문서에서 다시 찾는다 (U08 — 다시 읽기).
+     *
+     * 파일이 바뀌면 저장해 둔 좌표가 어긋난다. 옛 좌표로 언어 서버에 물으면
+     * 엉뚱한 곳으로 가므로, `documentSymbol` 결과에서 **이름으로** 다시 찾는다.
+     * 여럿이면 고르지 않는다 — 오버로드가 여럿인 경우이고, 어느 것을 보고 있었는지는
+     * 이름만으로 알 수 없다.
+     */
+    async resolveByName(
+        grant: DocumentGrant,
+        want: { name: string; container: string; kind: number },
+    ): Promise<ResolveOutcome> {
+        const session = await this.sessionFor(grant);
+        const uri = this.uriOf(grant);
+        const content = await this.options.documents.read(grant.documentId);
+        const lines = splitLines(content.text);
+        const symbols = await this.documentSymbols(session, uri, lines.length);
+
+        const wanted = shortName(want.name);
+        const matched = symbols.filter((symbol) => shortName(symbol.name) === wanted
+            && symbol.container === want.container
+            && symbol.kind === want.kind);
+        if (matched.length === 0) {
+            return { kind: 'none' };
+        }
+        if (matched.length === 1) {
+            const only = matched[0] as FlatSymbol;
+            return {
+                kind: 'resolved',
+                symbol: this.build({
+                    grant,
+                    symbols,
+                    symbol: only,
+                    lines,
+                    content,
+                    fallbackPosition: only.selectionRange.start,
+                    fallbackName: only.name,
+                }),
+            };
+        }
+        return {
+            kind: 'candidates',
+            candidates: matched.map((symbol, index) => ({
+                candidateId: `n${index}`,
+                name: shortName(symbol.name),
+                displayPath: grant.displayPath,
+                line: symbol.selectionRange.start.line,
+                hasBody: symbol.range.end.line > symbol.range.start.line,
+                location: {
+                    uri,
+                    key: this.keyOf(grant),
+                    selection: symbol.selectionRange.start,
+                    fullRange: symbol.range,
+                },
+            })),
+        };
+    }
+
+    /**
      * 커서를 감싸는 심볼을 통째로 가져온다 (구현서 10.3 — 루트 만들기).
      *
      * 1. 커서가 식별자 위이고 자기 선언이 아니면 정의로 먼저 간다.

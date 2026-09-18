@@ -55,6 +55,8 @@ export interface TrailSnapshot {
     title: string;
     revision: number;
     mode: 'tree' | 'board';
+    /** 이 트레일에서 고른 형제 정렬. `null` 이면 설정 기본값을 쓴다. */
+    childOrder: 'source' | 'click' | null;
     activeNodeId: string | null;
     roots: TrailNodeView[];
     nodeUi: Record<string, NodeUiView>;
@@ -76,10 +78,21 @@ export interface CandidateView {
     hasBody: boolean;
 }
 
+/**
+ * 사용자가 골라야 하는 후보 목록.
+ *
+ * 정의 후보와 구현 후보가 같은 모양을 쓴다. 다른 것은 어디에 띄우느냐뿐이다 —
+ * 정의는 클릭한 토큰 아래, 구현은 그 노드 헤더 아래.
+ */
 export interface DefinitionChoice {
     choiceId: string;
     nodeId: string | null;
     candidates: CandidateView[];
+    /** 클릭한 지점. 있으면 그 토큰 바로 아래에 띄운다. */
+    origin?: { line: number; char: number; text: string } | null;
+    title?: string;
+    /** 구현 목록이면 `전부 붙이기` 를 맨 위에 둔다. */
+    kind?: 'definition' | 'implementation';
 }
 
 /**

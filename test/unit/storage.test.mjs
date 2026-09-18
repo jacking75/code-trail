@@ -103,6 +103,20 @@ test('round trip 이 트리 모양과 화면 상태를 그대로 되살린다', 
     assert.deepEqual(reloaded.nodeUiEntries(), trail.nodeUiEntries());
 });
 
+test('형제 정렬은 왕복하고, 없는 옛 파일은 기본값으로 읽는다', () => {
+    // 저장 버전은 1 그대로다. 옛 파일에는 `childOrder` 가 없고, 없으면 화면이
+    // `settings.ui.childOrder` 를 쓴다(U17).
+    const trail = buildSampleTrail();
+    trail.setChildOrder('click');
+    const stored = toStoredTrail(trail);
+    assert.equal(stored.schemaVersion, 1);
+    assert.equal(fromStoredTrail(stored).childOrder, 'click');
+
+    const { childOrder, ...older } = stored;
+    assert.equal(fromStoredTrail(older).childOrder, null);
+    assert.equal(storedTrailSchema.safeParse(older).success, true);
+});
+
 test('본문 코드는 한 글자도 바뀌지 않는다', () => {
     const code = '\tif (x) {\n\t\t// 탭·한글·이모지 🚀\n\t}\n\r\n끝';
     const trail = makeTrail();

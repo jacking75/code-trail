@@ -134,13 +134,39 @@ body {
 }
 
 .sidebar {
-    width: 280px;
+    width: var(--ct-sidebar-width, 280px);
     flex: 0 0 auto;
     display: flex;
     flex-direction: column;
-    border-inline-end: 1px solid var(--ct-border);
     background: var(--ct-bg-raised);
     overflow: auto;
+}
+
+/* 사이드바 폭 손잡이. 4px 이지만 잡히는 범위는 조금 넓게 둔다. */
+.sidebar-handle {
+    flex: 0 0 4px;
+    cursor: col-resize;
+    background: var(--ct-border);
+    touch-action: none;
+}
+
+.sidebar-handle:hover,
+.sidebar-handle:focus-visible {
+    background: var(--ct-accent);
+    outline: none;
+}
+
+.sidebar-toggle {
+    background: none;
+    border: 0;
+    color: var(--ct-fg-muted);
+    font: inherit;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+.sidebar-toggle:hover {
+    color: var(--ct-fg);
 }
 
 .main {
@@ -215,6 +241,14 @@ body {
     font-size: 12px;
 }
 
+/* 파일 목록 자체를 못 읽었다. 그 자리에 적는다. */
+.tree-error {
+    margin: 0;
+    padding: 8px 12px;
+    color: var(--ct-danger);
+    font-size: 12px;
+}
+
 .search-results {
     list-style: none;
     margin: 6px 0 0;
@@ -251,6 +285,74 @@ body {
     flex: 1;
     min-height: 0;
 }
+
+.doc-bar button {
+    padding: 1px 8px;
+    background: var(--ct-bg-input);
+    color: var(--ct-fg);
+    border: 1px solid var(--ct-border);
+    border-radius: 3px;
+    font: inherit;
+    cursor: pointer;
+}
+
+.doc-bar button:hover:not(:disabled) { border-color: var(--ct-accent); }
+.doc-bar button:disabled { opacity: .5; cursor: not-allowed; }
+.doc-bar button.picked { border-color: var(--ct-accent); color: var(--ct-accent); }
+
+/*
+ * 서버 상태 표시 (U01).
+ *
+ * 앱 바와 문서 줄에 같은 모양으로 붙는다. 색은 상태를 나르는 유일한 수단이
+ * 아니다 — 글자로도 같은 것을 말한다.
+ */
+.lsp-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 1px 8px;
+    background: var(--ct-bg-input);
+    color: var(--ct-fg-muted);
+    border: 1px solid var(--ct-border);
+    border-radius: 9px;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.lsp-status::before {
+    content: '●';
+    font-size: 9px;
+}
+
+.lsp-status:hover { border-color: var(--ct-accent); }
+.lsp-status.tone-ok { color: #9ece6a; }
+.lsp-status.tone-partial { color: #e0af68; }
+.lsp-status.tone-bad { color: var(--ct-danger); }
+.lsp-status.tone-starting { color: var(--ct-accent); }
+.lsp-status.tone-starting::before { animation: ct-pulse 1.2s ease-in-out infinite; }
+
+@keyframes ct-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lsp-status.tone-starting::before { animation: none; }
+}
+
+/* 바뀐 줄 (U14). 왼쪽 여백에만 둔다 — 본문 색을 건드리면 토큰과 섞인다. */
+.changed-line {
+    width: 3px !important;
+    margin-inline-start: 3px;
+}
+
+.changed-line.added { background: #9ece6a; }
+.changed-line.modified { background: var(--ct-accent); }
+.changed-line.deleted { background: var(--ct-danger); }
+
+.code-view.diff .monaco-diff-editor { height: 100%; }
 
 .analysis-range {
     background: rgb(224 175 104 / 24%);
@@ -295,6 +397,12 @@ body {
 }
 
 .reading-starts li button:hover { background: rgb(122 162 247 / 14%); }
+.reading-starts .change-row { display: flex; flex-direction: column; }
+.reading-starts .change-stat { margin-inline-start: 6px; color: var(--ct-fg-muted); }
+.reading-starts .change-seen { color: #9ece6a; }
+.reading-starts .change-notes { color: var(--ct-accent); }
+.reading-starts .hunk-list { padding-inline-start: 22px; max-block-size: none; }
+.reading-starts .hunk-list code { color: var(--ct-accent); }
 .reading-starts code { overflow: hidden; text-overflow: ellipsis; }
 .reading-starts small { margin-inline-start: auto; color: var(--ct-fg-muted); overflow: hidden; text-overflow: ellipsis; }
 .reading-starts form { display: flex; gap: 4px; padding: 3px 7px; }
@@ -496,13 +604,6 @@ body {
     color: var(--ct-fg-muted);
 }
 
-.panel-error {
-    margin: 0;
-    padding: 8px 12px;
-    color: var(--ct-danger);
-    border-top: 1px solid var(--ct-border);
-}
-
 .fatal {
     padding: 48px;
 }
@@ -668,52 +769,44 @@ body {
     color: var(--ct-accent);
 }
 
-.diag-notice {
-    align-self: flex-start;
-    background: var(--ct-bg-input);
-    color: var(--ct-fg);
-    border: 1px solid var(--ct-accent);
-    border-radius: 4px;
-    padding: 4px 10px;
-    font: inherit;
-    cursor: pointer;
-}
-
-/* ── 외부 에디터 실패 안내 ───────────────────────────────────────────── */
+/* ── 알림 (U02) ──────────────────────────────────────────────────────── */
 
 /*
- * 에디터를 못 띄웠다고 막다른 길이 되면 안 된다. 경로와 줄을 복사해 주면
- * 사용자가 손으로 찾아갈 수 있다.
+ * 화면에 무언가를 알리는 통로는 이것 하나다. 예전에는 닫을 수 없는 패널 오류와
+ * 서로 덮어쓰는 토스트가 따로 있었다.
  */
-.editor-fallback {
+.notices {
     position: fixed;
-    inset-block-end: 14px;
-    inset-inline-start: 50%;
-    transform: translateX(-50%);
+    inset-block-end: 16px;
+    inset-inline-end: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-inline-size: min(90vw, 520px);
+    z-index: 30;
+}
+
+.notice {
     display: flex;
     align-items: center;
     gap: 8px;
-    max-inline-size: min(90vw, 760px);
     flex-wrap: wrap;
     padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--ct-border);
     background: var(--ct-bg-raised);
     color: var(--ct-fg);
-    border: 1px solid var(--ct-danger);
-    border-radius: 6px;
     box-shadow: 0 4px 16px rgb(0 0 0 / 35%);
     font-size: 12px;
-    z-index: 20;
 }
 
-.editor-fallback code {
-    font-family: var(--ct-code-font);
-    background: var(--ct-bg-input);
-    border-radius: 3px;
-    padding: 1px 6px;
-    overflow-wrap: anywhere;
-}
+.notice-warn { border-color: #e0af68; }
+.notice-error { border-color: var(--ct-danger); }
 
-.editor-fallback button {
+.notice-message { flex: 1; min-inline-size: 0; overflow-wrap: anywhere; }
+
+.notice-action,
+.notice-close {
     padding: 2px 8px;
     background: var(--ct-bg-input);
     color: var(--ct-fg);
@@ -723,6 +816,271 @@ body {
     cursor: pointer;
 }
 
-.editor-fallback button.danger {
-    color: var(--ct-danger);
+.notice-action:hover,
+.notice-close:hover { border-color: var(--ct-accent); }
+.notice-close { color: var(--ct-fg-muted); }
+
+/* ── 선택 칩 (U04) ───────────────────────────────────────────────────── */
+
+.selection-chip {
+    position: fixed;
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    background: var(--ct-bg-raised);
+    border: 1px solid var(--ct-accent);
+    border-radius: 5px;
+    box-shadow: 0 4px 14px rgb(0 0 0 / 35%);
+    z-index: 25;
 }
+
+.selection-chip button {
+    padding: 2px 8px;
+    background: var(--ct-bg-input);
+    color: var(--ct-fg);
+    border: 1px solid transparent;
+    border-radius: 3px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.selection-chip button:hover { border-color: var(--ct-accent); }
+
+/* ── 단축키 도움말 (U16) ─────────────────────────────────────────────── */
+
+.shortcuts-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgb(0 0 0 / 45%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 40;
+}
+
+.shortcuts {
+    max-inline-size: min(94vw, 900px);
+    max-block-size: 86vh;
+    overflow: auto;
+    padding: 14px 18px 18px;
+    background: var(--ct-bg-raised);
+    border: 1px solid var(--ct-border);
+    border-radius: 8px;
+}
+
+.shortcuts > header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.shortcuts > header h2 { margin: 0; font-size: 15px; }
+.shortcuts > header button {
+    margin-inline-start: auto;
+    background: none;
+    border: 0;
+    color: var(--ct-fg-muted);
+    font-size: 18px;
+    cursor: pointer;
+}
+
+.shortcuts-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+    margin-block-start: 10px;
+}
+
+.shortcuts h3 { margin: 0 0 4px; font-size: 12px; color: var(--ct-fg-muted); }
+.shortcuts table { border-collapse: collapse; inline-size: 100%; font-size: 12px; }
+.shortcuts th { text-align: start; padding: 2px 8px 2px 0; font-weight: 400; white-space: nowrap; }
+.shortcuts td { padding: 2px 0; color: var(--ct-fg-muted); }
+.shortcuts kbd {
+    font-family: var(--ct-code-font);
+    background: var(--ct-bg-input);
+    border: 1px solid var(--ct-border);
+    border-radius: 3px;
+    padding: 0 5px;
+}
+
+/* ── 설정 화면 (U15) ─────────────────────────────────────────────────── */
+
+.settings {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.settings .toolbar { display: flex; align-items: center; gap: 8px; }
+
+.settings-card {
+    border: 1px solid var(--ct-border);
+    border-radius: 6px;
+    background: var(--ct-bg-raised);
+    padding: 10px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    max-inline-size: 760px;
+}
+
+.settings-card h2 { margin: 0 0 4px; font-size: 13px; }
+.settings-card label { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.settings-card fieldset {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    font-size: 12px;
+}
+.settings-card legend { float: inline-start; margin-inline-end: 10px; color: var(--ct-fg-muted); }
+.settings-card input[type='number'],
+.settings-card input[type='text'],
+.settings-card select,
+.settings-card input:not([type]) {
+    margin-inline-start: auto;
+    min-inline-size: 140px;
+    padding: 3px 6px;
+    background: var(--ct-bg-input);
+    color: var(--ct-fg);
+    border: 1px solid var(--ct-border);
+    border-radius: 3px;
+    font: inherit;
+}
+.settings-card button {
+    align-self: flex-start;
+    padding: 3px 9px;
+    background: var(--ct-bg-input);
+    color: var(--ct-fg);
+    border: 1px solid var(--ct-border);
+    border-radius: 3px;
+    font: inherit;
+    cursor: pointer;
+}
+.settings-card p { margin: 0; }
+
+/* ── 시작하기 카드 (U19) ─────────────────────────────────────────────── */
+
+.start-card {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 24px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-inline-size: 760px;
+}
+
+.start-card h2 { margin: 0; }
+.start-card h3 { margin: 0 0 6px; font-size: 12px; color: var(--ct-fg-muted); }
+.start-card ul, .start-card ol { margin: 0; padding-inline-start: 18px; }
+.start-languages ul { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.start-languages li { display: flex; align-items: center; gap: 8px; }
+.start-language { min-inline-size: 110px; font-weight: 600; }
+.start-links ul { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.start-links button {
+    display: flex;
+    gap: 8px;
+    inline-size: 100%;
+    text-align: start;
+    background: none;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    padding: 2px 4px;
+    cursor: pointer;
+}
+.start-links button:hover { background: rgb(122 162 247 / 14%); }
+.start-card code { font-family: var(--ct-code-font); }
+.start-example { font-size: 12px; }
+
+/* ── 기록 열 (U12) ───────────────────────────────────────────────────── */
+
+.annotation-column {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-inline-size: 240px;
+    padding: 8px 10px 10px;
+    border-inline-start: 1px solid var(--ct-border);
+    background: var(--ct-bg-raised);
+    overflow: auto;
+    position: relative;
+}
+
+.annotation-column-handle {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    inline-size: 4px;
+    cursor: col-resize;
+    touch-action: none;
+}
+
+.annotation-column-handle:hover,
+.annotation-column-handle:focus-visible {
+    background: var(--ct-accent);
+    outline: none;
+}
+
+.annotation-column-head { display: flex; align-items: baseline; gap: 8px; }
+.annotation-column-head span { flex: 1; min-inline-size: 0; overflow-wrap: anywhere; font-size: 11px; }
+.annotation-column-head button {
+    background: none;
+    border: 0;
+    color: var(--ct-fg-muted);
+    font: inherit;
+    cursor: pointer;
+}
+.annotation-column-list { display: flex; flex-direction: column; gap: 7px; }
+.annotation-column-more {
+    align-self: flex-start;
+    background: none;
+    border: 0;
+    color: var(--ct-accent);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 0;
+}
+
+.annotation-column select,
+.annotation-column input,
+.annotation-column textarea,
+.annotation-column button:not(.annotation-column-more) {
+    background: var(--ct-bg-input);
+    color: var(--ct-fg);
+    border: 1px solid var(--ct-border);
+    border-radius: 3px;
+    font: inherit;
+    padding: 3px 6px;
+}
+
+.annotation-column .annotation-composer textarea { min-block-size: 70px; resize: vertical; }
+
+/* 인라인 편집 (U13) */
+.annotation-item.editing { border-inline-start-color: #e0af68; }
+.annotation-edit { display: flex; flex-direction: column; gap: 5px; }
+.annotation-edit textarea { min-block-size: 96px; resize: vertical; font: inherit; }
+.annotation-edit-row { display: flex; align-items: center; gap: 6px; }
+.inline-edit { display: flex; gap: 6px; align-items: flex-start; flex-wrap: wrap; }
+.inline-edit textarea { flex: 1; min-inline-size: 220px; min-block-size: 80px; }
+.target-link {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--ct-accent);
+    font: inherit;
+    cursor: pointer;
+}
+.target-link:hover { text-decoration: underline; }
+.composer-target { color: var(--ct-fg-muted); }

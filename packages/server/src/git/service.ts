@@ -1,8 +1,48 @@
 import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { promisify } from 'node:util';
 
 const runFile = promisify(execFile);
 const MAX_OUTPUT = 4 * 1024 * 1024;
+
+/**
+ * 바뀐 줄 덩어리 하나.
+ *
+ * 리뷰의 시작점은 파일이 아니라 hunk 다. 파일 첫 줄로 열면 바뀐 곳을 다시
+ * 찾아 내려가야 한다.
+ */
+export interface GitHunk {
+    /** 이전 쪽 시작 줄(1-based). 새로 생긴 줄만 있으면 0 일 수 있다. */
+    oldStart: number;
+    oldCount: number;
+    /** 현재 쪽 시작 줄(1-based). */
+    newStart: number;
+    newCount: number;
+}
+
+/** `git show` 에 넘길 수 있는 기준. `HEAD` 와 커밋 해시만 받는다. */
+function assertRef(ref: string): void {
+    if (ref !== 'HEAD' && !/^[a-f0-9]{7,64}$/i.test(ref)) {
+        throw new Error('Git 기준은 HEAD 또는 커밋 해시만 받는다.');
+    }
+}
+
+/** `@@ -a,b +c,d @@` 만 읽는다. 본문 줄은 보지 않는다 — 코드가 필요 없다. */
+function parseHunkHeaders(raw: string): GitHunk[] {
+    const out: GitHunk[] = [];
+    for (const line of raw.split(/\r?\n/)) {
+        const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line);
+        if (!match) continue;
+        out.push({
+            oldStart: Number.parseInt(match[1] ?? '0', 10),
+            oldCount: match[2] === undefined ? 1 : Number.parseInt(match[2], 10),
+            newStart: Number.parseInt(match[3] ?? '0', 10),
+            newCount: match[4] === undefined ? 1 : Number.parseInt(match[4], 10),
+        });
+    }
+    return out;
+}
 
 export interface GitChange {
     relPath: string;
@@ -151,6 +191,56 @@ export class GitService {
             });
         }
         return result;
+    }
+
+    /**
+     * 이 파일에서 바뀐 줄 덩어리 (U14).
+     *
+     * `-U0` 로 문맥 없이 받아 헤더만 읽는다. 추적되지 않는 파일은 diff 가 없으므로
+     * 파일 전체를 hunk 하나로 본다 — 리뷰하는 쪽에서는 새 파일도 "바뀐 곳" 이다.
+     */
+    async hunks(relPath: string, from?: string, to?: string): Promise<GitHunk[]> {
+        const range = from === undefined
+            ? []
+            : [await this.resolveRevision(from), await this.resolveRevision(to ?? 'HEAD')];
+        const tracked = await this.run(['ls-files', '--error-unmatch', '--', relPath])
+            .then(() => true, () => false);
+        if (!tracked) {
+            const text = await readFile(
+                path.join(this.projectRoot, ...relPath.split('/')),
+                'utf8',
+            ).catch(() => '');
+            const lines = text === '' ? 0 : text.split(/\r?\n/).length;
+            return [{ oldStart: 0, oldCount: 0, newStart: 1, newCount: lines }];
+        }
+        const raw = await this.run([
+            'diff', '-U0', '--no-ext-diff', '--no-textconv', '--no-color',
+            ...range, '--', relPath,
+        ]);
+        const hunks = parseHunkHeaders(raw);
+        if (hunks.length > 0 || range.length > 0) {
+            return hunks;
+        }
+        // 작업 트리에는 차이가 없고 스테이지에만 있는 경우다.
+        return parseHunkHeaders(await this.run([
+            'diff', '--cached', '-U0', '--no-ext-diff', '--no-textconv', '--no-color',
+            '--', relPath,
+        ]).catch(() => ''));
+    }
+
+    /**
+     * 그 기준에서의 원본 본문 (U14 — 변경 보기).
+     *
+     * 절대경로를 돌려주지 않는다. 바이너리는 거부한다 — 좌우 비교 편집기에
+     * 넣을 수 없고, 넣으면 브라우저가 멈춘다.
+     */
+    async originalText(ref: string, relPath: string): Promise<{ ref: string; text: string }> {
+        assertRef(ref);
+        const text = await this.run(['show', `${ref}:./${relPath}`]);
+        if (text.includes('\0')) {
+            throw new Error('바이너리 파일은 비교할 수 없다.');
+        }
+        return { ref, text };
     }
 
     async changesBetween(fromInput: string, toInput = 'HEAD'): Promise<GitChange[]> {

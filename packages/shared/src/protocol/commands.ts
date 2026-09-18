@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import {
     PROTOCOL_VERSION,
+    childOrderSchema,
     nodeUiStateSchema,
     offsetSchema,
     parseWith,
@@ -81,6 +82,26 @@ export const chooseCandidatePayloadSchema = z.object({
     candidateId: z.string().min(1),
 });
 
+/**
+ * 방금 지운 노드를 되돌린다.
+ *
+ * 구조 명령이다. 서버가 한 단계만, 짧은 시간만 기억한다 — 그 사이에 트리가
+ * 또 바뀌면 원래 자리가 없어져 되살릴 수 없다.
+ */
+export const undoRemovePayloadSchema = z.object({
+    nodeId: uuidSchema,
+});
+
+/**
+ * 파일이 바뀐 노드를 현재 코드로 다시 읽는다.
+ *
+ * 본문이 통째로 바뀌므로 구조 명령이다. 같은 이름·컨테이너·종류의 심볼을
+ * `documentSymbol` 에서 다시 찾는다 — 옛 좌표를 그대로 믿지 않는다.
+ */
+export const refreshNodePayloadSchema = z.object({
+    nodeId: uuidSchema,
+});
+
 export const toggleNodePayloadSchema = z.object({
     nodeId: uuidSchema,
     collapsed: z.boolean(),
@@ -116,6 +137,11 @@ export const setNodeUiPayloadSchema = z.object({
 
 export const setActiveNodePayloadSchema = z.object({
     nodeId: uuidSchema.nullable(),
+});
+
+/** 형제 정렬. `null` 이면 설정 기본값을 따른다. 트리 모양은 안 바뀐다. */
+export const setChildOrderPayloadSchema = z.object({
+    childOrder: childOrderSchema.nullable(),
 });
 
 // ── 워크스페이스·에디터·설정 명령 ───────────────────────────────────────────
@@ -338,6 +364,8 @@ export const STRUCTURE_COMMAND_TYPES = [
     'trail.promoteToRoot',
     'trail.clear',
     'trail.chooseCandidate',
+    'trail.undoRemove',
+    'trail.refreshNode',
 ] as const;
 
 /** 트리 모양을 건드리지 않는 명령. */
@@ -350,6 +378,7 @@ export const UI_COMMAND_TYPES = [
     'trail.setMode',
     'trail.setNodeUi',
     'trail.setActiveNode',
+    'trail.setChildOrder',
     'trail.exportMarkdown',
     'workspace.openDocument',
     'workspace.searchFiles',
@@ -408,6 +437,9 @@ export const COMMAND_PAYLOADS = {
     'trail.setActiveNode': setActiveNodePayloadSchema,
     'trail.clear': emptyPayloadSchema,
     'trail.chooseCandidate': chooseCandidatePayloadSchema,
+    'trail.undoRemove': undoRemovePayloadSchema,
+    'trail.refreshNode': refreshNodePayloadSchema,
+    'trail.setChildOrder': setChildOrderPayloadSchema,
     'trail.exportMarkdown': emptyPayloadSchema,
     'workspace.openDocument': openDocumentPayloadSchema,
     'workspace.searchFiles': searchFilesPayloadSchema,

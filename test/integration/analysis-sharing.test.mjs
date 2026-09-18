@@ -44,6 +44,24 @@ test('분석 기록은 재전송·재시작에도 중복되지 않고 디스크�
     }
 });
 
+test('분석 요약은 다루는 트레일을 함께 알려준다', async () => {
+    // 트레일을 고르면 짝지은 분석이 따라온다(U11). 목록만 보고 짝을 찾을 수
+    // 없으면 분석마다 전체 문서를 읽어야 한다.
+    const root = await makeProject(FILES);
+    const author = { id: randomUUID(), displayName: '검토자' };
+    try {
+        await withServer(root, async (running) => {
+            const trailId = (await running.context.trails.create('로그인 검토')).trail.id;
+            await running.context.analyses.create({ title: '분석', trailIds: [trailId], author });
+
+            const listed = await (await authFetch(running, '/api/analyses')).json();
+            assert.deepEqual(listed.analyses[0].trailIds, [trailId]);
+        });
+    } finally {
+        await removeProject(root);
+    }
+});
+
 test('범위 기록은 이전·현재 코드를 읽기 전용으로 비교하고 변경 시 검토를 무효화한다', async () => {
     const root = await makeProject(FILES);
     try {

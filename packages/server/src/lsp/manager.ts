@@ -11,7 +11,7 @@ import { findByExtension } from './adapters/detect.js';
 import type { DetectionResult, HealthCheck, WorkspaceInfo } from './adapters/types.js';
 import { pathToUri, uriToPath } from './documents.js';
 import { LspSession } from './session.js';
-import { LspUnavailableError, type LspSessionInfo } from './types.js';
+import { LspUnavailableError, toPublicState, type LspSessionInfo, type PublicLspState } from './types.js';
 import { flattenDocumentSymbols, type FlatSymbol } from '../symbols/flatten.js';
 import type { DocumentGrant } from '../workspace/documents.js';
 
@@ -24,6 +24,9 @@ import type { DocumentGrant } from '../workspace/documents.js';
  * - 실행 파일을 찾고 명령을 만드는 것은 **어댑터**가 한다. 여기에는 언어별
  *   분기가 없다 — `if (language === 'cpp')` 가 생기면 어댑터로 옮길 코드다.
  */
+
+/** 이 둘이 실제 문서에서 응답해야 `지원됨` 이다. `/api/diagnostics` 와 같은 기준이다. */
+const VERIFIED_METHODS = ['textDocument/documentSymbol', 'textDocument/definition'] as const;
 
 /** 확인용 샘플 파일을 고를 때 보는 확장자. 언어마다 흔한 것 하나면 된다. */
 const SAMPLE_EXTENSIONS: Record<SupportedLanguage, readonly string[]> = {
@@ -297,6 +300,32 @@ export class LspManager {
                 healthChecks,
             };
         }));
+    }
+
+    /**
+     * 이 언어 서버의 지금 상태. 탐지도 기동도 하지 않는다.
+     *
+     * 오류 맥락(`CommandError.context`)을 채우는 데 쓴다. 정의를 못 찾았을 때
+     * "서버가 아직 뜨는 중인지, 죽었는지, 확인 전인지" 가 사용자가 다음에
+     * 무엇을 할지 정하는 유일한 근거다. 여기서 프로세스를 띄우면 실패한 요청
+     * 하나가 언어 서버 기동을 부르게 되므로 이미 있는 세션만 본다.
+     */
+    status(language: SupportedLanguage): {
+        enabled: boolean;
+        state: PublicLspState;
+        verified: boolean;
+        lastError: string | null;
+    } {
+        const enabled = this.options.getSettings().languages[language].enabled;
+        const info = this.sessions.get(language)?.info();
+        return {
+            enabled,
+            state: info === undefined ? 'notStarted' : toPublicState(info.state),
+            verified: info === undefined
+                ? false
+                : VERIFIED_METHODS.every((method) => info.verifiedMethods.includes(method)),
+            lastError: info?.lastError ?? null,
+        };
     }
 
     /** 설정에 실행 파일이 있거나 탐지된 언어. bootstrap 이 쓴다. */

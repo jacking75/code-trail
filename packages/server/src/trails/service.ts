@@ -2,9 +2,12 @@ import {
     Trail,
     toTrailSummary,
     trailToMarkdown,
+    type ChildOrder,
     type CommandError,
     type NodeUiState,
+    type RemovedSubtree,
     type TrailMode,
+    type TrailNode,
     type TrailSummary,
     fromStoredTrail,
     type StoredTrail,
@@ -51,11 +54,30 @@ export interface TrailServiceOptions {
     store: ProjectStore;
     scheduler: SaveScheduler;
     logger: Logger;
+    /** 되돌리기 버퍼가 살아 있는 시간. 테스트에서 줄인다. */
+    undoWindowMs?: number;
 }
+
+/** 되돌릴 수 있는 삭제 한 건. 트레일마다 **한 단계**만 들고 있는다. */
+interface UndoEntry {
+    removed: RemovedSubtree;
+    expiresAt: number;
+}
+
+/** 되돌리기를 기억하는 시간. 지나면 버린다 — 그 사이 트리가 바뀔 수 있다. */
+const UNDO_WINDOW_MS = 60_000;
 
 export class TrailService {
     private readonly trails = new Map<string, Trail>();
     private readonly queues = new Map<string, Promise<unknown>>();
+    /**
+     * 트레일마다 마지막 삭제 하나.
+     *
+     * 여러 단계를 쌓지 않는다. 삭제 뒤 다른 구조 명령이 들어오면 원래 자리가
+     * 더 이상 그 자리가 아니라서 되살릴 수 없고, 그 판정을 단계마다 하려면
+     * 트리 변경 이력을 통째로 들고 있어야 한다.
+     */
+    private readonly lastRemoved = new Map<string, UndoEntry>();
     private activeTrailId: string | null = null;
     private readonly logger: Logger;
 
@@ -202,12 +224,142 @@ export class TrailService {
             if (trail.revision !== baseRevision) {
                 return { ok: false as const, error: stale(trail.revision) };
             }
+            // 구조가 바뀌면 되돌릴 자리가 없어진다. 어떤 구조 명령이든 버퍼를 비운다.
+            this.lastRemoved.delete(trailId);
             const changed = apply(trail);
             if (changed) {
                 this.afterMutation(trail);
             }
             return { ok: true as const, value: { trail, revision: trail.revision } };
         });
+    }
+
+    // ── 되돌리기 ────────────────────────────────────────────────────────────
+
+    /** 방금 지운 것을 기억한다. `mutate` 가 버퍼를 비운 **뒤**에 부른다. */
+    rememberRemoved(trailId: string, removed: RemovedSubtree): void {
+        this.lastRemoved.set(trailId, {
+            removed,
+            expiresAt: Date.now() + (this.options.undoWindowMs ?? UNDO_WINDOW_MS),
+        });
+    }
+
+    /** 되돌릴 수 있는 삭제. 만료됐거나 다른 노드면 `undefined`. */
+    private takeRemoved(trailId: string, nodeId: string): RemovedSubtree | undefined {
+        const entry = this.lastRemoved.get(trailId);
+        if (!entry) {
+            return undefined;
+        }
+        if (entry.expiresAt <= Date.now() || entry.removed.root.id !== nodeId) {
+            this.lastRemoved.delete(trailId);
+            return undefined;
+        }
+        return entry.removed;
+    }
+
+    /**
+     * 방금 지운 노드를 원래 자리에 되돌린다.
+     *
+     * `mutate` 가 버퍼를 비우기 때문에 여기서는 큐에 직접 들어간다 —
+     * 되돌리기 자신이 자기 근거를 지워버리면 안 된다.
+     */
+    undoRemove(
+        trailId: string,
+        baseRevision: number,
+        nodeId: string,
+    ): Promise<ServiceResult<TrailMutationResult & { node: TrailNode }>> {
+        return this.enqueue(trailId, () => {
+            const trail = this.trails.get(trailId);
+            if (!trail) {
+                return { ok: false as const, error: notFound('트레일') };
+            }
+            if (trail.revision !== baseRevision) {
+                return { ok: false as const, error: stale(trail.revision) };
+            }
+            const removed = this.takeRemoved(trailId, nodeId);
+            if (!removed) {
+                return {
+                    ok: false as const,
+                    error: {
+                        code: 'NOT_FOUND' as const,
+                        message: '되돌릴 자리가 없어졌다.',
+                        retryable: false,
+                    },
+                };
+            }
+            this.lastRemoved.delete(trailId);
+            const node = trail.insertSubtree(
+                removed.parentId,
+                removed.root,
+                removed.index,
+                removed.nodeUi,
+            );
+            if (!node) {
+                return {
+                    ok: false as const,
+                    error: {
+                        code: 'NOT_FOUND' as const,
+                        message: '되돌릴 자리가 없어졌다.',
+                        retryable: false,
+                    },
+                };
+            }
+            this.afterMutation(trail);
+            return { ok: true as const, value: { trail, revision: trail.revision, node } };
+        });
+    }
+
+    // ── 파일 변경 ───────────────────────────────────────────────────────────
+
+    /**
+     * 이 파일들을 보여주는 노드 중 내용이 달라진 것.
+     *
+     * 해시가 같으면 아무것도 돌려주지 않는다. 같은 내용으로 다시 저장된 것은
+     * 노드에게 아무 일도 아니다 — 거기서도 `바뀜` 을 띄우면 배지가 의미를 잃는다.
+     */
+    async staleNodes(
+        relPaths: readonly string[],
+        readHash: (relPath: string) => Promise<string | null>,
+    ): Promise<Array<{ trailId: string; nodeIds: string[] }>> {
+        const wanted = new Set(relPaths);
+        const hashes = new Map<string, string | null>();
+        const out: Array<{ trailId: string; nodeIds: string[] }> = [];
+
+        for (const trail of this.trails.values()) {
+            const nodeIds: string[] = [];
+            for (const node of trail.walk()) {
+                const relPath = node.symbol.relPath;
+                if (relPath === null || !wanted.has(relPath)) {
+                    continue;
+                }
+                if (!hashes.has(relPath)) {
+                    // 파일당 한 번만 읽는다. 같은 파일을 보는 노드가 수십 개일 수 있다.
+                    hashes.set(relPath, await readHash(relPath).catch(() => null));
+                }
+                const current = hashes.get(relPath) ?? null;
+                if (current !== null && node.symbol.contentHash !== null
+                    && current !== node.symbol.contentHash) {
+                    nodeIds.push(node.id);
+                }
+            }
+            if (nodeIds.length > 0) {
+                out.push({ trailId: trail.id, nodeIds });
+            }
+        }
+        return out;
+    }
+
+    /** 불러온 트레일이 보여주는 모든 프로젝트 안 파일. 시작 검사가 쓴다. */
+    trackedRelPaths(): string[] {
+        const paths = new Set<string>();
+        for (const trail of this.trails.values()) {
+            for (const node of trail.walk()) {
+                if (node.symbol.relPath !== null && !node.symbol.external) {
+                    paths.add(node.symbol.relPath);
+                }
+            }
+        }
+        return [...paths];
     }
 
     /** 트리 모양을 건드리지 않는 명령. revision 검사를 하지 않는다. */
@@ -244,6 +396,13 @@ export class TrailService {
         nodeId: string | null,
     ): Promise<ServiceResult<TrailMutationResult>> {
         return this.updateUi(trailId, (trail) => trail.setActiveNode(nodeId));
+    }
+
+    setChildOrder(
+        trailId: string,
+        childOrder: ChildOrder | null,
+    ): Promise<ServiceResult<TrailMutationResult>> {
+        return this.updateUi(trailId, (trail) => trail.setChildOrder(childOrder));
     }
 
     markdown(trailId: string): ServiceResult<string> {

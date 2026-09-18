@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import {
     PROTOCOL_VERSION,
+    childOrderSchema,
     commandErrorSchema,
     documentResponseSchema,
     nodeUiStateSchema,
@@ -9,6 +10,7 @@ import {
     projectSettingsSchema,
     trailModeSchema,
     trailNodeSchema,
+    trailOriginSchema,
     trailSummarySchema,
     uuidSchema,
     workspaceSearchResponseSchema,
@@ -37,6 +39,8 @@ export const trailSnapshotPayloadSchema = z.object({
     title: z.string(),
     revision: z.int().min(0),
     mode: trailModeSchema,
+    /** `null` 이면 화면이 `settings.ui.childOrder` 를 쓴다. */
+    childOrder: childOrderSchema.nullable(),
     activeNodeId: uuidSchema.nullable(),
     roots: z.array(trailNodeSchema),
     nodeUi: z.record(uuidSchema, nodeUiStateSchema),
@@ -53,6 +57,12 @@ export const nodeAddedPayloadSchema = z.object({
 
 export const nodeRemovedPayloadSchema = z.object({
     nodeId: uuidSchema,
+    /** 지운 노드의 이름. 알림에 무엇을 지웠는지 적는다. */
+    name: z.string().optional(),
+    /** 하위 노드를 포함해 사라진 노드 수. */
+    count: z.int().min(1).optional(),
+    /** 서버가 되돌리기 버퍼에 담아 뒀는지. 담겼을 때만 `되돌리기` 를 붙인다. */
+    undoable: z.boolean().optional(),
 });
 
 export const nodeToggledPayloadSchema = z.object({
@@ -80,6 +90,10 @@ export const modeChangedPayloadSchema = z.object({
     mode: trailModeSchema,
 });
 
+export const childOrderChangedPayloadSchema = z.object({
+    childOrder: childOrderSchema.nullable(),
+});
+
 export const activeNodeChangedPayloadSchema = z.object({
     nodeId: uuidSchema.nullable(),
 });
@@ -105,10 +119,28 @@ export const exportReadyPayloadSchema = z.object({
 
 /**
  * 저장된 스냅샷과 현재 파일 내용이 달라졌다.
+ *
  * 노드를 지우거나 자동으로 다시 읽지 않는다 — 사용자가 원할 때만 갱신한다(구현서 9.4).
+ * 파일이 같은 내용으로 다시 저장된 경우에는 보내지 않는다. 해시가 같으면
+ * 노드가 보여주는 코드도 그대로이기 때문이다.
  */
-export const nodeStalePayloadSchema = z.object({
+export const nodesStalePayloadSchema = z.object({
+    trailId: uuidSchema,
     nodeIds: z.array(uuidSchema),
+    /** 다시 읽어서 더 이상 오래되지 않은 노드. 배지를 떼는 신호다. */
+    cleared: z.array(uuidSchema).optional(),
+});
+
+/**
+ * 트레일이 디스크에 쓰였다.
+ *
+ * 앱 바의 `저장됨` 표시가 이 revision 과 지금 revision 을 견준다. debounce 로
+ * 모아 쓰기 때문에 명령이 끝난 시점과 파일에 남은 시점이 다르고, 그 차이를
+ * 사용자가 알 방법이 지금까지 없었다.
+ */
+export const trailPersistedPayloadSchema = z.object({
+    trailId: uuidSchema,
+    revision: z.int().min(0),
 });
 
 // ── 워크스페이스·설정·언어 서버 ─────────────────────────────────────────────
@@ -145,6 +177,13 @@ export const lspStateChangedPayloadSchema = z.object({
  */
 export const implementationChoicePayloadSchema = z.object({
     nodeId: uuidSchema,
+    /**
+     * 사용자가 고르면 `trail.chooseCandidate` 에 실어 보낼 값.
+     * 잘림을 알리기만 하는 경우에는 고를 것이 없으므로 `null` 이다.
+     */
+    choiceId: z.string().min(1).nullable(),
+    /** 노드 헤더에 붙일 제목. 무엇의 구현 목록인지 보여준다. */
+    title: z.string().optional(),
     /** 상한에 걸려 잘렸는지. 잘렸으면 UI 가 그 사실을 표시한다. */
     truncated: z.boolean(),
     candidates: z.array(z.object({
@@ -168,6 +207,13 @@ export const definitionChoicePayloadSchema = z.object({
     choiceId: z.string().min(1),
     /** 어느 노드에서 클릭했는지. 루트를 만드는 중이면 `null`. */
     nodeId: uuidSchema.nullable(),
+    /**
+     * 클릭한 그 지점. 화면이 후보 창을 그 토큰 바로 아래에 띄운다 —
+     * 트리 맨 위에 뜨면 무엇의 후보인지 알 수 없다.
+     */
+    origin: trailOriginSchema.nullable().optional(),
+    /** 창 제목. 없으면 화면이 기본 문구를 쓴다. */
+    title: z.string().optional(),
     candidates: z.array(z.object({
         candidateId: z.string().min(1),
         name: z.string(),
@@ -279,8 +325,10 @@ export const EVENT_PAYLOADS = {
     'trail.nodePromoted': nodePromotedPayloadSchema,
     'trail.nodeBusy': nodeBusyPayloadSchema,
     'trail.nodeUiChanged': nodeUiChangedPayloadSchema,
-    'trail.nodeStale': nodeStalePayloadSchema,
+    'trail.nodesStale': nodesStalePayloadSchema,
+    'trail.persisted': trailPersistedPayloadSchema,
     'trail.modeChanged': modeChangedPayloadSchema,
+    'trail.childOrderChanged': childOrderChangedPayloadSchema,
     'trail.activeNodeChanged': activeNodeChangedPayloadSchema,
     'trail.renamed': trailRenamedPayloadSchema,
     'trail.listChanged': trailListChangedPayloadSchema,

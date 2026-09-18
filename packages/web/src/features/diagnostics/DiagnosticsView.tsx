@@ -51,6 +51,13 @@ export interface DiagnosticsViewProps {
     onUpdateSettings: (settings: ProjectSettingsView) => void;
     readOnly?: boolean;
     onRecoverAnalysis: (analysisId: string, kind: 'temporary' | 'backup') => void;
+    /**
+     * 사람에게 보여줄 말.
+     *
+     * 이 화면이 스스로 띄우지 않는다 — 알림 통로가 하나여야 사용자가 늘 같은
+     * 자리에서 같은 모양을 본다(U02).
+     */
+    onNotice: (message: string, level?: 'info' | 'warn' | 'error') => void;
 }
 
 /** 한 줄 항목. 이름과 값을 나란히 둔다. */
@@ -78,7 +85,7 @@ export function DiagnosticsView(props: DiagnosticsViewProps): JSX.Element {
     const [logs, setLogs] = useState<Record<string, string[]>>({});
     const [editor, setEditor] = useState<EditorDiagnostics | null>(null);
     const [solutions, setSolutions] = useState<SolutionDiagnostics | null>(null);
-    const [notice, setNotice] = useState<string | null>(null);
+    const notify = props.onNotice;
 
     useEffect(() => {
         void api.editorDiagnostics().then(setEditor).catch(() => undefined);
@@ -89,8 +96,8 @@ export function DiagnosticsView(props: DiagnosticsViewProps): JSX.Element {
         void api
             .lspLog(language)
             .then((data) => setLogs((prev) => ({ ...prev, [language]: data.lines })))
-            .catch(() => setNotice('로그를 읽지 못했다.'));
-    }, []);
+            .catch(() => notify('로그를 읽지 못했다.', 'error'));
+    }, [notify]);
 
     /**
      * 로그를 파일로 내려받는다.
@@ -109,8 +116,8 @@ export function DiagnosticsView(props: DiagnosticsViewProps): JSX.Element {
             link.click();
             link.remove();
             URL.revokeObjectURL(href);
-        }).catch(() => setNotice('로그를 내려받지 못했다.'));
-    }, []);
+        }).catch(() => notify('로그를 내려받지 못했다.', 'error'));
+    }, [notify]);
 
     const pickEditor = useCallback((executable: string, args: string[]) => {
         if (props.settings === null) {
@@ -120,8 +127,8 @@ export function DiagnosticsView(props: DiagnosticsViewProps): JSX.Element {
             ...props.settings,
             editor: { executable, args },
         });
-        setNotice(`${executable} 를 외부 에디터로 정했다.`);
-    }, [props]);
+        notify(`${executable} 를 외부 에디터로 정했다.`);
+    }, [props, notify]);
 
     const pickSolution = useCallback((solutionPath: string | null) => {
         if (props.settings === null) {
@@ -135,8 +142,8 @@ export function DiagnosticsView(props: DiagnosticsViewProps): JSX.Element {
                 csharp: { ...languages.csharp, solutionPath },
             },
         });
-        setNotice(solutionPath === null ? '솔루션 선택을 지웠다.' : `${solutionPath} 를 골랐다.`);
-    }, [props]);
+        notify(solutionPath === null ? '솔루션 선택을 지웠다.' : `${solutionPath} 를 골랐다.`);
+    }, [props, notify]);
 
     return (
         <div className="diagnostics" id="diagnostics">
@@ -147,12 +154,6 @@ export function DiagnosticsView(props: DiagnosticsViewProps): JSX.Element {
                     `지원됨` 은 실제 샘플 요청이 응답했다는 뜻이다.
                 </span>
             </div>
-
-            {notice === null ? null : (
-                <button type="button" className="diag-notice" onClick={() => setNotice(null)}>
-                    {notice}
-                </button>
-            )}
 
             {props.readOnly ? (
                 <section className="diag-card"><h2>공유 읽기 준비됨</h2><p>이 자료를 읽는 데 프로젝트·외부 에디터·언어 서버가 필요하지 않다.</p></section>

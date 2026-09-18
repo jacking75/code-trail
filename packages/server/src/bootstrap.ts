@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -6,6 +7,7 @@ import { createLogger, type LogLevel, type Logger } from './config/logger.js';
 import type { ServerContext } from './context.js';
 import { EditorService } from './editor/service.js';
 import { pathToUri } from './lsp/documents.js';
+import { findSolutionCandidates } from './lsp/adapters/index.js';
 import { LspManager } from './lsp/manager.js';
 import { toPublicState, type LspSessionInfo } from './lsp/types.js';
 import { ResolveFlow } from './trails/resolveFlow.js';
@@ -37,6 +39,21 @@ import { AiExplanationService } from './ai/service.js';
  * - 잠금 파일은 **마지막**에 쓴다. 포트를 실제로 잡은 뒤여야 그 값이 참이다.
  */
 
+/**
+ * 공유 묶음에 적는 만든이 버전.
+ *
+ * 자기 `package.json` 에서 읽는다. 상수로 적어두면 배포할 때마다 두 곳을
+ * 고쳐야 하고, 한쪽만 고치면 받은 쪽이 틀린 버전을 본다.
+ */
+function readVersion(): string {
+    try {
+        const require = createRequire(import.meta.url);
+        return (require('../package.json') as { version?: string }).version ?? '0.0.0';
+    } catch {
+        return '0.0.0';
+    }
+}
+
 export interface StartServerOptions {
     projectDirectory: string;
     /** 0 이면 운영체제가 빈 포트를 고른다. */
@@ -56,6 +73,8 @@ export interface StartServerOptions {
     lspStableAfterMs?: number;
     /** 프로젝트 없이 가져온 공유 자료만 읽는 서버다. */
     readOnlyShare?: boolean;
+    /** 노드 삭제를 되돌릴 수 있는 시간. 테스트에서 줄인다. */
+    undoWindowMs?: number;
 }
 
 export interface RunningServer {
@@ -86,8 +105,18 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     });
     await store.initialize();
 
-    const scheduler = new SaveScheduler({ logger });
-    const trails = new TrailService({ store, scheduler, logger });
+    // 저장이 끝나면 화면에 알린다. 앱 바의 `저장됨` 이 이 신호를 기다린다(U19).
+    let broadcastPersisted: (key: string, revision: number) => void = () => undefined;
+    const scheduler = new SaveScheduler({
+        logger,
+        onPersisted: (key, revision) => broadcastPersisted(key, revision),
+    });
+    const trails = new TrailService({
+        store,
+        scheduler,
+        logger,
+        ...(options.undoWindowMs !== undefined ? { undoWindowMs: options.undoWindowMs } : {}),
+    });
     await trails.load();
     const analysisStore = new AnalysisStore(store.dir, logger);
     await analysisStore.initialize();
@@ -129,6 +158,11 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         documents,
         logger,
         getSettings: () => store.getSettings(),
+        // 오류에 실을 맥락. 여기서 프로세스를 띄우지 않는다 — 실패한 요청 하나가
+        // 언어 서버 기동을 부르면 안 된다.
+        lspStatus: (language) => lsp.status(language),
+        solutionCandidateCount: async () =>
+            (await findSolutionCandidates(projectRoot)).paths.length,
     });
 
     const editor = new EditorService({
@@ -137,7 +171,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         logger,
         getSettings: () => store.getSettings(),
     });
-    const sharing = new SharingService(analyses, trails, projectName, '1.1.0');
+    const sharing = new SharingService(analyses, trails, projectName, readVersion());
     const git = new GitService(projectRoot);
     const ai = new AiExplanationService(documents, analyses, () => store.getAiSettings());
 
@@ -191,8 +225,40 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         app.gateway.broadcast('lsp.stateChanged', {
             language: info.language,
             state: toPublicState(info.state),
-            lastError: info.lastError,
+            message: info.lastError,
         }, {});
+    };
+
+    broadcastPersisted = (key, revision) => {
+        if (!key.startsWith('trail:')) {
+            return;
+        }
+        app.gateway.broadcast('trail.persisted', {
+            trailId: key.slice('trail:'.length),
+            revision,
+        }, {});
+    };
+
+    /**
+     * 파일이 바뀐 노드를 찾아 알린다 (U08).
+     *
+     * 해시가 같으면 아무것도 보내지 않는다. 같은 내용으로 다시 저장된 것은
+     * 노드에게 아무 일도 아니다.
+     */
+    const announceStaleNodes = async (relPaths: readonly string[]): Promise<void> => {
+        if (relPaths.length === 0) {
+            return;
+        }
+        const stale = await trails.staleNodes(relPaths, async (relPath) => {
+            const grant = await documents.grantInsideProject(relPath).catch(() => null);
+            if (grant === null) {
+                return null;
+            }
+            return (await documents.read(grant.documentId).catch(() => null))?.contentHash ?? null;
+        }).catch(() => []);
+        for (const entry of stale) {
+            app.gateway.broadcast('trail.nodesStale', entry, { trailId: entry.trailId });
+        }
     };
 
     const watcher = new WorkspaceWatcher({
@@ -203,6 +269,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
             // 서버가 대신 다시 읽지 않는다. 무엇이 바뀌었는지만 알린다 —
             // 갱신 시점은 화면(과 사용자)이 정한다.
             app.gateway.broadcast('workspace.filesChanged', { relPaths }, {});
+            void announceStaleNodes(relPaths);
             // 언어 서버에는 알린다. 그쪽은 낡은 내용으로 답하면 안 된다.
             for (const relPath of relPaths) {
                 void lsp.notifyFileChanged(
@@ -220,6 +287,11 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         port,
         startedAt: new Date().toISOString(),
     });
+
+    // 꺼둔 사이에 바뀐 파일도 잡는다. 시작 snapshot 뒤에 한 번만 돈다.
+    if (!context.readOnlyShare) {
+        void announceStaleNodes(trails.trackedRelPaths());
+    }
 
     const url = `http://127.0.0.1:${port}`;
     logger.info('서버가 떴다.', { port, project: projectName });

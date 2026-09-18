@@ -81,6 +81,8 @@ localSettings.languages.cpp.executable = process.execPath;
 localSettings.languages.cpp.args = [FAKE_LSP, '--scenario=normal'];
 // 폭 맞춤 하한을 눈에 띄게 올려 둔다. 아래에서 이 값에서 멈추는지 본다.
 settings.ui.minFontSize = 11;
+// 기준 화면을 늘 같은 테마로 찍는다. 기본값 `system` 은 기계마다 다르다.
+settings.ui.theme = 'dark';
 await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
 await writeFile(localSettingsPath, `${JSON.stringify(localSettings, null, 2)}\n`, 'utf8');
 await running.close();
@@ -133,16 +135,13 @@ try {
         { timeout: 10000 },
     );
 
-    console.log('\n[트레일 만들기]');
-    await page.getByRole('button', { name: '＋ 새 트레일' }).click();
-    await page.waitForFunction(
-        () => document.querySelectorAll('.trail-pick option').length === 1,
-        undefined,
-        { timeout: 8000 },
+    console.log('\n[루트 만들기 — 키 한 번]');
+    // 트레일을 미리 만들지 않는다. 예전에는 "트레일을 새로 만들었다. 한 번 더
+    // 누른다" 가 첫 사용의 첫 마찰이었다(U05).
+    check(
+        '아직 트레일이 없다',
+        (await page.locator('.trail-pick option').first().textContent()) === '없음',
     );
-    check('트레일이 목록에 생겼다', (await page.locator('.trail-pick option').count()) === 1);
-
-    console.log('\n[루트 만들기]');
     await page.locator('.tree-row', { hasText: 'src' }).first().click();
     await page.waitForSelector('button:has-text("dispatch.cpp")');
     await page.locator('button:has-text("dispatch.cpp")').click();
@@ -153,7 +152,16 @@ try {
     await page.keyboard.press('Control+Alt+KeyT');
     await page.waitForSelector('.node', { timeout: 15000 });
     check('트레일 탭으로 넘어갔다', (await page.locator('.pane-tabs .tab.active').textContent()).includes('트레일'));
-    check('루트 노드가 하나 생겼다', (await page.locator('.node').count()) === 1);
+    check('키 한 번으로 루트가 생겼다', (await page.locator('.node').count()) === 1);
+    await page.waitForFunction(
+        () => document.querySelector('.trail-pick option')?.textContent?.startsWith('Find') === true,
+        undefined,
+        { timeout: 8000 },
+    );
+    check(
+        '트레일 이름이 첫 함수 이름이 된다',
+        (await page.locator('.trail-pick option').first().textContent()).startsWith('Find'),
+    );
 
     console.log('\n[헤더 구성]');
     const header = page.locator('.node > .hd').first();
@@ -163,7 +171,9 @@ try {
     check('경로:줄', (await header.locator('.loc').textContent()) === 'src/dispatch.cpp:4');
     check('감싸는 클래스는 함수 노드에 안 붙는다', (await header.locator('.container').count()) === 0);
     check('⚑ 버튼이 있다', (await header.locator('[data-act="impl"]').count()) === 1);
+    check('＋ 기록 버튼이 있다', (await header.locator('[data-act="note"]').count()) === 1);
     check('루트에는 ⇱ 가 없다', (await header.locator('[data-act="root"]').count()) === 0);
+    check('바뀌지 않은 노드에는 ↻ 가 없다', (await header.locator('[data-act="refresh"]').count()) === 0);
 
     console.log('\n[본문]');
     const NBSP = String.fromCharCode(0x00a0);
@@ -189,10 +199,10 @@ try {
             timeout: 15000,
         });
     } catch {
-        const toast = await page.locator('.toast').count() > 0
-            ? await page.locator('.toast').textContent()
-            : '(토스트 없음)';
-        check('자식 노드가 붙었다', false, `토스트: ${toast}`);
+        const notice = await page.locator('.notice').count() > 0
+            ? await page.locator('.notice').first().textContent()
+            : '(알림 없음)';
+        check('자식 노드가 붙었다', false, `알림: ${notice}`);
     }
     check('자식 노드가 붙었다', (await page.locator('.node').count()) >= 2);
 
@@ -213,6 +223,25 @@ try {
     const outDir = fileURLToPath(new URL('../../docs/baseline/', import.meta.url));
     await page.screenshot({ path: path.join(outDir, 'standalone-trail.png') });
     console.log('  wrote docs/baseline/standalone-trail.png');
+
+    console.log('\n[활성 노드로 이동]');
+    // 이미 펼친 식별자를 다시 누르면 활성만 바뀌고 화면은 그대로였다(U06).
+    await page.locator('.node > .body .tok.clickable.visited').first().click();
+    await page.waitForFunction(
+        () => document.querySelector('.node .kids .node')?.classList.contains('flash') === true
+            || document.querySelector('.node .kids .node')?.classList.contains('active') === true,
+        undefined,
+        { timeout: 8000 },
+    );
+    check('노드 수는 그대로다', (await page.locator('.node').count()) === 2);
+    const childBox = await child.locator('> .hd').boundingBox();
+    // `#root` 는 React 마운트 지점과 트리 둘이다. 트리 쪽만 집는다.
+    const rootBox = await page.locator('#root.tree').boundingBox();
+    check(
+        '활성 노드가 화면 안에 있다',
+        childBox.y >= rootBox.y - 1 && childBox.y + childBox.height <= rootBox.y + rootBox.height + 1,
+        `${JSON.stringify(childBox)} in ${JSON.stringify(rootBox)}`,
+    );
 
     console.log('\n[브레드크럼]');
     await child.locator('> .hd .name').click();
@@ -497,6 +526,37 @@ try {
     check('수동 지정도 헤더 글자는 건드리지 않는다', forced.header === wide.header,
         `${wide.header} → ${forced.header}`);
 
+    console.log('\n[키보드로 트리 다니기]');
+    // 리뷰는 손을 키보드에 둔 채 오래 하는 일이다(U16).
+    await page.locator('#root > .node > .hd').first().focus();
+    await page.keyboard.press('ArrowDown');
+    await page.waitForFunction(
+        () => document.querySelectorAll('.node .kids .node.active').length === 1,
+        undefined,
+        { timeout: 8000 },
+    );
+    check('↓ 로 자식 노드에 간다', true);
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(
+        () => document.querySelectorAll('.node .kids .node.collapsed').length === 1,
+        undefined,
+        { timeout: 8000 },
+    );
+    check('Enter 로 접힌다', true);
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(
+        () => document.querySelectorAll('.node.collapsed').length === 0,
+        undefined,
+        { timeout: 8000 },
+    );
+    await page.keyboard.press('ArrowUp');
+    await page.waitForFunction(
+        () => document.querySelector('#root > .node')?.classList.contains('active') === true,
+        undefined,
+        { timeout: 8000 },
+    );
+    check('↑ 로 부모로 돌아온다', true);
+
     console.log('\n[새 루트로 떼어내기]');
     await page.locator('.node .kids .node > .hd [data-act="root"]').first().click();
     await page.waitForFunction(
@@ -535,7 +595,26 @@ try {
     check('이름 변경이 두 번째 탭에도 온다', true);
     await second.close();
 
-    console.log('\n[노드 삭제]');
+    console.log('\n[지우기 확인]');
+    // 한 번의 오클릭으로 탐색 결과를 잃지 않는다(U03).
+    const beforeClear = await page.locator('#root > .node').count();
+    await page.locator('#toolbar button.danger', { hasText: '지우기' }).click();
+    await page.waitForSelector('.confirm-popover', { timeout: 8000 });
+    check('확인 없이는 지워지지 않는다', (await page.locator('#root > .node').count()) === beforeClear);
+    check(
+        '몇 개가 사라지는지 알려준다',
+        (await page.locator('.confirm-popover p').textContent()).includes('노드'),
+    );
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(
+        () => document.querySelector('.confirm-popover') === null,
+        undefined,
+        { timeout: 8000 },
+    );
+    check('Esc 로 취소하면 그대로다', (await page.locator('#root > .node').count()) === beforeClear);
+
+    console.log('\n[노드 삭제와 되돌리기]');
+    const doomed = await page.locator('#root > .node').nth(1).getAttribute('data-id');
     await page.locator('#root > .node').nth(1).locator('> .hd [data-act="del"]').click();
     await page.waitForFunction(
         () => document.querySelectorAll('#root > .node').length === 1,
@@ -543,6 +622,28 @@ try {
         { timeout: 8000 },
     );
     check('노드가 지워졌다', (await page.locator('#root > .node').count()) === 1);
+
+    // 잦은 삭제에는 확인 대신 되돌리기다. 매번 확인하면 리뷰 흐름이 끊긴다.
+    await page.waitForSelector('.notice', { timeout: 8000 });
+    check('무엇을 지웠는지 알려준다', (await page.locator('.notice').first().textContent()).includes('지웠다'));
+    await page.locator('.notice button', { hasText: '되돌리기' }).click();
+    await page.waitForFunction(
+        () => document.querySelectorAll('#root > .node').length === 2,
+        undefined,
+        { timeout: 8000 },
+    );
+    check(
+        '되돌리면 같은 노드가 같은 자리로 돌아온다',
+        (await page.locator('#root > .node').nth(1).getAttribute('data-id')) === doomed,
+    );
+
+    // 다시 지워 둔다. 아래 재연결 검사가 노드 하나를 기준으로 삼는다.
+    await page.locator('#root > .node').nth(1).locator('> .hd [data-act="del"]').click();
+    await page.waitForFunction(
+        () => document.querySelectorAll('#root > .node').length === 1,
+        undefined,
+        { timeout: 8000 },
+    );
 
     console.log(`${NL}[WebSocket 재연결]`);
     const beforeDrop = await page.locator('#root > .node').count();
@@ -616,12 +717,22 @@ try {
     await page.locator('.pane-tabs .tab', { hasText: '트레일' }).click();
     await page.waitForSelector('#root > .node', { timeout: 8000 });
     await page.locator('#root > .node > .hd [data-act="open"]').first().click();
-    await page.waitForSelector('.editor-fallback', { timeout: 8000 });
-    const fallback = await page.locator('.editor-fallback').textContent();
+    await page.waitForSelector('.notice-error', { timeout: 8000 });
+    const fallback = await page.locator('.notice-error').first().textContent();
     check('못 열면 이유와 경로·줄을 보여준다', fallback.includes('설정되지 않았다')
         && /registry|dispatch/.test(fallback), fallback);
-    check('복사 버튼이 있다', (await page.locator('.editor-fallback button', { hasText: '경로·줄 복사' }).count()) === 1);
-    await page.locator('.editor-fallback button.danger').click();
+    check('복사 버튼이 있다', (await page.locator('.notice-error button', { hasText: '경로·줄 복사' }).count()) === 1);
+
+    // 모든 알림은 닫을 수 있다. 예전 패널 오류는 다음 파일을 열 때까지 남았다(U02).
+    await page.locator('.notice-error .notice-close').first().click();
+    await page.waitForFunction(
+        () => document.querySelector('.notice-error') === null,
+        undefined,
+        { timeout: 8000 },
+    );
+    check('× 로 닫힌다', (await page.locator('.notice-error').count()) === 0);
+    check('예전 오류 표시 경로가 DOM 에 없다',
+        (await page.locator('.panel-error, .toast, .editor-fallback').count()) === 0);
 
     check('페이지 에러 없음', errors.length === 0, errors.join(' | '));
     console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILED`);

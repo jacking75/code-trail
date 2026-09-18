@@ -1075,3 +1075,342 @@ test('진단 로그에 환경 변수·토큰·코드 본문이 안 남는다', a
         await removeProject(root);
     }
 });
+
+test('정의를 못 찾으면 언어와 서버 상태를 함께 알린다', async () => {
+    // "언어 서버가 켜져 있는지 확인한다" 한 줄로는 다음에 무엇을 할지 모른다.
+    // 어느 언어였고 그 서버가 어떤 상태였는지가 다음 행동을 가른다(U01).
+    const project = await makeLspProject('noAnyDefinition');
+    try {
+        await startWithFakeLsp(project, async (running) => {
+            const client = await connect(running);
+            const { trailId, root, revision } = await seedTrailWithRoot(running, client);
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.resolve',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: revision,
+                payload: { nodeId: root.id, line: 3, char: 28, text: 'Find' },
+            });
+            const failed = await client.wait((e) => e.type === 'command.error');
+            assert.equal(failed.payload.error.code, 'NOT_FOUND');
+            assert.equal(failed.payload.error.context.language, 'cpp');
+            assert.equal(failed.payload.error.context.lspState, 'ready');
+            // 루트를 만들면서 documentSymbol·definition 이 이미 응답했다.
+            // 서버는 멀쩡하고 이 심볼에 갈 곳이 없는 것이다 — 누를 버튼이 없다.
+            assert.equal(failed.payload.error.context.verified, true);
+            assert.equal(failed.payload.error.context.action, undefined);
+            assert.match(failed.payload.error.message, /헤더 파일이나 생성 코드/);
+            await client.close();
+        });
+    } finally {
+        await removeProject(project.root);
+    }
+});
+
+test('언어 서버를 못 찾으면 진단 화면으로 보낸다', async () => {
+    // 실행 파일이 없는 것은 사용자가 고쳐야 하는 일이다. 다시 눌러도 같으므로
+    // `다시 시도` 가 아니라 `진단 화면` 을 붙인다(U01).
+    const root = await makeProject(FILES);
+    const base = { projectDirectory: root, logLevel: 'error', logWrite: () => {} };
+    try {
+        const first = await server.startServer(base);
+        await updateLocalSettings(root, (settings) => {
+            settings.languages.cpp.executable = path.join(root, '없는-clangd');
+        });
+        await first.close();
+
+        const running = await server.startServer(base);
+        try {
+            const client = await connect(running);
+            const opened = await (
+                await authFetch(running, '/api/workspace/open?relPath=src%2Fdispatch.cpp')
+            ).json();
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.create',
+                commandId: randomUUID(),
+                baseRevision: 0,
+                payload: { title: '없는 서버' },
+            });
+            const created = await client.wait((e) => e.type === 'trail.snapshot');
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.addRootAt',
+                commandId: randomUUID(),
+                trailId: created.trailId,
+                baseRevision: created.revision,
+                payload: { documentId: opened.documentId, line: 4, char: 0 },
+            });
+            const failed = await client.wait((e) => e.type === 'command.error');
+            assert.equal(failed.payload.error.code, 'LSP_UNAVAILABLE');
+            assert.equal(failed.payload.error.context.language, 'cpp');
+            assert.equal(failed.payload.error.context.action, 'openDiagnostics');
+            await client.close();
+        } finally {
+            await running.close();
+        }
+    } finally {
+        await removeProject(root);
+    }
+});
+
+test('구현이 여럿이면 고를 목록을 그 자리에서 준다', async () => {
+    // **자동으로 고르지 않는다**는 규칙은 그대로다. 달라진 것은 `⚑` 를 한 번
+    // 더 누르라고만 알리는 대신 고를 수 있게 목록을 함께 준다는 점이다(U09).
+    const project = await makeLspProject('declarationTarget,multiImplementation');
+    try {
+        await startWithFakeLsp(project, async (running) => {
+            const client = await connect(running);
+            const { trailId, root, revision } = await seedTrailWithRoot(running, client);
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.resolve',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: revision,
+                payload: { nodeId: root.id, line: 3, char: 28, text: 'Find' },
+            });
+            const declaration = await client.wait((e) => e.type === 'trail.nodeAdded');
+            assert.equal(declaration.payload.node.symbol.declarationOnly, true);
+
+            const choice = await client.wait((e) => e.type === 'trail.implementationChoice');
+            assert.equal(choice.payload.truncated, false);
+            assert.ok(choice.payload.choiceId, 'choiceId 가 있어야 고를 수 있다');
+            assert.equal(choice.payload.candidates.length, 2);
+            assert.equal(choice.payload.candidates.every((item) => item.hasBody), true);
+
+            const before = await client.wait((e) => e.type === 'trail.nodeAdded');
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.chooseCandidate',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: before.revision,
+                payload: {
+                    choiceId: choice.payload.choiceId,
+                    candidateId: choice.payload.candidates[0].candidateId,
+                },
+            });
+            const attached = await client.wait((e) => e.type === 'trail.nodeAdded'
+                && e.payload.parentId === declaration.payload.node.id);
+            // 고른 것 하나만 붙는다. 선언 노드는 그대로 남는다.
+            assert.equal(attached.payload.node.symbol.declarationOnly, false);
+            await client.close();
+        });
+    } finally {
+        await removeProject(project.root);
+    }
+});
+
+test('노드를 지우고 되돌리면 ID·자리·화면 상태가 그대로다', async () => {
+    const project = await makeLspProject('normal');
+    try {
+        await startWithFakeLsp(project, async (running) => {
+            const client = await connect(running);
+            const { trailId, root, revision } = await seedTrailWithRoot(running, client);
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.resolve',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: revision,
+                payload: { nodeId: root.id, line: 3, char: 28, text: 'Find' },
+            });
+            const added = await client.wait((e) => e.type === 'trail.nodeAdded');
+            const childId = added.payload.node.id;
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.removeNode',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: added.revision,
+                payload: { nodeId: childId },
+            });
+            const removed = await client.wait((e) => e.type === 'trail.nodeRemoved');
+            assert.equal(removed.payload.undoable, true);
+            assert.equal(removed.payload.count, 1);
+            assert.ok(removed.payload.name);
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.undoRemove',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: removed.revision,
+                payload: { nodeId: childId },
+            });
+            const restored = await client.wait((e) => e.type === 'trail.snapshot'
+                && e.revision > removed.revision);
+            const child = restored.payload.roots[0].children[0];
+            assert.equal(child.id, childId, '같은 ID 로 되살아나야 배지와 좌표가 안 끊긴다');
+            assert.deepEqual(child.origin, added.payload.node.origin);
+            await client.close();
+        });
+    } finally {
+        await removeProject(project.root);
+    }
+});
+
+test('다른 구조 명령이 끼면 되돌릴 자리가 없다', async () => {
+    const project = await makeLspProject('normal');
+    try {
+        await startWithFakeLsp(project, async (running) => {
+            const client = await connect(running);
+            const { trailId, root, revision } = await seedTrailWithRoot(running, client);
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.resolve',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: revision,
+                payload: { nodeId: root.id, line: 3, char: 28, text: 'Find' },
+            });
+            const added = await client.wait((e) => e.type === 'trail.nodeAdded');
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.removeNode',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: added.revision,
+                payload: { nodeId: added.payload.node.id },
+            });
+            const removed = await client.wait((e) => e.type === 'trail.nodeRemoved');
+
+            // 사이에 다른 구조 명령이 들어온다. 원래 자리가 더 이상 그 자리가 아니다.
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.rename',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: removed.revision,
+                payload: { title: '이름을 바꿨다' },
+            });
+            const renamed = await client.wait((e) => e.type === 'trail.renamed');
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.undoRemove',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: renamed.revision,
+                payload: { nodeId: added.payload.node.id },
+            });
+            const failed = await client.wait((e) => e.type === 'command.error');
+            assert.equal(failed.payload.error.code, 'NOT_FOUND');
+            await client.close();
+        });
+    } finally {
+        await removeProject(project.root);
+    }
+});
+
+test('되돌리기는 시간이 지나면 만료된다', async () => {
+    const project = await makeLspProject('normal');
+    try {
+        await startWithFakeLsp(project, async (running) => {
+            const client = await connect(running);
+            const { trailId, root, revision } = await seedTrailWithRoot(running, client);
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.resolve',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: revision,
+                payload: { nodeId: root.id, line: 3, char: 28, text: 'Find' },
+            });
+            const added = await client.wait((e) => e.type === 'trail.nodeAdded');
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.removeNode',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: added.revision,
+                payload: { nodeId: added.payload.node.id },
+            });
+            const removed = await client.wait((e) => e.type === 'trail.nodeRemoved');
+
+            await new Promise((resolve) => setTimeout(resolve, 120));
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.undoRemove',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: removed.revision,
+                payload: { nodeId: added.payload.node.id },
+            });
+            const failed = await client.wait((e) => e.type === 'command.error');
+            assert.equal(failed.payload.error.message, '되돌릴 자리가 없어졌다.');
+            await client.close();
+        }, { undoWindowMs: 60 });
+    } finally {
+        await removeProject(project.root);
+    }
+});
+
+test('파일이 바뀐 노드만 오래됐다고 알리고, 다시 읽으면 배지가 떨어진다', async () => {
+    // 해시가 같으면(같은 내용으로 다시 저장) 아무것도 보내지 않는다 —
+    // 거기서도 `바뀜` 을 띄우면 배지가 의미를 잃는다(U08).
+    const project = await makeLspProject('normal');
+    try {
+        await startWithFakeLsp(project, async (running) => {
+            const client = await connect(running);
+            const { trailId, root, revision } = await seedTrailWithRoot(running, client);
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.resolve',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: revision,
+                payload: { nodeId: root.id, line: 3, char: 28, text: 'Find' },
+            });
+            const added = await client.wait((e) => e.type === 'trail.nodeAdded');
+
+            // 같은 내용으로 다시 쓴다. 노드에게는 아무 일도 아니다.
+            await writeFile(path.join(project.root, 'src', 'registry.cpp'), REGISTRY, 'utf8');
+            await new Promise((resolve) => setTimeout(resolve, 400));
+            assert.equal(client.events.some((e) => e.type === 'trail.nodesStale'), false);
+
+            await writeFile(
+                path.join(project.root, 'src', 'registry.cpp'),
+                REGISTRY.replace('auto it', 'auto found'),
+                'utf8',
+            );
+            const stale = await client.wait((e) => e.type === 'trail.nodesStale'
+                && e.payload.nodeIds.length > 0);
+            assert.deepEqual(stale.payload.nodeIds, [added.payload.node.id],
+                '바뀐 파일을 보는 노드만 오래된 것이다');
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.refreshNode',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: added.revision,
+                payload: { nodeId: added.payload.node.id },
+            });
+            const cleared = await client.wait((e) => e.type === 'trail.nodesStale'
+                && (e.payload.cleared ?? []).length > 0);
+            assert.deepEqual(cleared.payload.cleared, [added.payload.node.id]);
+
+            const snapshot = await client.wait((e) => e.type === 'trail.snapshot'
+                && e.revision > added.revision);
+            const refreshed = snapshot.payload.roots[0].children[0];
+            assert.equal(refreshed.id, added.payload.node.id, '같은 노드여야 자식이 안 끊긴다');
+            assert.equal(refreshed.symbol.code.includes('auto found'), true);
+            await client.close();
+        });
+    } finally {
+        await removeProject(project.root);
+    }
+});

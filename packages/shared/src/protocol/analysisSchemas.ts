@@ -234,6 +234,7 @@ export const analysisSummarySchema = z.object({
     unresolvedCount: z.int().min(0),
     reviewedCount: z.int().min(0),
     reviewTargetCount: z.int().min(0),
+    trailIds: z.array(uuidSchema),
 }) satisfies z.ZodType<AnalysisSummary>;
 
 export const shareExportPolicySchema = z.object({

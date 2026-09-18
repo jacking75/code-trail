@@ -31,6 +31,13 @@ export const pixelSchema = z.number().finite();
 
 export const trailModeSchema = z.enum(['tree', 'board']);
 
+export const childOrderSchema = z.enum(['source', 'click']);
+
+/** 심볼 해석을 지원하는 언어. 오류 맥락과 상태 이벤트가 함께 쓴다. */
+export const supportedLanguageSchema = z.enum(['cpp', 'csharp', 'go', 'rust', 'typescript']);
+
+export const lspStateSchema = z.enum(['notStarted', 'starting', 'ready', 'failed', 'stopped']);
+
 // ── 도메인 ──────────────────────────────────────────────────────────────────
 
 export const resolvedSymbolSchema = z.object({
@@ -103,6 +110,8 @@ export const storedTrailSchema = z.object({
     revision: z.int().min(0),
     activeNodeId: uuidSchema.nullable(),
     mode: trailModeSchema,
+    // 옛 저장 파일에는 없다. 없으면 화면이 설정 기본값을 쓴다.
+    childOrder: childOrderSchema.nullable().optional(),
     roots: z.array(storedTrailNodeSchema),
     nodeUi: z.record(uuidSchema, nodeUiStateSchema),
 }) satisfies z.ZodType<StoredTrail>;
@@ -219,6 +228,22 @@ export const COMMAND_ERROR_CODES = [
 export type CommandErrorCode = (typeof COMMAND_ERROR_CODES)[number];
 
 /**
+ * 오류가 난 자리의 상황.
+ *
+ * "정의를 찾지 못했다" 만으로는 사용자가 다음에 무엇을 할지 모른다. 어느 언어
+ * 서버였고 그 서버가 어떤 상태였는지, 그리고 화면이 어떤 버튼을 붙이면 되는지를
+ * 함께 싣는다. **경로도 실행 파일 위치도 담지 않는다** — 담는 것은 상태뿐이다.
+ */
+export interface CommandErrorContext {
+    language?: 'cpp' | 'csharp' | 'go' | 'rust' | 'typescript';
+    lspState?: 'notStarted' | 'starting' | 'ready' | 'failed' | 'stopped';
+    /** 실제 샘플 요청으로 확인된 서버인지. */
+    verified?: boolean;
+    /** 화면이 알림에 붙일 버튼. */
+    action?: 'openDiagnostics' | 'retry' | 'chooseSolution' | 'verify';
+}
+
+/**
  * `details` 에 stack, 절대경로, 코드 본문, 환경 변수, 원문 LSP payload 를 넣지 않는다
  * (구현서 15.2). 브라우저는 신뢰 경계 밖이고, 오류 메시지는 그 경계를 넘는 통로다.
  */
@@ -227,13 +252,23 @@ export interface CommandError {
     message: string;
     retryable: boolean;
     details?: Record<string, unknown>;
+    context?: CommandErrorContext;
 }
+
+export const commandErrorContextSchema = z.object({
+    language: supportedLanguageSchema.optional(),
+    lspState: lspStateSchema.optional(),
+    verified: z.boolean().optional(),
+    action: z.enum(['openDiagnostics', 'retry', 'chooseSolution', 'verify']).optional(),
+}) satisfies z.ZodType<CommandErrorContext>;
 
 export const commandErrorSchema = z.object({
     code: z.enum(COMMAND_ERROR_CODES),
     message: z.string(),
     retryable: z.boolean(),
     details: z.record(z.string(), z.unknown()).optional(),
+    // 전부 선택이라 `context` 를 모르는 옛 화면도 그대로 통과한다.
+    context: commandErrorContextSchema.optional(),
 }) satisfies z.ZodType<CommandError>;
 
 // ── HTTP ────────────────────────────────────────────────────────────────────

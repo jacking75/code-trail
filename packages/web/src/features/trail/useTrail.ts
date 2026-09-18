@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { isOwnCommand } from '../../api/commands.js';
 import type { ServerEventMessage, TrailSocket } from '../../api/socket.js';
 import type {
     DefinitionChoice,
@@ -16,8 +17,11 @@ import type {
  * 먼저 그려두면 서버가 거절했을 때(오래된 revision, 권한 없는 문서) 두 상태가
  * 어긋나고, 그 어긋남은 다음 명령의 `baseRevision` 을 타고 번진다.
  *
- * 트리 모양이 크게 바뀌는 명령(`⇱`, 지우기)은 서버가 snapshot 을 다시 보낸다.
- * 그래서 여기서는 부분 갱신을 단순하게 유지할 수 있다.
+ * 트리 모양이 크게 바뀌는 명령(`⇱`, 지우기, 되돌리기, 다시 읽기)은 서버가
+ * snapshot 을 다시 보낸다. 그래서 여기서는 부분 갱신을 단순하게 유지할 수 있다.
+ *
+ * **알림을 만들지 않는다.** 이벤트 → 상태만 담당하고, 사람에게 보여줄 말은
+ * `App` 이 정한다(U02) — 오류 표시 통로가 둘이면 같은 오류를 두 모양으로 본다.
  */
 
 export interface TrailState {
@@ -26,10 +30,19 @@ export interface TrailState {
     activeTrailId: string | null;
     /** 지금 해석 중인 노드. 헤더에 진행 표시를 띄운다. */
     busyNodeIds: ReadonlySet<string>;
-    /** 사용자가 골라야 하는 정의 후보. 없으면 `null`. */
+    /** 파일이 바뀌어 옛 코드를 보여주고 있는 노드. */
+    staleNodeIds: ReadonlySet<string>;
+    /** 사용자가 골라야 하는 정의·구현 후보. 없으면 `null`. */
     choice: DefinitionChoice | null;
-    /** 마지막 오류 한 줄. 토스트로 띄운다. */
-    notice: { level: 'info' | 'warn' | 'error'; message: string } | null;
+    /** 디스크에 마지막으로 쓰인 revision. 앱 바의 저장 표시가 쓴다. */
+    persistedRevision: number | null;
+    /**
+     * 이 탭이 시킨 활성 노드 변경.
+     *
+     * 옆 탭이 노드를 골랐다고 이 탭이 따라 스크롤하면 방해가 된다.
+     * `seq` 가 오를 때만 화면을 움직인다.
+     */
+    focusRequest: { nodeId: string; seq: number } | null;
 }
 
 /** 트리 안의 노드 하나를 바꾼 새 트리를 만든다. */
@@ -67,14 +80,16 @@ export function useTrail(socket: TrailSocket | null): TrailState & {
     /** 이벤트를 넣는다. `App` 이 소켓에서 받아 넘긴다. */
     handleEvent: (event: ServerEventMessage) => void;
     dismissChoice: () => void;
-    dismissNotice: () => void;
 } {
     const [trail, setTrail] = useState<TrailSnapshot | null>(null);
     const [trails, setTrails] = useState<TrailSummaryView[]>([]);
     const [activeTrailId, setActiveTrailId] = useState<string | null>(null);
     const [busyNodeIds, setBusyNodeIds] = useState<ReadonlySet<string>>(() => new Set());
+    const [staleNodeIds, setStaleNodeIds] = useState<ReadonlySet<string>>(() => new Set());
     const [choice, setChoice] = useState<DefinitionChoice | null>(null);
-    const [notice, setNotice] = useState<TrailState['notice']>(null);
+    const [persistedRevision, setPersistedRevision] = useState<number | null>(null);
+    const [focusRequest, setFocusRequest] = useState<TrailState['focusRequest']>(null);
+    const focusSeq = useRef(0);
 
     // 소켓이 바뀌면 상태를 비운다. 다시 붙으면 서버가 snapshot 을 보내준다.
     const socketRef = useRef(socket);
@@ -84,6 +99,14 @@ export function useTrail(socket: TrailSocket | null): TrailState & {
             setBusyNodeIds(new Set());
         }
     }, [socket]);
+
+    const requestFocus = useCallback((nodeId: string | null, commandId?: string): void => {
+        if (nodeId === null || !isOwnCommand(commandId)) {
+            return;
+        }
+        focusSeq.current += 1;
+        setFocusRequest({ nodeId, seq: focusSeq.current });
+    }, []);
 
     const handleEvent = useCallback((event: ServerEventMessage) => {
         switch (event.type) {
@@ -107,6 +130,19 @@ export function useTrail(socket: TrailSocket | null): TrailState & {
                 return;
             }
 
+            case 'trail.persisted': {
+                const { trailId, revision } = event.payload as {
+                    trailId: string; revision: number;
+                };
+                setTrail((prev) => {
+                    if (prev !== null && prev.id === trailId) {
+                        setPersistedRevision(revision);
+                    }
+                    return prev;
+                });
+                return;
+            }
+
             case 'trail.rootAdded': {
                 const { node } = event.payload as { node: TrailNodeView };
                 setTrail((prev) => (prev === null ? prev : {
@@ -114,6 +150,7 @@ export function useTrail(socket: TrailSocket | null): TrailState & {
                     revision: event.revision ?? prev.revision,
                     roots: [...prev.roots, node],
                 }));
+                requestFocus(node.id, event.commandId);
                 return;
             }
 
@@ -127,6 +164,7 @@ export function useTrail(socket: TrailSocket | null): TrailState & {
                     revision: event.revision ?? prev.revision,
                     roots: addChild(prev.roots, parentId, node),
                 }));
+                requestFocus(node.id, event.commandId);
                 return;
             }
 
@@ -167,10 +205,31 @@ export function useTrail(socket: TrailSocket | null): TrailState & {
                 return;
             }
 
+            case 'trail.nodesStale': {
+                // 서버가 해시를 견줘 실제로 달라진 노드만 준다.
+                const { nodeIds, cleared } = event.payload as {
+                    trailId: string; nodeIds: string[]; cleared?: string[];
+                };
+                setStaleNodeIds((prev) => {
+                    const next = new Set([...prev, ...nodeIds]);
+                    for (const nodeId of cleared ?? []) {
+                        next.delete(nodeId);
+                    }
+                    return next;
+                });
+                return;
+            }
+
             case 'trail.modeChanged': {
                 // 트리 ↔ 보드도 화면 상태다. revision 을 올리지 않는다.
                 const { mode } = event.payload as { mode: 'tree' | 'board' };
                 setTrail((prev) => (prev === null ? prev : { ...prev, mode }));
+                return;
+            }
+
+            case 'trail.childOrderChanged': {
+                const { childOrder } = event.payload as { childOrder: 'source' | 'click' | null };
+                setTrail((prev) => (prev === null ? prev : { ...prev, childOrder }));
                 return;
             }
 
@@ -201,6 +260,7 @@ export function useTrail(socket: TrailSocket | null): TrailState & {
                 // 노드를 하나 누른 것만으로 날아가던 구조 명령이 거절되면 안 된다.
                 const { nodeId } = event.payload as { nodeId: string | null };
                 setTrail((prev) => (prev === null ? prev : { ...prev, activeNodeId: nodeId }));
+                requestFocus(nodeId, event.commandId);
                 return;
             }
 
@@ -215,76 +275,43 @@ export function useTrail(socket: TrailSocket | null): TrailState & {
             }
 
             case 'trail.definitionChoice': {
-                // **자동으로 고르지 않는다.** 목록을 띄우고 기다린다.
-                setChoice(event.payload as DefinitionChoice);
+                // **자동으로 고르지 않는다.** 목록을 클릭한 자리 옆에 띄우고 기다린다.
+                setChoice({ ...(event.payload as DefinitionChoice), kind: 'definition' });
                 return;
             }
 
             case 'trail.implementationChoice': {
-                const payload = event.payload as { truncated: boolean };
-                setNotice({
-                    level: 'info',
-                    message: payload.truncated
-                        ? '구현이 많아 일부만 붙였다.'
-                        : '구현이 여러 개다. 헤더의 ⚑ 를 눌러 전부 펼친다.',
-                });
-                return;
-            }
-
-            case 'trail.exportReady': {
-                const { url, fileName } = event.payload as { url: string; fileName: string };
-                setNotice({ level: 'info', message: `${fileName} 을 내려받는다.` });
-                void downloadMarkdown(url, fileName);
-                return;
-            }
-
-            case 'command.error': {
-                const { error } = event.payload as {
-                    error: { code: string; message: string; retryable: boolean };
+                const payload = event.payload as DefinitionChoice & {
+                    choiceId: string | null; truncated: boolean;
                 };
-                setNotice({ level: error.retryable ? 'warn' : 'error', message: error.message });
+                // 잘림 알림에는 고를 것이 없다. 그건 `App` 이 알림으로 띄운다.
+                if (payload.choiceId === null || payload.candidates.length === 0) {
+                    return;
+                }
+                setChoice({
+                    choiceId: payload.choiceId,
+                    nodeId: payload.nodeId,
+                    candidates: payload.candidates,
+                    ...(payload.title === undefined ? {} : { title: payload.title }),
+                    kind: 'implementation',
+                });
                 return;
             }
 
             default:
         }
-    }, []);
+    }, [requestFocus]);
 
     return {
         trail,
         trails,
         activeTrailId,
         busyNodeIds,
+        staleNodeIds,
         choice,
-        notice,
+        persistedRevision,
+        focusRequest,
         handleEvent,
         dismissChoice: useCallback(() => setChoice(null), []),
-        dismissNotice: useCallback(() => setNotice(null), []),
     };
-}
-
-/**
- * Markdown 을 내려받는다.
- *
- * 본문을 WebSocket 으로 흘리지 않는다(구현서 15.1). HTTP 로 받아 브라우저
- * 다운로드에 넘긴다 — 토큰이 필요하므로 fetch 로 받아 blob 을 만든다.
- */
-async function downloadMarkdown(url: string, fileName: string): Promise<void> {
-    const token = sessionStorage.getItem('codeTrail.token');
-    if (token === null) {
-        return;
-    }
-    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!response.ok) {
-        return;
-    }
-    const blob = await response.blob();
-    const href = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = href;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(href);
 }

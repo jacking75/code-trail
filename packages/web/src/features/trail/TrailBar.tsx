@@ -1,5 +1,6 @@
 import { useState, type JSX } from 'react';
 
+import { ConfirmPopover } from './ConfirmPopover.js';
 import type { TrailSummaryView } from './types.js';
 
 /**
@@ -13,6 +14,10 @@ import type { TrailSummaryView } from './types.js';
 export interface TrailBarProps {
     trails: TrailSummaryView[];
     activeTrailId: string | null;
+    /** 활성 트레일이 디스크에 남았는지. 앱 바에 한 줄로 보여준다(U19). */
+    saveState: 'saved' | 'saving' | 'none';
+    /** 이 트레일을 대상으로 한 분석 기록 수. 삭제 확인 문구에 넣는다. */
+    annotationCount: number;
     onSelect: (trailId: string) => void;
     onCreate: () => void;
     onRename: (title: string) => void;
@@ -21,6 +26,7 @@ export interface TrailBarProps {
 
 export function TrailBar(props: TrailBarProps): JSX.Element {
     const [renaming, setRenaming] = useState<string | null>(null);
+    const [confirming, setConfirming] = useState(false);
     const active = props.trails.find((t) => t.id === props.activeTrailId) ?? null;
 
     return (
@@ -80,14 +86,37 @@ export function TrailBar(props: TrailBarProps): JSX.Element {
             )}
 
             {active === null ? null : (
-                <button
-                    type="button"
-                    className="danger"
-                    onClick={props.onDelete}
-                    title="이 트레일을 지운다"
-                >
-                    ✕ 트레일
-                </button>
+                <span className="toolbar-confirm">
+                    <button
+                        type="button"
+                        className="danger"
+                        onClick={() => setConfirming((open) => !open)}
+                        title="이 트레일을 지운다"
+                    >
+                        ✕ 트레일
+                    </button>
+                    {confirming ? (
+                        <ConfirmPopover
+                            message={`트레일 『${active.title}』(노드 ${active.nodeCount}개)를 지운다.`
+                                + (props.annotationCount > 0
+                                    ? ` 이 트레일을 대상으로 한 분석 기록 ${props.annotationCount}개는`
+                                        + ' 남지만 트레일 대상 링크는 끊긴다.'
+                                    : ' 되돌릴 수 없다.')}
+                            confirmLabel="지운다"
+                            onConfirm={() => {
+                                setConfirming(false);
+                                props.onDelete();
+                            }}
+                            onCancel={() => setConfirming(false)}
+                        />
+                    ) : null}
+                </span>
+            )}
+
+            {active === null || props.saveState === 'none' ? null : (
+                <span className="save-state" role="status">
+                    {props.saveState === 'saved' ? '저장됨' : '저장 중…'}
+                </span>
             )}
         </div>
     );

@@ -67,3 +67,58 @@ test('Git 변경 목록은 이름 변경의 옛·새 경로와 staged·unstaged 
         await removeProject(root);
     }
 });
+
+test('hunk 는 바뀐 줄 덩어리만 주고, 추적되지 않는 파일은 전체가 하나다', async () => {
+    // 리뷰의 시작점은 파일이 아니라 hunk 다(U14). 헤더만 읽으므로 본문이 커도
+    // 결과 크기가 늘지 않는다.
+    const original = Array.from({ length: 20 }, (_, index) => `line ${index}`).join('\n') + '\n';
+    const root = await makeProject({ 'src/edit.txt': original });
+    try {
+        await git(root, 'init');
+        await git(root, 'config', 'user.name', 'Code Trail Test');
+        await git(root, 'config', 'user.email', 'test@invalid.local');
+        await git(root, 'add', '--', '.');
+        await git(root, 'commit', '-m', 'base');
+
+        const lines = original.split('\n');
+        lines[2] = 'line 2 — 고쳤다';
+        lines[11] = 'line 11 — 고쳤다';
+        await writeFile(path.join(root, 'src', 'edit.txt'), lines.join('\n'), 'utf8');
+        await writeFile(path.join(root, 'src', 'brand new.txt'), 'a\nb\nc\n', 'utf8');
+
+        const service = new GitService(root);
+        const edited = await service.hunks('src/edit.txt');
+        assert.deepEqual(edited.map((hunk) => hunk.newStart), [3, 12]);
+        assert.equal(edited.every((hunk) => hunk.newCount === 1 && hunk.oldCount === 1), true);
+
+        const untracked = await service.hunks('src/brand new.txt');
+        assert.equal(untracked.length, 1, '추적되지 않는 파일도 "바뀐 곳" 이다');
+        assert.equal(untracked[0].newStart, 1);
+        assert.equal(untracked[0].oldCount, 0);
+    } finally {
+        await removeProject(root);
+    }
+});
+
+test('원본 조회는 HEAD 와 커밋 해시만 받는다', async () => {
+    // `ref` 가 옵션처럼 보이는 값이면 `git show` 가 그것을 옵션으로 읽는다.
+    // 셸을 거치지 않아도 인자 해석은 git 이 한다.
+    const root = await makeProject({ 'src/a.txt': '처음 내용\n' });
+    try {
+        await git(root, 'init');
+        await git(root, 'config', 'user.name', 'Code Trail Test');
+        await git(root, 'config', 'user.email', 'test@invalid.local');
+        await git(root, 'add', '--', '.');
+        await git(root, 'commit', '-m', 'base');
+        await writeFile(path.join(root, 'src', 'a.txt'), '바꾼 내용\n', 'utf8');
+
+        const service = new GitService(root);
+        assert.equal((await service.originalText('HEAD', 'src/a.txt')).text, '처음 내용\n');
+
+        await assert.rejects(() => service.originalText('--output=/tmp/x', 'src/a.txt'));
+        await assert.rejects(() => service.originalText('-n', 'src/a.txt'));
+        await assert.rejects(() => service.originalText('main', 'src/a.txt'));
+    } finally {
+        await removeProject(root);
+    }
+});

@@ -25,6 +25,7 @@
  *   badRange            문서 범위를 벗어나는 range 를 준다
  *   noisyStderr         stderr 로 많은 줄을 뱉는다
  *   noDefinitionResult  정의를 못 찾는다 (typeDefinition 폴백 시험용)
+ *   noAnyDefinition     정의도 typeDefinition 도 못 찾는다 (오류 맥락 시험용)
  *   declarationTarget   정의가 몸통 없는 선언으로 간다 (자동 구현 추적 시험용)
  *   externalTarget      정의가 프로젝트 **밖** 파일로 간다 (일시 문서 권한 시험용).
  *                       `--external-file=<절대경로>` 로 그 파일을 지정한다
@@ -347,6 +348,11 @@ function handle(message) {
     switch (method) {
         case 'textDocument/definition': {
             delayed(() => {
+                if (has('noAnyDefinition')) {
+                    // 폴백까지 빈손이다. 우리 쪽이 왜 못 찾았는지를 설명해야 한다.
+                    reply(id, []);
+                    return;
+                }
                 if (has('noDefinitionResult')) {
                     // 빈 결과. 우리 쪽이 typeDefinition 으로 넘어가야 한다.
                     reply(id, []);
@@ -374,6 +380,10 @@ function handle(message) {
 
         case 'textDocument/typeDefinition': {
             delayed(() => {
+                if (has('noAnyDefinition')) {
+                    reply(id, []);
+                    return;
+                }
                 // 정의를 못 찾았을 때의 폴백 경로를 시험하려고 여기서만 답한다.
                 const uri = definitionUri(params.textDocument.uri);
                 reply(id, locationResult(uri, { ...DEFINITION_TARGET, line: 3 }));

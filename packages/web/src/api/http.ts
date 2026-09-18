@@ -71,6 +71,19 @@ export interface DocumentContent {
     contentHash: string;
     modifiedAt: string;
     text: string;
+    /**
+     * 이 파일 형식에 심볼 해석이 되는지. `null` 이면 언어 서버에 물을 것이 없다.
+     * 서버 왕복 없이 화면에서 바로 안내한다.
+     */
+    supportedLanguage?: 'cpp' | 'csharp' | 'go' | 'rust' | 'typescript' | null;
+}
+
+/** 바뀐 줄 덩어리. 리뷰는 파일이 아니라 여기서 시작한다. */
+export interface GitHunkView {
+    oldStart: number;
+    oldCount: number;
+    newStart: number;
+    newCount: number;
 }
 
 export interface TrailSummary {
@@ -128,6 +141,11 @@ export interface ProjectSettingsView {
 export interface Bootstrap {
     protocolVersion: number;
     project: { name: string };
+    /** 확장자로 센 언어별 파일 수. 시작하기 카드가 쓴다. */
+    languageSummary?: {
+        languages: Array<{ languageId: string; fileCount: number }>;
+        truncated: boolean;
+    };
     settings: ProjectSettingsView;
     localAuthor: { id: string; displayName: string } | null;
     trails: TrailSummary[];
@@ -145,6 +163,8 @@ export interface Bootstrap {
 export interface AnalysisSummaryView {
     id: string; title: string; purpose: string; revision: number; updatedAt: string;
     annotationCount: number; unresolvedCount: number; reviewedCount: number; reviewTargetCount: number;
+    /** 이 분석이 다루는 트레일. 트레일을 고르면 짝지은 분석이 따라온다. */
+    trailIds?: string[];
 }
 
 export interface AnalysisDocumentView {
@@ -290,6 +310,19 @@ export const api = {
     changes: (from?: string, to?: string) => request<{ repository: boolean; changes: Array<{ relPath: string; status: string; area: string; addedLines: number | null; deletedLines: number | null }> }>(
         `/api/changes${from ? `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to ?? 'HEAD')}` : ''}`,
     ),
+
+    /** 그 파일에서 바뀐 줄 덩어리. 변경 목록에 있는 파일만 받는다. */
+    hunks: (relPath: string, from?: string, to?: string) =>
+        request<{ relPath: string; hunks: GitHunkView[] }>(
+            `/api/changes/hunks?relPath=${encodeURIComponent(relPath)}`
+            + (from ? `&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to ?? 'HEAD')}` : ''),
+        ),
+
+    /** `HEAD`(또는 커밋 해시) 시점의 본문. 좌우 비교의 왼쪽에 넣는다. */
+    originalText: (relPath: string, ref = 'HEAD') =>
+        request<{ ref: string; text: string }>(
+            `/api/changes/original?relPath=${encodeURIComponent(relPath)}&ref=${encodeURIComponent(ref)}`,
+        ),
 
     contentSearch: (query: string, scope = '', caseSensitive = false, signal?: AbortSignal) =>
         request<{ matches: Array<{ relPath: string; line: number; char: number; preview: string }>; truncated: boolean; scannedFiles: number }>(

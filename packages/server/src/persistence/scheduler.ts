@@ -27,6 +27,13 @@ export interface SaveSchedulerOptions {
     /** 테스트에서 타이머를 갈아끼우기 위한 구멍. */
     setTimer?: (fn: () => void, ms: number) => unknown;
     clearTimer?: (handle: unknown) => void;
+    /**
+     * 쓰기가 끝났다.
+     *
+     * 화면의 `저장됨` 표시가 이걸 근거로 삼는다. 명령이 끝난 시점과 파일에
+     * 남은 시점이 debounce 만큼 다르고, 그 차이를 사용자가 알 방법이 없었다.
+     */
+    onPersisted?: (key: string, revision: number) => void;
 }
 
 interface Pending {
@@ -40,6 +47,7 @@ export class SaveScheduler {
     private readonly delayMs: number;
     private readonly setTimer: (fn: () => void, ms: number) => unknown;
     private readonly clearTimer: (handle: unknown) => void;
+    private readonly onPersisted: (key: string, revision: number) => void;
 
     private readonly pending = new Map<string, Pending>();
     private readonly running = new Map<string, Promise<void>>();
@@ -61,6 +69,7 @@ export class SaveScheduler {
             });
         this.clearTimer = options.clearTimer
             ?? ((handle) => clearTimeout(handle as NodeJS.Timeout));
+        this.onPersisted = options.onPersisted ?? (() => undefined);
     }
 
     /** 저장을 예약한다. 같은 키의 앞선 예약은 최신 것으로 덮인다. */
@@ -117,6 +126,7 @@ export class SaveScheduler {
             try {
                 await task.write();
                 this.saved.set(key, task.revision);
+                this.onPersisted(key, task.revision);
             } catch (error) {
                 this.logger.error('저장에 실패했다.', {
                     key,

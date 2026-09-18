@@ -352,3 +352,41 @@ test('오류에 코드 본문이나 절대경로가 섞이지 않는다', async 
         await removeProject(root);
     }
 });
+
+test('디스크에 쓰고 나면 그 revision 을 알린다', async () => {
+    // 명령이 끝난 시점과 파일에 남은 시점이 debounce 만큼 다르다. 그 차이를
+    // 사용자가 알 방법이 지금까지 없었다 — 앱 바의 `저장됨` 이 이 신호를 쓴다(U19).
+    const root = await makeProject(FILES);
+    try {
+        await withServer(root, async (running) => {
+            const client = await openSocket(running);
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.create',
+                commandId: randomUUID(),
+                baseRevision: 0,
+                payload: { title: '저장 표시' },
+            });
+            const snapshot = await client.wait((e) => e.type === 'trail.snapshot');
+            const trailId = snapshot.trailId;
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.rename',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: 0,
+                payload: { title: '고쳤다' },
+            });
+            const renamed = await client.wait((e) => e.type === 'trail.renamed');
+
+            const persisted = await client.wait((e) => e.type === 'trail.persisted'
+                && e.payload.trailId === trailId
+                && e.payload.revision === renamed.revision);
+            assert.equal(persisted.payload.revision, 1);
+            await client.close();
+        });
+    } finally {
+        await removeProject(root);
+    }
+});

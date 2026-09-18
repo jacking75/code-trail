@@ -101,7 +101,9 @@ export function FileTree({ onOpenFile, activePath }: FileTreeProps): JSX.Element
     };
 
     if (error !== null) {
-        return <p className="panel-error">{error}</p>;
+        // 목록 자체를 못 읽은 것이라 그 자리에 적는다. 알림으로 띄우면
+        // 빈 트리만 남아 "파일이 없다" 로 보인다.
+        return <p className="tree-error">{error}</p>;
     }
 
     return (

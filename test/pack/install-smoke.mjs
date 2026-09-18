@@ -10,12 +10,17 @@
  * 사용자는 빈 화면을 보고, 그건 우리 테스트가 하나도 못 잡던 실패다.
  */
 import { execFileSync, spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
+/** 기대 버전은 워크스페이스 루트 하나에서만 온다. */
+const EXPECTED_VERSION = JSON.parse(
+    readFileSync(path.join(ROOT, 'package.json'), 'utf8'),
+).version;
 
 let failures = 0;
 const check = (name, condition, extra) => {
@@ -83,7 +88,7 @@ try {
         encoding: 'utf8',
         shell: false,
     }).trim();
-    check('버전을 찍는다', version === '1.1.0', version);
+    check('버전을 찍는다', version === EXPECTED_VERSION, version);
 
     // 서버를 실제로 띄우고 정적 화면과 API 가 사는지 본다.
     const child = spawn(process.execPath, [cli, project, '--no-open', '--log-level', 'info'], {
