@@ -287,7 +287,7 @@ test/fixtures/                  확장 시절 데이터를 굳혀 둔 것. **고
 | 툴바 버튼 추가·삭제 (`TrailView.tsx`) | `docs/terms.svg` 의 툴바, README `## 사용법` |
 | 화면에 새 부위가 생김 (새 영역·새 버튼·새 표시) | `## 용어` 표에 이름 한 줄, 트레일 패널 안이면 `docs/terms.svg` 에 그 부위와 콜아웃 |
 | 용어를 바꾸거나 새로 정함 | `## 용어` 표, `docs/terms.*`, 그리고 UI 문구를 같은 말로 |
-| 사용자가 체감하는 동작 변경 | `CHANGELOG.md` 새 항목 + 네 `package.json` 의 `version`, 그리고 `working_log.md` |
+| 사용자가 체감하는 동작 변경 | `CHANGELOG.md` 새 항목 + 네 `package.json` 의 `version` |
 | `packages/shared` 의 도메인 타입 | `packages/shared/src/protocol/schemas.ts` 의 같은 스키마 (`satisfies` 가 컴파일에서 잡는다), `test/unit/` |
 | 새 명령·이벤트 추가 | `protocol/commands.ts` 또는 `events.ts` 의 payload 스키마, 구현서 14.2·15.2, `test/unit/protocol.test.mjs` 의 목록 |
 | HTTP 경로 추가 | 구현서 15.1 표, `test/integration/resilience.test.mjs` 의 인증 훑기가 자동으로 잡는다 |

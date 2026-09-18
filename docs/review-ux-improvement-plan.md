@@ -66,7 +66,7 @@
 
 | 간극 | 근거 (파일:줄) | 사용자에게 생기는 일 | 태스크 |
 | --- | --- | --- | --- |
-| 언어 서버 상태가 앱 바·코드 화면 어디에도 없다. 정의 실패 메시지가 언어·상태를 안 알려준다 | `ws/gateway.ts:433` "정의를 찾지 못했다. 해당 언어의 언어 서버가 켜져 있는지 확인한다.", `app/App.tsx` 앱 바에 연결 상태만 표시 | `working_prompt.md` 의 실제 불만 그대로다 — C# 에서 정의를 못 찾는데 왜인지 모른다 | U01 |
+| 언어 서버 상태가 앱 바·코드 화면 어디에도 없다. 정의 실패 메시지가 언어·상태를 안 알려준다 | `ws/gateway.ts:433` "정의를 찾지 못했다. 해당 언어의 언어 서버가 켜져 있는지 확인한다.", `app/App.tsx` 앱 바에 연결 상태만 표시 | 저장소 주인이 적어 준 실제 불만 그대로다 — C# 에서 정의를 못 찾는데 왜인지 모른다 | U01 |
 | 오류 표시가 두 갈래고 닫을 수 없다 | `App.tsx` `error` → `.panel-error`(닫기 없음, 다음 파일 열기까지 남음), `useTrail.ts` `notice` → `.toast`. `App.tsx` 의 `onEvent` 가 `command.error` 를 먼저 먹고 `return` 하므로 `useTrail` 의 같은 분기는 죽은 코드다 | 지난 오류가 화면 아래 계속 남고, 새 오류가 덮어쓴다 | U02 |
 | 되돌릴 수 없는 삭제에 확인도 실행 취소도 없다 | `TrailView.tsx` `지우기` → `commands.clear` 직행, `TrailBar.tsx` `✕ 트레일` → `commands.deleteTrail` 직행, `TrailNode.tsx` `✕` → 하위까지 삭제. `window.confirm` 사용처 0 | 한 번 잘못 누르면 수십 노드가 사라진다 | U03 |
 | 본문에서 글자를 드래그하면 분석 기록 탭으로 튕긴다 | `CodeBody.tsx` `onMouseUp` → `onRangeSelect` → `App.tsx` `setPane('analysis')` | 코드 한 줄을 복사하려 해도 탭이 바뀐다 | U04 |
@@ -74,7 +74,7 @@
 | 이미 펼친 노드를 다시 클릭하면 활성만 바뀌고 화면이 안 움직인다 | `gateway.ts` `'existing'` → `trail.activeNodeChanged` 만 방송, `TrailView.tsx` 는 `jumpToOrigin` 에서만 `scrollIntoView` | 어디로 갔는지 찾아 스크롤해야 한다 | U06 |
 | 코드 화면에서 트레일을 시작하는 수단이 단축키 하나다 | `CodeView.tsx` 는 커서 위치만 기록. 우클릭 메뉴·버튼 없음 | 단축키를 모르면 시작을 못 한다 | U07 |
 | 파일이 바뀌어도 트레일 노드는 옛 코드를 조용히 보여준다 | `App.tsx` 는 열린 문서만 `staleDocument`. `TrailNode.tsx` 에 `contentHash` 비교 없음 | 옛 좌표로 정의를 물어 엉뚱한 곳으로 간다 | U08 |
-| 정의 후보 대화상자가 트리 맨 위에 뜨고 무엇을 클릭했는지 안 보인다. 구현이 여럿이면 토스트로 `⚑` 를 누르라고만 한다 | `TrailView.tsx` `.choice` 위치, `useTrail.ts` `trail.implementationChoice` | `working_prompt.md` 세 번째 질문 — "왜 깃발을 또 눌러야 하나" | U09 |
+| 정의 후보 대화상자가 트리 맨 위에 뜨고 무엇을 클릭했는지 안 보인다. 구현이 여럿이면 토스트로 `⚑` 를 누르라고만 한다 | `TrailView.tsx` `.choice` 위치, `useTrail.ts` `trail.implementationChoice` | 저장소 주인의 세 번째 질문 — "왜 깃발을 또 눌러야 하나" | U09 |
 | 트레일 패널에 기록 존재 표시가 전혀 없다 | `TrailNode.tsx` 헤더 배지는 `재귀·선언만·근사` 뿐. 목업(`code-understanding-and-sharing-mockup.png`)의 `+ 기록`·개수·검토 상태가 구현에 없다 | 어느 함수에 우려가 달려 있는지 트리에서 알 수 없다 | U10 |
 | 분석을 먼저 만들어야 기록할 수 있다 | `AnalysisPanel.tsx` `analysis === null` 이면 작성 폼만 보인다 | 트레일 만들기 → 분석 만들기 → 대상 고르기 → 쓰기, 네 단계다 | U11 |
 | 기록이 별도 탭이라 코드와 기록 사이를 계속 오간다 | `App.tsx` 탭 넷 중 `analysis` 만 기록을 그린다 | 노드 하나에 기록을 달 때마다 왕복한다 | U12 |
@@ -133,7 +133,7 @@ P1 은 리뷰 동선을 짧게 만드는 것, P2 는 있으면 좋은 것이다.
 ### U01. 언어 서버 상태를 화면에 항상 보여주고 오류를 다음 행동으로 잇는다
 
 **목적.** 정의를 못 찾았을 때 "언어 서버 때문인지, 서버가 뜨는 중인지, 이 파일 형식은 원래 안 되는지, C# 솔루션을 안 골라서인지" 를
-화면에서 바로 알 수 있게 한다. `working_prompt.md` 의 첫 불만이 이것이다.
+화면에서 바로 알 수 있게 한다. 저장소 주인이 적어 준 첫 불만이 이것이다.
 
 **변경할 파일.**
 
@@ -805,13 +805,13 @@ P1 은 리뷰 동선을 짧게 만드는 것, P2 는 있으면 좋은 것이다.
    - 분석 기록 도메인·스키마(`domain/analysis.ts`, `analysisSchemas.ts`) → `docs/share-format.md`, `docs/data-and-recovery.md`, `test/unit/analysis-sharing.test.mjs`
    - 공유 묶음에 들어가는 필드 → `docs/share-format.md` 포함 정책, `examples/first-review.ctshare.json` 무결성 재계산
 5. README `## 구조` 도 같은 목록으로.
-6. 루트의 `working_prompt.md` 는 작업 지시 메모다. 저장소에 남길 것이면 `docs/` 로 옮기고 이 문서에서 링크하거나, 아니면 지운다 — 저장소 주인이 정한다.
+6. 루트의 작업 메모(`working_prompt.md`)와 작업 로그(`working_log.md`)는 저장소 주인의 결정으로 지웠다. 두 지침 파일의 `## 바꾸면 같이 고칠 것` 에서 작업 로그를 참조하던 줄도 함께 걷어냈다.
 
 **검증 방법.** `diff <(sed -n '/^## 용어/,/^## 지금/p' CLAUDE.md) <(sed -n '/^## 용어/,/^## 지금/p' AGENTS.md)` 가 비어 있다. `## 구조` 의 모든 경로가 실제로 존재한다(`ls`).
 
 **완료 기준.** 두 지침 파일이 같고, 구조 목록이 실제 디렉터리와 일치한다.
 
-**함께 고칠 문서.** 없음(이 태스크 자체가 문서다). `working_log.md`.
+**함께 고칠 문서.** 없음(이 태스크 자체가 문서다).
 
 ## 5. 종단 간 인수 시나리오
 
@@ -839,7 +839,7 @@ P1 은 리뷰 동선을 짧게 만드는 것, P2 는 있으면 좋은 것이다.
 | 노드 삭제에 확인만 둘까, 되돌리기까지 만들까 | **되돌리기** | 노드 삭제는 리뷰 중 수십 번 일어난다. 매번 확인하면 흐름이 끊긴다. 서버 버퍼 한 단계(60초)면 충분하다 |
 | `변경 보기` 의 원본을 `git show HEAD:path` 로 읽어도 되나 | **된다** | 프로젝트 안 경로만, 변경 목록에 있는 파일만, `ref` 는 `HEAD`·해시만 받는다. 셸을 거치지 않는다 |
 | 기록 표시(U10)를 활성 분석 하나로 제한할까, 모든 분석을 합칠까 | **활성 분석 하나** | 여러 분석의 기록을 합치면 "누구의 우려인지" 가 흐려진다. 분석 선택 상자가 이미 있다 |
-| `working_prompt.md` 를 저장소에 둘까 | `docs/` 로 옮기거나 삭제 | 루트에 작업 메모가 있으면 배포물 검사(`test:pack`)와 README 독자가 혼란스럽다 |
+| `working_prompt.md` 를 저장소에 둘까 | **지웠다** (주인의 결정) | 루트에 작업 메모가 있으면 배포물 검사(`test:pack`)와 README 독자가 혼란스럽다. 작업 로그(`working_log.md`)도 같은 이유로 함께 지웠다 |
 
 ## 7. 이 문서가 다루지 않는 것
 
@@ -874,3 +874,5 @@ P1 은 리뷰 동선을 짧게 만드는 것, P2 는 있으면 좋은 것이다.
   `npm run test:pack` 도 통과한다.
 - **`npm run test:install` 과 `npm run test:lsp` 는 이번에 돌리지 않았다.** 앞의 것은
   네트워크가 필요하고, 뒤의 것은 이 기계에 실제 언어 서버가 없다.
+- 루트의 `working_prompt.md` · `working_log.md` 는 저장소 주인의 결정으로 지웠다.
+  이 문서와 `CHANGELOG.md` 가 진행 기록을 대신한다.
