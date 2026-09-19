@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
     PROTOCOL_VERSION,
     childOrderSchema,
+    localUiStateSchema,
     nodeUiStateSchema,
     offsetSchema,
     parseWith,
@@ -93,6 +94,16 @@ export const undoRemovePayloadSchema = z.object({
 });
 
 /**
+ * 방금 `⇱` 로 떼어낸 노드를 원래 부모의 원래 자리로 되돌린다 (V10).
+ *
+ * 삭제 되돌리기와 **같은 한 단계 버퍼**를 쓴다. 그 사이에 다른 구조 명령이
+ * 들어오면 원래 자리가 더 이상 그 자리가 아니라 되살릴 수 없다.
+ */
+export const undoPromotePayloadSchema = z.object({
+    nodeId: uuidSchema,
+});
+
+/**
  * 파일이 바뀐 노드를 현재 코드로 다시 읽는다.
  *
  * 본문이 통째로 바뀌므로 구조 명령이다. 같은 이름·컨테이너·종류의 심볼을
@@ -142,6 +153,36 @@ export const setActiveNodePayloadSchema = z.object({
 /** 형제 정렬. `null` 이면 설정 기본값을 따른다. 트리 모양은 안 바뀐다. */
 export const setChildOrderPayloadSchema = z.object({
     childOrder: childOrderSchema.nullable(),
+});
+
+/**
+ * 보드에서 손으로 옮긴 자리를 모두 지운다 (V11).
+ *
+ * 좌표는 화면 상태다. 되돌리기 버퍼에 넣지 않고 revision 도 올리지 않는다 —
+ * 구조가 아니라 배치이기 때문이다.
+ */
+export const resetBoardLayoutPayloadSchema = z.object({});
+
+/**
+ * 이 기계의 개인 화면 상태를 저장한다 (V18).
+ *
+ * `localStorage` 는 origin 이 포트에 묶여 재시작을 못 견딘다. 서버가 들고 있어야
+ * "저장한 줄 알았던 값" 이 실제로 남는다. 트레일과는 무관하므로 `trailId` 도
+ * `baseRevision` 도 싣지 않는다.
+ */
+export const saveLocalUiStatePayloadSchema = z.object({
+    state: localUiStateSchema,
+});
+
+/**
+ * 트레일을 Markdown 으로 내보낸다 (V23).
+ *
+ * 분석 ID 를 함께 주면 그 분석의 기록·검토·안내 순서가 같은 문서에 실린다.
+ * 어디서 내보내도 형식이 같아야 하므로 공유 묶음의 Markdown 과 같은 함수를 쓴다.
+ */
+export const exportMarkdownPayloadSchema = z.object({
+    analysisId: uuidSchema.optional(),
+    mermaid: z.boolean().default(false),
 });
 
 // ── 워크스페이스·에디터·설정 명령 ───────────────────────────────────────────
@@ -365,6 +406,7 @@ export const STRUCTURE_COMMAND_TYPES = [
     'trail.clear',
     'trail.chooseCandidate',
     'trail.undoRemove',
+    'trail.undoPromote',
     'trail.refreshNode',
 ] as const;
 
@@ -379,7 +421,9 @@ export const UI_COMMAND_TYPES = [
     'trail.setNodeUi',
     'trail.setActiveNode',
     'trail.setChildOrder',
+    'trail.resetBoardLayout',
     'trail.exportMarkdown',
+    'ui.saveLocalState',
     'workspace.openDocument',
     'workspace.searchFiles',
     'editor.openLocation',
@@ -438,9 +482,12 @@ export const COMMAND_PAYLOADS = {
     'trail.clear': emptyPayloadSchema,
     'trail.chooseCandidate': chooseCandidatePayloadSchema,
     'trail.undoRemove': undoRemovePayloadSchema,
+    'trail.undoPromote': undoPromotePayloadSchema,
     'trail.refreshNode': refreshNodePayloadSchema,
     'trail.setChildOrder': setChildOrderPayloadSchema,
-    'trail.exportMarkdown': emptyPayloadSchema,
+    'trail.resetBoardLayout': resetBoardLayoutPayloadSchema,
+    'trail.exportMarkdown': exportMarkdownPayloadSchema,
+    'ui.saveLocalState': saveLocalUiStatePayloadSchema,
     'workspace.openDocument': openDocumentPayloadSchema,
     'workspace.searchFiles': searchFilesPayloadSchema,
     'editor.openLocation': openLocationPayloadSchema,

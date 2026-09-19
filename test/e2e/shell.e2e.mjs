@@ -144,9 +144,39 @@ try {
     await page.getByRole('button', { name: /net/ }).first().click();
     await page.waitForSelector('button:has-text("dispatch.cpp")');
 
+    console.log('\n[파일 탐색기 도구 (V21)]');
+    check('전부 접기·현재 파일 위치 버튼이 있다',
+        (await page.locator('.tree-tools button').count()) === 2);
+
     console.log('\n[코드 화면]');
     await page.locator('button:has-text("dispatch.cpp")').click();
     await page.waitForSelector('.code-view .monaco-editor', { timeout: 15000 });
+
+    // 어떤 길로 열어도 트리가 그 자리를 보여준다(V21).
+    await page.locator('.tree-tools button', { hasText: '전부 접기' }).click();
+    await page.waitForFunction(
+        () => document.querySelector('.tree-file.active') === null,
+        undefined,
+        { timeout: 8000 },
+    );
+    await page.locator('.tree-tools button', { hasText: '현재 파일 위치' }).click();
+    await page.waitForSelector('.tree-file.active', { timeout: 8000 });
+    check('현재 파일 위치가 트리에서 펼쳐진다',
+        (await page.locator('.tree-file.active').textContent()).includes('dispatch.cpp'));
+
+    console.log('\n[트레일 목록 (V22)]');
+    await page.locator('.trail-pick').click();
+    await page.waitForSelector('.trail-list', { timeout: 8000 });
+    check('목록에 새 트레일 만들기가 있다',
+        (await page.locator('.trail-list-tools button', { hasText: '새 트레일' }).count()) === 1);
+    check('이름 검색 칸이 있다',
+        (await page.locator('.trail-list input[type="search"]').count()) === 1);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(
+        () => document.querySelector('.trail-list') === null,
+        undefined,
+        { timeout: 8000 },
+    );
 
     check('경로 표시', (await page.locator('.doc-path').textContent()) === 'src/net/dispatch.cpp');
     // 언어 서버 상태가 문서 줄에 늘 보인다(U01). 여기서는 clangd 가 없으니
@@ -360,7 +390,87 @@ try {
         );
         check('토글을 끄면 보통 편집기로 돌아온다',
             (await page.locator('.monaco-diff-editor').count()) === 0);
+        console.log('\n[변경 기준 (V01)]');
+        // 커밋한 뒤에도 리뷰를 이어갈 시작점이 있어야 한다.
+        const baseOptions = await page.locator('.reading-starts .change-base option').count();
+        check('기준 셀렉트에 브랜치·커밋이 있다', baseOptions >= 2, String(baseOptions));
+        const working = await page.locator('.reading-starts .change-file').count();
+        await page.locator('.reading-starts .change-base select').selectOption({ index: 1 });
+        await page.waitForTimeout(800);
+        check('기준을 바꾸면 변경 목록이 그 기준을 따른다',
+            (await page.locator('.reading-starts .change-file').count()) !== working
+            || working > 0);
+        await page.locator('.reading-starts .change-base select').selectOption({ index: 0 });
+        await page.waitForTimeout(500);
+
+        console.log('\n[hunk 검토 표시 (V03)]');
+        await page.locator('.reading-starts .change-file').first().click();
+        await page.waitForSelector('.reading-starts .hunk-review', { timeout: 10000 });
+        check('hunk 마다 ☐ 가 붙는다',
+            (await page.locator('.reading-starts .hunk-review').count()) >= 1);
+
+        console.log('\n[Alt+↓ 로 다음 변경 (V19)]');
+        await page.locator('.reading-starts .hunk-list button').first().click();
+        await page.waitForSelector('.code-view .monaco-editor', { timeout: 15000 });
+        await page.locator('.view-line').first().click();
+        const beforeJump = await page.evaluate(
+            () => document.querySelector('.monaco-editor .cursor') !== null,
+        );
+        await page.keyboard.press('Alt+ArrowDown');
+        await page.waitForTimeout(400);
+        check('문서화된 Alt+↓ 가 먹는다', beforeJump);
     }
+
+    console.log('\n[탭·사이드바 키 (V19)]');
+    await page.keyboard.press('Control+Alt+Digit2');
+    await page.waitForFunction(
+        () => document.querySelector('.pane-tabs .tab.active')?.textContent?.includes('트레일') === true
+            || document.querySelector('.placeholder') !== null,
+        undefined,
+        { timeout: 8000 },
+    );
+    check('Ctrl+Alt+2 로 트레일 탭', true);
+    await page.keyboard.press('Control+Alt+KeyB');
+    await page.waitForFunction(
+        () => document.querySelector('.sidebar') === null,
+        undefined,
+        { timeout: 8000 },
+    );
+    check('Ctrl+Alt+B 로 사이드바가 접힌다', (await page.locator('.sidebar').count()) === 0);
+    await page.keyboard.press('Control+Alt+KeyB');
+    await page.waitForSelector('.sidebar', { timeout: 8000 });
+    await page.keyboard.press('Control+Alt+Digit1');
+    await page.waitForTimeout(300);
+
+    console.log('\n[분할 보기 (V07)]');
+    // 1400px 아래에서는 토글 자체가 없다. 구현서가 탭을 택한 이유 그대로다.
+    check('좁은 화면에는 분할 토글이 없다',
+        (await page.locator('.pane-tabs .tab', { hasText: '분할' }).count()) === 0);
+    await page.setViewportSize({ width: 1500, height: 950 });
+    await page.waitForSelector('.pane-tabs .tab:has-text("분할")', { timeout: 8000 });
+    await page.locator('.pane-tabs .tab', { hasText: '분할' }).click();
+    await page.waitForSelector('.main.split', { timeout: 8000 });
+    check('코드와 트레일이 동시에 보인다',
+        (await page.locator('.split-code .code-view, .split-code .start-card').count()) === 1
+        && (await page.locator('.split-trail').count()) === 1);
+    await page.setViewportSize({ width: 1100, height: 900 });
+    await page.waitForFunction(
+        () => document.querySelector('.main.split') === null,
+        undefined,
+        { timeout: 8000 },
+    );
+    check('좁아지면 탭으로 돌아간다', (await page.locator('.main.split').count()) === 0);
+    await page.setViewportSize({ width: 1500, height: 950 });
+    await page.waitForSelector('.main.split', { timeout: 8000 });
+    check('넓어지면 켰던 값으로 돌아온다', (await page.locator('.main.split').count()) === 1);
+    await page.locator('.pane-tabs .tab', { hasText: '분할' }).click();
+    await page.waitForFunction(
+        () => document.querySelector('.main.split') === null,
+        undefined,
+        { timeout: 8000 },
+    );
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize({ width: 1280, height: 800 });
 
     console.log('\n[탭 스크립트 차단]');
     const cspBlocked = await page.evaluate(() => {
@@ -385,6 +495,14 @@ try {
         { timeout: 10000 },
     );
     check('토큰 없이도 새로고침이 살아남음', (await page.locator('.conn').textContent()) === '연결됨');
+    // 개인 화면 상태는 서버에 남는다(V18). 어제 보던 자리에서 시작한다.
+    await page.waitForFunction(
+        () => document.querySelector('.doc-path') !== null,
+        undefined,
+        { timeout: 10000 },
+    );
+    check('새로고침해도 보던 파일이 그대로 열려 있다',
+        (await page.locator('.doc-path').textContent()).length > 0);
 
     console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILED`);
 } finally {

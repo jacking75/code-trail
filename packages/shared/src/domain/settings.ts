@@ -51,6 +51,13 @@ export interface UiSettings {
     minFontSize: number;
     /** 코드 글자 크기(px). 0 보다 크면 `fitToWidth` 보다 우선한다. */
     fontSize: number;
+    /**
+     * 탭 한 칸을 몇 칸으로 보여줄지. 코드 화면과 노드 본문이 같은 값을 쓴다.
+     *
+     * **표시 설정이다.** 원본 문자열과 컬럼 좌표는 바꾸지 않는다 — 탭 문자는
+     * 그대로 두고 그리는 폭만 정한다.
+     */
+    tabSize: number;
     /** 몸통 없는 선언의 구현이 정확히 하나뿐일 때 거기까지 바로 펼친다. */
     autoFollowSingleImplementation: boolean;
     /** 노드를 추가할 때 외부 에디터에서도 그 위치를 연다. */
@@ -136,6 +143,7 @@ export function defaultSettings(): ProjectSettings {
             fitToWidth: true,
             minFontSize: 8,
             fontSize: 0,
+            tabSize: 4,
             autoFollowSingleImplementation: true,
             revealInExternalEditorOnAdd: false,
         },

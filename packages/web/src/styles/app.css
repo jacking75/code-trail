@@ -1084,3 +1084,342 @@ body {
 }
 .target-link:hover { text-decoration: underline; }
 .composer-target { color: var(--ct-fg-muted); }
+
+/* ── 분할 보기 (V07) ─────────────────────────────────────────────────── */
+
+/*
+ * 넓은 화면에서만 켤 수 있다. 구현서가 탭을 택한 이유("작은 화면에서 둘을
+ * 나란히 놓으면 코드도 트리도 못 읽는다")는 그대로다.
+ */
+.split-panes {
+    display: flex;
+    flex: 1;
+    min-block-size: 0;
+}
+
+.split-code,
+.split-trail {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 50%;
+    min-inline-size: 0;
+    min-block-size: 0;
+}
+
+.split-trail {
+    border-inline-start: 1px solid var(--ct-border);
+}
+
+/* 코드 화면과 그 오른쪽 기록 열 (V16). */
+.code-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-block-size: 0;
+}
+
+.code-pane .annotation-column {
+    max-block-size: 45vh;
+}
+
+/* ── 코드 화면 여백 표식 (V04) ───────────────────────────────────────── */
+
+/*
+ * 기록 표식의 색은 트레일 본문의 색 띠(`.cl.noted[data-kind]`)와 같은 값이다.
+ * 같은 것을 두 색으로 부르지 않는다.
+ */
+.glyph-node,
+.glyph-note {
+    cursor: pointer;
+}
+
+.glyph-node::after,
+.glyph-note::after {
+    content: "";
+    display: block;
+    inline-size: 8px;
+    block-size: 8px;
+    margin: 4px auto;
+    border-radius: 50%;
+}
+
+.glyph-node::after {
+    background: var(--ct-accent);
+}
+
+.glyph-note::after {
+    background: var(--ct-accent);
+    border-radius: 2px;
+}
+
+.glyph-note.k-question::after {
+    background: #bb9af7;
+}
+
+.glyph-note.k-concern::after {
+    background: #e0af68;
+}
+
+.glyph-note.k-conclusion::after {
+    background: #9ece6a;
+}
+
+/* ── 읽기 시작점 (V01 · V03 · V06) ───────────────────────────────────── */
+
+.reading-starts .change-base {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px 5px;
+}
+
+.reading-starts .change-base select {
+    flex: 1;
+    min-inline-size: 0;
+    background: var(--ct-bg-input);
+    color: var(--ct-fg);
+    border: 1px solid var(--ct-border);
+    border-radius: 3px;
+    font: inherit;
+    padding: 2px 4px;
+}
+
+.reading-starts .change-reviewed {
+    color: #9ece6a;
+}
+
+.reading-starts .hunk-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.reading-starts .hunk-row > button:first-child {
+    flex: 1;
+    min-inline-size: 0;
+}
+
+.reading-starts .hunk-review {
+    inline-size: auto;
+    flex: none;
+    color: var(--ct-fg-muted);
+}
+
+.reading-starts .hunk-review.on {
+    color: #9ece6a;
+}
+
+.reading-starts .hunk-review.stale {
+    color: #e0af68;
+}
+
+.reading-starts .symbol-filter {
+    margin: 3px 7px 5px;
+    inline-size: calc(100% - 14px);
+    background: var(--ct-bg-input);
+    color: var(--ct-fg);
+    border: 1px solid var(--ct-border);
+    border-radius: 3px;
+    padding: 2px 5px;
+}
+
+.reading-starts .symbol-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.reading-starts .symbol-row.here > button:first-child {
+    border-inline-start: 2px solid var(--ct-accent);
+}
+
+.reading-starts .symbol-root {
+    inline-size: auto;
+    flex: none;
+    color: var(--ct-accent);
+}
+
+/* ── 파일 탐색기 (V21) ───────────────────────────────────────────────── */
+
+.tree-tools {
+    display: flex;
+    gap: 6px;
+    padding: 5px 8px 0;
+}
+
+.tree-tools button {
+    background: var(--ct-bg-input);
+    color: var(--ct-fg-muted);
+    border: 1px solid var(--ct-border);
+    border-radius: 3px;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    padding: 1px 6px;
+}
+
+.tree-tools button:hover:not(:disabled) {
+    border-color: var(--ct-accent);
+}
+
+.tree-tools button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* 색은 변경 목록의 상태 글자와 같은 뜻이다. */
+.tree-file.changed {
+    color: var(--ct-accent);
+}
+
+.tree-file.changed.added,
+.tree-file.changed.untracked {
+    color: #9ece6a;
+}
+
+.tree-file.changed.deleted {
+    color: var(--ct-danger);
+}
+
+.tree-dir.has-change::after {
+    content: "●";
+    color: var(--ct-accent);
+    font-size: 8px;
+    margin-inline-start: 6px;
+    vertical-align: middle;
+}
+
+/* ── 기록 목록 도구 (V15) ────────────────────────────────────────────── */
+
+.annotation-global,
+.annotation-global-results {
+    grid-column: 1;
+}
+
+.annotation-global {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.annotation-global input {
+    flex: 1;
+    min-inline-size: 0;
+}
+
+.annotation-global-results {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-block-size: 30vh;
+    overflow: auto;
+    border: 1px solid var(--ct-border);
+    border-radius: 4px;
+}
+
+.annotation-global-results li button {
+    inline-size: 100%;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    text-align: start;
+    background: none;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    padding: 3px 7px;
+}
+
+.annotation-global-results li button:hover {
+    background: rgb(122 162 247 / 14%);
+}
+
+.annotation-group {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.annotation-group-head {
+    color: var(--ct-fg-muted);
+    font-family: var(--ct-code-font);
+    font-size: 11px;
+    margin: 6px 0 0;
+}
+
+/* ── 안내 순서 재생 (V13) ────────────────────────────────────────────── */
+
+/*
+ * 화면 아래 고정 막대. 알림 위에 둔다 — 알림이 막대를 가리면 다음 단계를
+ * 누를 수 없다.
+ */
+.walkthrough-player {
+    position: fixed;
+    inset-inline: 16px;
+    inset-block-end: 16px;
+    z-index: 28;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--ct-bg-raised);
+    border: 1px solid var(--ct-accent);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgb(0 0 0 / 40%);
+    font-size: 12px;
+}
+
+.walkthrough-count {
+    color: var(--ct-accent);
+    font-family: var(--ct-code-font);
+    flex: none;
+}
+
+.walkthrough-body {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.walkthrough-body span {
+    color: var(--ct-fg-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.walkthrough-title {
+    flex: none;
+    max-inline-size: 20ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.walkthrough-player button {
+    background: var(--ct-bg-input);
+    color: var(--ct-fg);
+    border: 1px solid var(--ct-border);
+    border-radius: 3px;
+    font: inherit;
+    cursor: pointer;
+    padding: 2px 9px;
+}
+
+.walkthrough-player button:hover:not(:disabled) {
+    border-color: var(--ct-accent);
+}
+
+.walkthrough-player button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.walkthrough-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}

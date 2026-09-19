@@ -7,6 +7,14 @@ export const MAX_TAGS = 20;
 export const MAX_TAG_LENGTH = 64;
 export const MAX_ANALYSIS_ENTITIES = 10_000;
 
+/**
+ * 자동 재확인이 남기는 이력의 작성자 (V17).
+ *
+ * 사람이 아니라 시스템이다. 이력의 `actorId` 는 UUID 라서 `'system'` 같은 글자를
+ * 넣을 수 없고, 넣지 않으면 "누가 상태를 바꿨나" 를 답할 수 없다.
+ */
+export const SYSTEM_ACTOR_ID = '00000000-0000-4000-8000-000000000000';
+
 export interface Position {
     line: number;
     char: number;

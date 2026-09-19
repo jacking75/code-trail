@@ -4,7 +4,10 @@ import {
     trailToMarkdown,
     type ChildOrder,
     type CommandError,
+    subtreeToMarkdown,
+    type MarkdownOptions,
     type NodeUiState,
+    type PromotedNode,
     type RemovedSubtree,
     type TrailMode,
     type TrailNode,
@@ -58,11 +61,15 @@ export interface TrailServiceOptions {
     undoWindowMs?: number;
 }
 
-/** 되돌릴 수 있는 삭제 한 건. 트레일마다 **한 단계**만 들고 있는다. */
-interface UndoEntry {
-    removed: RemovedSubtree;
-    expiresAt: number;
-}
+/**
+ * 되돌릴 수 있는 변경 한 건. 트레일마다 **한 단계**만 들고 있는다.
+ *
+ * 삭제와 승격이 같은 버퍼를 나눠 쓴다(V10). 둘 다 "직전 한 번" 만 되돌릴 수 있고,
+ * 그 사이에 다른 구조 명령이 들어오면 원래 자리가 없어진다.
+ */
+type UndoEntry =
+    | { kind: 'remove'; removed: RemovedSubtree; expiresAt: number }
+    | { kind: 'promote'; promoted: PromotedNode; expiresAt: number };
 
 /** 되돌리기를 기억하는 시간. 지나면 버린다 — 그 사이 트리가 바뀔 수 있다. */
 const UNDO_WINDOW_MS = 60_000;
@@ -77,7 +84,7 @@ export class TrailService {
      * 더 이상 그 자리가 아니라서 되살릴 수 없고, 그 판정을 단계마다 하려면
      * 트리 변경 이력을 통째로 들고 있어야 한다.
      */
-    private readonly lastRemoved = new Map<string, UndoEntry>();
+    private readonly lastUndoable = new Map<string, UndoEntry>();
     private activeTrailId: string | null = null;
     private readonly logger: Logger;
 
@@ -225,7 +232,7 @@ export class TrailService {
                 return { ok: false as const, error: stale(trail.revision) };
             }
             // 구조가 바뀌면 되돌릴 자리가 없어진다. 어떤 구조 명령이든 버퍼를 비운다.
-            this.lastRemoved.delete(trailId);
+            this.lastUndoable.delete(trailId);
             const changed = apply(trail);
             if (changed) {
                 this.afterMutation(trail);
@@ -238,23 +245,38 @@ export class TrailService {
 
     /** 방금 지운 것을 기억한다. `mutate` 가 버퍼를 비운 **뒤**에 부른다. */
     rememberRemoved(trailId: string, removed: RemovedSubtree): void {
-        this.lastRemoved.set(trailId, {
+        this.lastUndoable.set(trailId, {
+            kind: 'remove',
             removed,
             expiresAt: Date.now() + (this.options.undoWindowMs ?? UNDO_WINDOW_MS),
         });
     }
 
-    /** 되돌릴 수 있는 삭제. 만료됐거나 다른 노드면 `undefined`. */
-    private takeRemoved(trailId: string, nodeId: string): RemovedSubtree | undefined {
-        const entry = this.lastRemoved.get(trailId);
+    /** 방금 떼어낸 것을 기억한다 (V10). 삭제와 같은 한 단계 버퍼를 쓴다. */
+    rememberPromoted(trailId: string, promoted: PromotedNode): void {
+        this.lastUndoable.set(trailId, {
+            kind: 'promote',
+            promoted,
+            expiresAt: Date.now() + (this.options.undoWindowMs ?? UNDO_WINDOW_MS),
+        });
+    }
+
+    /** 되돌릴 수 있는 변경. 만료됐거나 다른 노드·다른 종류면 `undefined`. */
+    private takeUndoable<K extends UndoEntry['kind']>(
+        trailId: string,
+        nodeId: string,
+        kind: K,
+    ): Extract<UndoEntry, { kind: K }> | undefined {
+        const entry = this.lastUndoable.get(trailId);
         if (!entry) {
             return undefined;
         }
-        if (entry.expiresAt <= Date.now() || entry.removed.root.id !== nodeId) {
-            this.lastRemoved.delete(trailId);
+        const id = entry.kind === 'remove' ? entry.removed.root.id : entry.promoted.node.id;
+        if (entry.expiresAt <= Date.now() || id !== nodeId || entry.kind !== kind) {
+            this.lastUndoable.delete(trailId);
             return undefined;
         }
-        return entry.removed;
+        return entry as Extract<UndoEntry, { kind: K }>;
     }
 
     /**
@@ -276,7 +298,8 @@ export class TrailService {
             if (trail.revision !== baseRevision) {
                 return { ok: false as const, error: stale(trail.revision) };
             }
-            const removed = this.takeRemoved(trailId, nodeId);
+            const entry = this.takeUndoable(trailId, nodeId, 'remove');
+            const removed = entry?.removed;
             if (!removed) {
                 return {
                     ok: false as const,
@@ -287,7 +310,7 @@ export class TrailService {
                     },
                 };
             }
-            this.lastRemoved.delete(trailId);
+            this.lastUndoable.delete(trailId);
             const node = trail.insertSubtree(
                 removed.parentId,
                 removed.root,
@@ -306,6 +329,42 @@ export class TrailService {
             }
             this.afterMutation(trail);
             return { ok: true as const, value: { trail, revision: trail.revision, node } };
+        });
+    }
+
+    /**
+     * 방금 떼어낸 노드를 원래 부모의 원래 자리로 되돌린다 (V10).
+     *
+     * `mutate` 가 버퍼를 비우기 때문에 여기서는 큐에 직접 들어간다 —
+     * 되돌리기 자신이 자기 근거를 지워버리면 안 된다.
+     */
+    undoPromote(
+        trailId: string,
+        baseRevision: number,
+        nodeId: string,
+    ): Promise<ServiceResult<TrailMutationResult>> {
+        return this.enqueue(trailId, () => {
+            const trail = this.trails.get(trailId);
+            if (!trail) {
+                return { ok: false as const, error: notFound('트레일') };
+            }
+            if (trail.revision !== baseRevision) {
+                return { ok: false as const, error: stale(trail.revision) };
+            }
+            const entry = this.takeUndoable(trailId, nodeId, 'promote');
+            this.lastUndoable.delete(trailId);
+            if (!entry || !trail.undoPromote(entry.promoted)) {
+                return {
+                    ok: false as const,
+                    error: {
+                        code: 'NOT_FOUND' as const,
+                        message: '되돌릴 자리가 없어졌다.',
+                        retryable: false,
+                    },
+                };
+            }
+            this.afterMutation(trail);
+            return { ok: true as const, value: { trail, revision: trail.revision } };
         });
     }
 
@@ -405,12 +464,30 @@ export class TrailService {
         return this.updateUi(trailId, (trail) => trail.setChildOrder(childOrder));
     }
 
-    markdown(trailId: string): ServiceResult<string> {
+    /** 보드에서 손으로 옮긴 자리를 모두 지운다 (V11). 화면 상태라 revision 은 그대로다. */
+    resetBoardLayout(trailId: string): Promise<ServiceResult<TrailMutationResult>> {
+        return this.updateUi(trailId, (trail) => trail.resetBoardLayout() > 0);
+    }
+
+    markdown(trailId: string, options: MarkdownOptions = {}): ServiceResult<string> {
         const trail = this.trails.get(trailId);
         if (!trail) {
             return { ok: false, error: notFound('트레일') };
         }
-        return { ok: true, value: trailToMarkdown(trail) };
+        return { ok: true, value: trailToMarkdown(trail, options) };
+    }
+
+    /** 노드 하나와 그 하위만 Markdown 으로 (V08). 트레일 전체와 같은 형식이다. */
+    nodeMarkdown(
+        trailId: string,
+        nodeId: string,
+        options: MarkdownOptions = {},
+    ): ServiceResult<string> {
+        const node = this.trails.get(trailId)?.get(nodeId);
+        if (!node) {
+            return { ok: false, error: notFound('노드') };
+        }
+        return { ok: true, value: subtreeToMarkdown(node, options) };
     }
 
     /** 종료 절차. 대기 중인 저장을 모두 끝낸다. */

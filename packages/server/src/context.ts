@@ -7,6 +7,7 @@ import type { TrailService } from './trails/service.js';
 import type { DocumentRegistry } from './workspace/documents.js';
 import type { WorkspaceTree } from './workspace/tree.js';
 import type { AnalysisStore } from './persistence/analysisStore.js';
+import type { LocalUiStateStore } from './persistence/localUiStateStore.js';
 import type { AnalysisService } from './analysis/service.js';
 import type { SharingService } from './sharing/service.js';
 import type { GitService } from './git/service.js';
@@ -39,6 +40,8 @@ export interface ServerContext {
     sharing: SharingService;
     git: GitService;
     ai: AiExplanationService;
+    /** 이 기계의 개인 화면 상태. 트레일·분석과 섞지 않는다(V18). */
+    localUiState: LocalUiStateStore;
     /** 프로젝트 없는 공유 읽기에서는 변경 동작과 LSP를 제한한다. */
     readOnlyShare: boolean;
 }

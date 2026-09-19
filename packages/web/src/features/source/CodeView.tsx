@@ -1,7 +1,9 @@
-import { useEffect, useImperativeHandle, useRef, type JSX, type Ref } from 'react';
+import { useEffect, useImperativeHandle, useMemo, useRef, type JSX, type Ref } from 'react';
 import { monaco } from './monaco.js';
 
 import type { DocumentContent, GitHunkView } from '../../api/http.js';
+import type { GutterIndex } from './gutterIndex.js';
+import { gutterLines } from './gutterIndex.js';
 
 /**
  * 읽기 전용 코드 화면 (구현서 10.2).
@@ -50,6 +52,14 @@ export interface CodeViewProps {
     theme?: string;
     /** 우클릭 메뉴와 Monaco 안의 `Ctrl+Alt+T`. */
     onAddRoot?: (position: { line: number; char: number }) => void;
+    /** 여백 표식을 그릴 색인 (V04). 활성 트레일·활성 분석만 본다. */
+    gutter?: GutterIndex;
+    /** 여백의 노드 표식을 눌렀다. 그 노드로 간다(V04). */
+    onGutterNode?: (nodeIds: string[]) => void;
+    /** 여백의 기록 표식을 눌렀다. 그 기록으로 간다(V04). */
+    onGutterNote?: (annotationIds: string[]) => void;
+    /** 탭 한 칸을 몇 칸으로 보여줄지 (V20). 원본 문자열은 바꾸지 않는다. */
+    tabSize?: number;
     handle?: Ref<CodeViewHandle>;
 }
 
@@ -62,6 +72,7 @@ export function CodeView(props: CodeViewProps): JSX.Element {
     const {
         document: doc, onPositionClick, onSelectionChange, annotationRanges = [],
         hunks = [], originalText = null, diff = false, theme = 'vs-dark',
+        gutter, tabSize = 4,
     } = props;
     const hostRef = useRef<HTMLDivElement | null>(null);
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -75,6 +86,12 @@ export function CodeView(props: CodeViewProps): JSX.Element {
     const addRootRef = useRef(props.onAddRoot);
     addRootRef.current = props.onAddRoot;
     const decorationIds = useRef<string[]>([]);
+    const gutterNodeRef = useRef(props.onGutterNode);
+    gutterNodeRef.current = props.onGutterNode;
+    const gutterNoteRef = useRef(props.onGutterNote);
+    gutterNoteRef.current = props.onGutterNote;
+    /** 줄(1-based) → 그 줄의 표식. 여백 클릭이 이걸로 무엇을 눌렀는지 안다. */
+    const gutterByLine = useRef(new Map<number, { nodeIds: string[]; noteIds: string[] }>());
 
     /** 지금 커서를 읽을 수 있는 편집기. 변경 보기에서는 수정본 쪽이다. */
     const activeEditor = (): monaco.editor.IStandaloneCodeEditor | null =>
@@ -114,7 +131,9 @@ export function CodeView(props: CodeViewProps): JSX.Element {
             // 원본을 그대로 보여준다. 자동 들여쓰기 감지가 켜져 있으면 화면의
             // 탭 폭이 파일마다 달라져 같은 코드가 다르게 보인다.
             detectIndentation: false,
-            tabSize: 4,
+            tabSize,
+            // 여백 표식을 그릴 자리다(V04). 켜두지 않으면 장식이 보이지 않는다.
+            glyphMargin: true,
             fontLigatures: false,
             theme,
         });
@@ -140,6 +159,16 @@ export function CodeView(props: CodeViewProps): JSX.Element {
             const position = event.target.position;
             if (position === null || position === undefined) {
                 return;
+            }
+            // 여백 표식은 코드가 아니다. 눌렀으면 그 노드·기록으로 보내고
+            // 커서는 건드리지 않는다(V04).
+            if (event.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
+                const marks = gutterByLine.current.get(position.lineNumber);
+                if (marks !== undefined) {
+                    if (marks.nodeIds.length > 0) gutterNodeRef.current?.(marks.nodeIds);
+                    else if (marks.noteIds.length > 0) gutterNoteRef.current?.(marks.noteIds);
+                    return;
+                }
             }
             const model = editor.getModel();
             const word = model?.getWordAtPosition(position)?.word ?? '';
@@ -180,6 +209,19 @@ export function CodeView(props: CodeViewProps): JSX.Element {
     useEffect(() => {
         monaco.editor.setTheme(theme);
     }, [theme]);
+
+    /**
+     * 탭 폭 (V20).
+     *
+     * **표시 설정이다.** 모델의 문자열과 컬럼 좌표는 그대로다 — 탭 문자를 몇 칸
+     * 너비로 그릴지만 정한다. 편집기와 모델 양쪽에 넣어야 실제로 바뀐다.
+     */
+    useEffect(() => {
+        editorRef.current?.updateOptions({ tabSize });
+        modelRef.current?.updateOptions({ tabSize });
+        diffRef.current?.getModifiedEditor().updateOptions({ tabSize });
+        diffRef.current?.getOriginalEditor().updateOptions({ tabSize });
+    }, [tabSize, doc, diff]);
 
     useEffect(() => {
         const editor = editorRef.current;
@@ -252,6 +294,19 @@ export function CodeView(props: CodeViewProps): JSX.Element {
         diffRef.current = created;
     }, [diff, originalText, doc, theme]);
 
+    /** 이 문서의 여백 표식. 줄 번호로 미리 모아 둔다. */
+    const marks = useMemo(
+        () => (gutter === undefined ? [] : gutterLines(gutter, doc?.relPath ?? null)),
+        [gutter, doc?.relPath],
+    );
+
+    useEffect(() => {
+        gutterByLine.current = new Map(marks.map((mark) => [mark.line + 1, {
+            nodeIds: mark.nodeIds,
+            noteIds: mark.notes.map((note) => note.annotationId),
+        }]));
+    }, [marks]);
+
     useEffect(() => {
         const editor = editorRef.current;
         if (!editor || diffRef.current !== null) return;
@@ -292,9 +347,24 @@ export function CodeView(props: CodeViewProps): JSX.Element {
                         linesDecorationsClassName: 'changed-line deleted',
                     },
                 })),
+                // 여백 표식 (V04). 노드는 `anchorLine` 한 줄에만 둔다 — 본문
+                // 전체에 색을 칠하면 hunk 의 색 띠와 섞인다.
+                ...marks.map((mark) => ({
+                    range: new monaco.Range(mark.line + 1, 1, mark.line + 1, 1),
+                    options: {
+                        glyphMarginClassName: mark.nodeIds.length > 0
+                            ? 'glyph-node'
+                            : `glyph-note k-${mark.notes[0]?.kind ?? 'explanation'}`,
+                        glyphMarginHoverMessage: {
+                            value: mark.nodeIds.length > 0
+                                ? `트레일 노드 ${mark.nodeIds.length}개 — 누르면 그 노드로`
+                                : `분석 기록 ${mark.notes.length}개 — 누르면 그 기록으로`,
+                        },
+                    },
+                })),
             ],
         );
-    }, [annotationRanges, hunks, doc, diff]);
+    }, [annotationRanges, hunks, doc, diff, marks]);
 
     return <div className={diff ? 'code-view diff' : 'code-view'} ref={hostRef} />;
 }

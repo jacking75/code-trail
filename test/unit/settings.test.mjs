@@ -92,3 +92,22 @@ test('defaultSettings 는 호출할 때마다 새 객체를 준다', () => {
     assert.equal(b.ui.fontSize, 0);
     assert.deepEqual(b.languages.cpp.args, []);
 });
+
+test('탭 폭은 기본 4 이고 옛 설정 파일에도 채워진다', () => {
+    // 표시 설정이다. 두 화면이 같은 값을 써야 같은 함수가 같게 보인다(V20).
+    assert.equal(shared.defaultSettings().ui.tabSize, 4);
+
+    const legacy = shared.defaultSettings();
+    delete legacy.ui.tabSize;
+    const parsed = shared.parseWith(shared.projectSettingsSchema, legacy);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.value.ui.tabSize, 4);
+
+    assert.equal(
+        shared.parseWith(shared.projectSettingsSchema, {
+            ...shared.defaultSettings(),
+            ui: { ...shared.defaultSettings().ui, tabSize: 0 },
+        }).ok,
+        false,
+    );
+});

@@ -13,6 +13,16 @@
 
 export type AnnotationKind = 'explanation' | 'question' | 'concern' | 'conclusion';
 
+/** 검토 표시의 네 상태. 헤더의 `☐/☑` 와 hunk 줄이 함께 쓴다(V02·V03). */
+export type ReviewStateView = 'unreviewed' | 'reviewing' | 'reviewed' | 'needsReview';
+
+/** 파일의 이 줄 범위가 어떤 검토 상태인지. hunk 겹침 판정이 쓴다(V03). */
+export interface ReviewMarkView {
+    startLine: number;
+    endLine: number;
+    state: ReviewStateView;
+}
+
 export interface AnnotationMarkView {
     annotationId: string;
     kind: AnnotationKind;
@@ -39,6 +49,12 @@ export interface AnnotationIndex {
     trailTotal: number;
     total: number;
     open: number;
+    /** 노드 대상 검토 상태. 헤더의 `☑` 와 배지가 쓴다(V02). */
+    reviewByNode: Map<string, ReviewStateView>;
+    /** 파일별 범위 검토. 변경 목록의 hunk 표시가 쓴다(V03). */
+    reviewsByFile: Map<string, ReviewMarkView[]>;
+    /** 툴바의 `확인함 N · 재검토 K`. 분모는 두지 않는다. */
+    reviewCounts: { reviewed: number; needsReview: number };
 }
 
 /** 분석 문서에서 색인이 보는 만큼만. 화면 타입을 그대로 받지 않는다. */
@@ -53,6 +69,8 @@ export interface AnalysisLike {
     }>;
     anchors: ReadonlyArray<Record<string, unknown>>;
     baselines: ReadonlyArray<Record<string, unknown>>;
+    /** 검토 기록. 없는 화면 타입도 있으므로 선택이다. */
+    reviews?: ReadonlyArray<{ target: Record<string, unknown>; state: string }>;
 }
 
 function emptyCount(): AnnotationCount {
@@ -86,6 +104,9 @@ export function buildAnnotationIndex(analysis: AnalysisLike | null): AnnotationI
         trailTotal: 0,
         total: 0,
         open: 0,
+        reviewByNode: new Map(),
+        reviewsByFile: new Map(),
+        reviewCounts: { reviewed: 0, needsReview: 0 },
     };
     if (analysis === null) {
         return index;
@@ -159,7 +180,55 @@ export function buildAnnotationIndex(analysis: AnalysisLike | null): AnnotationI
         });
         index.byFile.set(relPath, marks);
     }
+
+    // 검토는 기록과 별개의 목록이다. 같은 앵커·같은 노드를 가리키지만 "봤다" 는
+    // 기록 없이도 남길 수 있다(V02·V03).
+    for (const review of analysis.reviews ?? []) {
+        const state = isReviewState(review.state) ? review.state : 'unreviewed';
+        if (state === 'reviewed') index.reviewCounts.reviewed += 1;
+        if (state === 'needsReview') index.reviewCounts.needsReview += 1;
+        const target = review.target as { kind?: string; nodeId?: string; anchorId?: string };
+        if (target.kind === 'node' && typeof target.nodeId === 'string') {
+            index.reviewByNode.set(target.nodeId, state);
+            continue;
+        }
+        if (target.kind !== 'range' || typeof target.anchorId !== 'string') continue;
+        const anchor = anchorById.get(target.anchorId);
+        const relPath = anchor === undefined ? undefined : fileById.get(anchor.fileId);
+        if (anchor === undefined || relPath === undefined) continue;
+        const marks = index.reviewsByFile.get(relPath) ?? [];
+        marks.push({ startLine: anchor.range.start.line, endLine: anchor.range.end.line, state });
+        index.reviewsByFile.set(relPath, marks);
+    }
     return index;
+}
+
+function isReviewState(value: unknown): value is ReviewStateView {
+    return value === 'unreviewed' || value === 'reviewing'
+        || value === 'reviewed' || value === 'needsReview';
+}
+
+/**
+ * 그 파일의 이 줄 범위를 덮는 검토 상태 (V03).
+ *
+ * 범위가 정확히 같지 않아도 `확인함` 범위가 hunk 를 덮으면 확인한 것으로 본다 —
+ * 함수 하나를 통째로 확인하면 그 안의 hunk 도 본 것이다. 재검토가 하나라도
+ * 겹치면 재검토가 이긴다. "다시 봐야 한다" 는 쪽이 놓치면 안 되는 신호다.
+ */
+export function reviewForRange(
+    index: AnnotationIndex,
+    relPath: string | null,
+    startLine: number,
+    endLine: number,
+): ReviewStateView {
+    if (relPath === null) return 'unreviewed';
+    let best: ReviewStateView = 'unreviewed';
+    for (const mark of index.reviewsByFile.get(relPath) ?? []) {
+        if (mark.startLine > startLine || mark.endLine < endLine) continue;
+        if (mark.state === 'needsReview') return 'needsReview';
+        if (mark.state === 'reviewed' || best === 'unreviewed') best = mark.state;
+    }
+    return best;
 }
 
 /**
@@ -225,4 +294,58 @@ export function describeCount(count: AnnotationCount): string {
         parts.push(`미해결 ${count.open}`);
     }
     return parts.join(' · ');
+}
+
+/** 접힌 노드가 감추고 있는 것 (V12). */
+export interface SubtreeSummary {
+    /** 자기 자신을 뺀 하위 노드 수. */
+    nodes: number;
+    /** 하위(자기 포함) 기록 수. */
+    notes: number;
+    /** 하위(자기 포함) 미해결 질문·우려 수. */
+    open: number;
+    /** 하위(자기 포함) `재검토` 노드 수. */
+    needsReview: number;
+}
+
+/** 요약 계산이 노드에서 보는 만큼만. `TrailNodeView` 를 그대로 받지 않는다. */
+export interface SummaryNodeLike {
+    id: string;
+    symbol: { relPath: string | null; startLine: number; code: string };
+    children: readonly SummaryNodeLike[];
+}
+
+/**
+ * 노드마다 하위 요약을 한 번의 순회로 (V12).
+ *
+ * 접힌 노드는 `↳ N`(직계 자식 수)뿐이라 그 안에 미해결 우려가 있는지 알 수 없다.
+ * 노드마다 따로 세면 트리 깊이 × 노드 수가 되므로 아래에서 위로 한 번만 센다.
+ */
+export function subtreeSummary(
+    roots: readonly SummaryNodeLike[],
+    index: AnnotationIndex,
+): Map<string, SubtreeSummary> {
+    const out = new Map<string, SubtreeSummary>();
+    const visit = (node: SummaryNodeLike): SubtreeSummary => {
+        const lineCount = node.symbol.code === '' ? 0 : node.symbol.code.split(/\r?\n/).length;
+        const end = node.symbol.startLine + Math.max(0, lineCount - 1);
+        const own = countForNode(index, node.id, node.symbol.relPath, node.symbol.startLine, end);
+        const summary: SubtreeSummary = {
+            nodes: 0,
+            notes: own.total,
+            open: own.open,
+            needsReview: index.reviewByNode.get(node.id) === 'needsReview' ? 1 : 0,
+        };
+        for (const child of node.children) {
+            const childSummary = visit(child);
+            summary.nodes += childSummary.nodes + 1;
+            summary.notes += childSummary.notes;
+            summary.open += childSummary.open;
+            summary.needsReview += childSummary.needsReview;
+        }
+        out.set(node.id, summary);
+        return summary;
+    };
+    roots.forEach(visit);
+    return out;
 }

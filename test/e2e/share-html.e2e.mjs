@@ -55,6 +55,17 @@ try {
             if ((await page.locator('script').count()) !== 0 || await page.evaluate(() => globalThis.__executed === true)) {
                 throw new Error(`${name}: 공유 본문의 코드가 실행됐다.`);
             }
+            // 코드는 트리 구조를 지킨다(V23). 평평하게 늘어놓으면 "무엇에서
+            // 무엇으로 들어갔는지" 가 사라져 코드 조각 목록이 된다.
+            const nested = await page.locator('details details').count();
+            const total = await page.locator('details').count();
+            if (total > 1 && nested === 0) throw new Error(`${name}: 코드가 평평하게 나열됐다.`);
+            if (nested > 0) {
+                const ordinal = await page.locator('details details > summary').first().textContent();
+                if (!/^[①-⑳(]/.test(ordinal.trim())) {
+                    throw new Error(`${name}: 자식 코드에 순번이 없다 — ${ordinal}`);
+                }
+            }
             if (externalRequests.length > 0) throw new Error(`${name}: 외부 통신이 발생했다.`);
             if (consoleErrors.length > 0) throw new Error(`${name}: 페이지 오류가 발생했다.`);
             console.log(`  ok   ${name}에서 독립 정적 HTML·긴 본문·안내 순서·실행 차단을 확인했다.`);

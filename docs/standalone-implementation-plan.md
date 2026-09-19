@@ -1070,11 +1070,14 @@ trail.chooseCandidate
 trail.removeNode
 trail.toggleNode
 trail.promoteToRoot
+trail.undoPromote
 trail.setMode
 trail.setNodeUi
 trail.setActiveNode
+trail.resetBoardLayout
 trail.clear
 trail.exportMarkdown
+ui.saveLocalState
 workspace.openDocument
 workspace.searchFiles
 editor.openLocation
@@ -1133,9 +1136,11 @@ ai.accept
 | GET | `/api/analyses/:analysisId` | 분석 정본 조회 |
 | GET | `/api/analyses/:analysisId/anchors/:anchorId/compare` | 기록 당시 코드와 현재 코드의 읽기 전용 비교 |
 | GET | `/api/annotations/search` | 분석 기록 본문·메타데이터 검색 |
-| GET | `/api/changes` | 읽기 전용 Git 변경 목록 조회 |
+| GET | `/api/changes` | 읽기 전용 Git 변경 목록 조회. `from`·`to`·`mergeBase` 로 변경 기준을 고른다 |
+| GET | `/api/changes/refs` | 변경 기준으로 고를 브랜치와 최근 커밋 |
 | GET | `/api/workspace/content-search` | 제한된 일반 문자열 내용 검색 |
-| GET | `/api/trails/:trailId/export.md` | Markdown 다운로드 |
+| GET | `/api/trails/:trailId/export.md` | Markdown 다운로드. `analysis`·`mermaid` 로 기록과 그림을 함께 싣는다 |
+| GET | `/api/trails/:trailId/nodes/:nodeId/export.md` | 노드 하나와 그 하위의 Markdown |
 | GET | `/api/shares/:planId/:format` | 공유 묶음·Markdown·정적 HTML 다운로드 |
 | GET | `/api/diagnostics` | LSP 상태와 안전하게 정제한 진단 정보 |
 | GET | `/api/health` | 현재 프로세스의 단순 생존 확인 |

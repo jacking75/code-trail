@@ -1414,3 +1414,155 @@ test('파일이 바뀐 노드만 오래됐다고 알리고, 다시 읽으면 배
         await removeProject(project.root);
     }
 });
+
+test('떼어낸 노드를 되돌리면 원래 자리로 돌아간다', async () => {
+    // `⇱` 는 관계를 바꾸는 유일한 동작이다. 되돌릴 수 없으면 잘못 떼어낸
+    // 서브트리를 원래 자리로 되돌릴 길이 없다(V10).
+    const project = await makeLspProject('normal');
+    try {
+        await startWithFakeLsp(project, async (running) => {
+            const client = await connect(running);
+            const { trailId, root, revision } = await seedTrailWithRoot(running, client);
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.resolve',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: revision,
+                payload: { nodeId: root.id, line: 3, char: 28, text: 'Find' },
+            });
+            const added = await client.wait((e) => e.type === 'trail.nodeAdded');
+            const child = added.payload.node;
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.promoteToRoot',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: added.revision,
+                payload: { nodeId: child.id },
+            });
+            const promoted = await client.wait((e) => e.type === 'trail.nodePromoted');
+            assert.equal(promoted.payload.undoable, true);
+            assert.equal(promoted.payload.name, 'Find');
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.undoPromote',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: promoted.revision,
+                payload: { nodeId: child.id },
+            });
+            const restored = await client.wait(
+                (e) => e.type === 'trail.snapshot' && e.revision > promoted.revision,
+            );
+            assert.deepEqual(restored.payload.roots.map((node) => node.id), [root.id]);
+            const back = restored.payload.roots[0].children[0];
+            assert.equal(back.id, child.id);
+            assert.deepEqual(back.origin, { line: 3, char: 28, text: 'Find' });
+
+            await client.close();
+        });
+    } finally {
+        await removeProject(project.root);
+    }
+});
+
+test('떼어낸 뒤 다른 구조 명령이 오면 되돌리기를 거절한다', async () => {
+    // 되돌리기 버퍼는 한 단계다. 그 사이에 트리가 또 바뀌면 원래 자리가 없다.
+    const project = await makeLspProject('normal');
+    try {
+        await startWithFakeLsp(project, async (running) => {
+            const client = await connect(running);
+            const { trailId, root, revision } = await seedTrailWithRoot(running, client);
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.resolve',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: revision,
+                payload: { nodeId: root.id, line: 3, char: 28, text: 'Find' },
+            });
+            const added = await client.wait((e) => e.type === 'trail.nodeAdded');
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.promoteToRoot',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: added.revision,
+                payload: { nodeId: added.payload.node.id },
+            });
+            const promoted = await client.wait((e) => e.type === 'trail.nodePromoted');
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.rename',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: promoted.revision,
+                payload: { title: '그 사이에 바뀜' },
+            });
+            const renamed = await client.wait((e) => e.type === 'trail.renamed');
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.undoPromote',
+                commandId: randomUUID(),
+                trailId,
+                baseRevision: renamed.revision,
+                payload: { nodeId: added.payload.node.id },
+            });
+            const error = await client.wait((e) => e.type === 'command.error');
+            assert.equal(error.payload.error.code, 'NOT_FOUND');
+
+            await client.close();
+        });
+    } finally {
+        await removeProject(project.root);
+    }
+});
+
+test('보드 배치 초기화는 좌표만 지우고 revision 을 올리지 않는다', async () => {
+    // 화면 상태다. revision 이 오르면 배치를 정리한 것만으로 날아가던 구조
+    // 명령이 거절된다(V11).
+    const project = await makeLspProject('normal');
+    try {
+        await startWithFakeLsp(project, async (running) => {
+            const client = await connect(running);
+            const { trailId, root, revision } = await seedTrailWithRoot(running, client);
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.setNodeUi',
+                commandId: randomUUID(),
+                trailId,
+                payload: { nodeId: root.id, patch: { boardX: 120, boardY: 240, bodyHeight: 180 } },
+            });
+            await client.wait((e) => e.type === 'trail.nodeUiChanged');
+
+            client.send({
+                protocolVersion: 1,
+                type: 'trail.resetBoardLayout',
+                commandId: randomUUID(),
+                trailId,
+                payload: {},
+            });
+            const snapshot = await client.wait(
+                (e) => e.type === 'trail.snapshot'
+                    && e.payload.nodeUi[root.id]?.bodyHeight === 180
+                    && e.payload.nodeUi[root.id]?.boardX === undefined,
+            );
+            assert.equal(snapshot.revision, revision);
+            // 본문 높이는 배치와 상관없는 값이라 남는다.
+            assert.equal(snapshot.payload.nodeUi[root.id].bodyHeight, 180);
+
+            await client.close();
+        });
+    } finally {
+        await removeProject(project.root);
+    }
+});

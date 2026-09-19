@@ -326,3 +326,64 @@ test('트레일 파일 이름은 UUID 뿐이다', async () => {
         await removeProject(root);
     }
 });
+
+test('개인 화면 상태는 서버를 다시 띄워도 남고 절대경로를 담지 않는다', async () => {
+    // `localStorage` 는 origin 이 포트에 묶여 재시작을 못 견딘다. 저장한 줄
+    // 알았던 값이 매번 초기화되면 안 된다(V18).
+    const root = await makeProject({ 'src/a.cpp': 'void a() {}\n' });
+    const state = {
+        schemaVersion: 1,
+        layout: 'split',
+        sidebar: { width: 340, collapsed: true },
+        annotationColumn: { open: true, width: 380 },
+        lastPane: 'trail',
+        lastDocument: { relPath: 'src/a.cpp', line: 3, char: 2 },
+        navigation: [{ pane: 'code', relPath: 'src/a.cpp', line: 3, char: 2 }],
+        navigationIndex: 0,
+        changeBase: { mode: 'since', from: 'main', to: null, mergeBase: false, label: 'main 이후' },
+    };
+    try {
+        await withServer(root, async (running) => {
+            running.context.localUiState.save(state);
+            await running.context.localUiState.flush();
+        });
+
+        const target = path.join(root, '.code-trail', 'local', 'ui-state.json');
+        const raw = await readFile(target, 'utf8');
+        assert.equal(raw.includes(root), false, '절대경로를 담지 않는다');
+        assert.equal(raw.includes('documentId'), false);
+
+        await withServer(root, async (running) => {
+            const bootstrap = await (await authFetch(running, '/api/bootstrap')).json();
+            assert.deepEqual(bootstrap.localUiState, state);
+        });
+    } finally {
+        await removeProject(root);
+    }
+});
+
+test('공유 읽기 모드에서는 개인 화면 상태를 쓰지 않는다', async () => {
+    // 임시 디렉터리라 남길 자리가 아니다.
+    const root = await makeProject({ 'src/a.cpp': 'void a() {}\n' });
+    try {
+        await withServer(root, async (running) => {
+            running.context.localUiState.save({
+                schemaVersion: 1,
+                layout: 'tabs',
+                sidebar: { width: 280, collapsed: false },
+                annotationColumn: { open: false, width: 320 },
+                lastPane: 'code',
+                lastDocument: null,
+                navigation: [],
+                navigationIndex: -1,
+                changeBase: null,
+            });
+            await running.context.localUiState.flush();
+        }, { readOnlyShare: true });
+
+        const target = path.join(root, '.code-trail', 'local', 'ui-state.json');
+        await assert.rejects(() => readFile(target, 'utf8'));
+    } finally {
+        await removeProject(root);
+    }
+});

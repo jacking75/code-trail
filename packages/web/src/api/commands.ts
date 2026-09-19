@@ -123,6 +123,14 @@ export const commands = {
     promoteToRoot: (context: CommandContext, nodeId: string) =>
         send(context, 'trail.promoteToRoot', { nodeId }),
 
+    /** 방금 떼어낸 노드를 원래 부모의 원래 자리로 (V10). */
+    undoPromote: (context: CommandContext, nodeId: string) =>
+        send(context, 'trail.undoPromote', { nodeId }),
+
+    /** 보드에서 손으로 옮긴 자리를 모두 지운다. 화면 상태라 revision 을 싣지 않는다(V11). */
+    resetBoardLayout: (context: CommandContext) =>
+        send(context, 'trail.resetBoardLayout', {}, { withRevision: false }),
+
     clear: (context: CommandContext) => send(context, 'trail.clear', {}),
 
     setActiveNode: (context: CommandContext, nodeId: string | null) =>
@@ -155,8 +163,25 @@ export const commands = {
         },
     ) => send(context, 'trail.setNodeUi', { nodeId, patch }, { withRevision: false }),
 
-    exportMarkdown: (context: CommandContext) =>
-        send(context, 'trail.exportMarkdown', {}, { withRevision: false }),
+    exportMarkdown: (
+        context: CommandContext,
+        options: { analysisId?: string; mermaid?: boolean } = {},
+    ) => send(context, 'trail.exportMarkdown', {
+        ...(options.analysisId === undefined ? {} : { analysisId: options.analysisId }),
+        mermaid: options.mermaid ?? false,
+    }, { withRevision: false }),
+
+    /**
+     * 이 기계의 개인 화면 상태를 저장한다 (V18).
+     *
+     * `localStorage` 는 origin 이 포트에 묶여 재시작을 못 견딘다. 트레일과 무관한
+     * 값이므로 `trailId` 도 `baseRevision` 도 싣지 않는다.
+     */
+    saveLocalUiState: (context: CommandContext, state: unknown) =>
+        send(context, 'ui.saveLocalState', { state }, {
+            withRevision: false,
+            withTrail: false,
+        }),
 
     /**
      * 외부 에디터에서 열기.

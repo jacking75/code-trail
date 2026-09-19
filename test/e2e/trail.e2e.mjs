@@ -100,6 +100,10 @@ const browser = await chromium.launch({
 
 try {
     const page = await browser.newPage({ viewport: { width: 1500, height: 950 } });
+    // `링크 복사` 결과를 읽어 확인한다(V08). 제품 코드는 쓰기만 한다.
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], {
+        origin: running.url,
+    });
     /*
      * 열린 WebSocket 을 붙들어 둔다.
      *
@@ -140,7 +144,7 @@ try {
     // 누른다" 가 첫 사용의 첫 마찰이었다(U05).
     check(
         '아직 트레일이 없다',
-        (await page.locator('.trail-pick option').first().textContent()) === '없음',
+        (await page.locator('.trail-pick').textContent()).includes('없음'),
     );
     await page.locator('.tree-row', { hasText: 'src' }).first().click();
     await page.waitForSelector('button:has-text("dispatch.cpp")');
@@ -154,13 +158,13 @@ try {
     check('트레일 탭으로 넘어갔다', (await page.locator('.pane-tabs .tab.active').textContent()).includes('트레일'));
     check('키 한 번으로 루트가 생겼다', (await page.locator('.node').count()) === 1);
     await page.waitForFunction(
-        () => document.querySelector('.trail-pick option')?.textContent?.startsWith('Find') === true,
+        () => document.querySelector('.trail-pick')?.textContent?.includes('Find') === true,
         undefined,
         { timeout: 8000 },
     );
     check(
         '트레일 이름이 첫 함수 이름이 된다',
-        (await page.locator('.trail-pick option').first().textContent()).startsWith('Find'),
+        (await page.locator('.trail-pick').textContent()).includes('Find'),
     );
 
     console.log('\n[헤더 구성]');
@@ -172,6 +176,8 @@ try {
     check('감싸는 클래스는 함수 노드에 안 붙는다', (await header.locator('.container').count()) === 0);
     check('⚑ 버튼이 있다', (await header.locator('[data-act="impl"]').count()) === 1);
     check('＋ 기록 버튼이 있다', (await header.locator('[data-act="note"]').count()) === 1);
+    check('☐ 검토 표시가 있다', (await header.locator('[data-act="review"]').count()) === 1);
+    check('⋯ 노드 메뉴 버튼이 있다', (await header.locator('[data-act="menu"]').count()) === 1);
     check('루트에는 ⇱ 가 없다', (await header.locator('[data-act="root"]').count()) === 0);
     check('바뀌지 않은 노드에는 ↻ 가 없다', (await header.locator('[data-act="refresh"]').count()) === 0);
 
@@ -256,6 +262,26 @@ try {
     await page.locator('#filter').fill('없는이름xyz');
     await page.waitForTimeout(200);
     check('안 걸리면 다 사라진다', (await page.locator('.node').count()) === 0);
+
+    // 본문 대상 — "이 트레일에서 이 낱말을 만진 곳" (V09).
+    // 브레드크럼 단계에서 자식 헤더를 눌러 접혔다. 본문을 봐야 하므로 펼친다.
+    await page.locator('#filter').fill('');
+    await page.waitForTimeout(200);
+    if (await page.locator('.node .kids .node.collapsed').count() > 0) {
+        await page.locator('.node .kids .node > .hd .name').first().click();
+        await page.waitForFunction(
+            () => document.querySelectorAll('.node .kids .node.collapsed').length === 0,
+            undefined,
+            { timeout: 8000 },
+        );
+    }
+    await page.locator('#filter-scope').selectOption('body');
+    await page.locator('#filter').fill('entries_');
+    await page.waitForTimeout(250);
+    check('본문 필터가 그 노드만 남긴다', (await page.locator('.node').count()) === 2);
+    check('걸린 줄이 강조된다', (await page.locator('.node .code .cl.hit').count()) >= 1);
+    check('매치 수를 보여준다', (await page.locator('#filter-count').textContent()).includes('1'));
+    await page.locator('#filter-scope').selectOption('name');
     await page.locator('#filter').fill('');
     await page.waitForTimeout(200);
 
@@ -557,6 +583,83 @@ try {
     );
     check('↑ 로 부모로 돌아온다', true);
 
+    console.log(`${NL}[접힌 노드 하위 요약 (V12)]`);
+    // 접힌 노드는 `↳ N`(직계) 뿐이라 그 안에 볼 것이 있는지 알 수 없었다.
+    await page.getByRole('button', { name: '⤡ 전체 접기' }).click();
+    await page.waitForFunction(
+        () => document.querySelectorAll('.node:not(.collapsed)').length === 0,
+        undefined,
+        { timeout: 8000 },
+    );
+    check('접힌 루트가 하위 수를 알려준다',
+        (await page.locator('#root > .node > .hd .sub-summary').textContent()).includes('하위 1'));
+    await page.getByRole('button', { name: '⤢ 전체 펼치기' }).click();
+    await page.waitForFunction(
+        () => document.querySelectorAll('.node.collapsed').length === 0,
+        undefined,
+        { timeout: 8000 },
+    );
+    check('펼치면 요약이 사라진다', (await page.locator('.sub-summary').count()) === 0);
+
+    console.log(`${NL}[노드에서 코드 화면으로 (V05)]`);
+    // 함수를 감싸는 클래스의 다른 멤버를 보려면 예전에는 외부 에디터뿐이었다.
+    await page.locator('.node > .hd .loc').first().click();
+    await page.waitForSelector('.code-view .monaco-editor', { timeout: 15000 });
+    check('코드 탭으로 갔다', (await page.locator('.doc-path').textContent()).includes('dispatch.cpp'));
+    check('여백 표식이 보인다', (await page.locator('.glyph-node').count()) >= 1);
+
+    // 여백의 노드 표식을 누르면 그 노드로 돌아간다 (V04).
+    await page.locator('.glyph-node').first().click();
+    await page.waitForFunction(
+        () => document.querySelector('.pane-tabs .tab.active')?.textContent?.includes('트레일') === true,
+        undefined,
+        { timeout: 8000 },
+    );
+    check('여백 표식으로 트레일 노드에 간다', (await page.locator('.node.active').count()) === 1);
+
+    console.log(`${NL}[검토 표시 (V02)]`);
+    // 헤더를 누르면 접힌다. 키를 보내려면 포커스만 준다.
+    await page.locator('#root > .node > .hd').first().focus();
+    await page.keyboard.press('v');
+    await page.waitForSelector('.badge.reviewed', { timeout: 8000 });
+    check('헤더에 ✓ 가 남는다', (await page.locator('.badge.reviewed').count()) === 1);
+    check('툴바에 확인함 개수가 나온다',
+        (await page.locator('#review-counts').textContent()).includes('확인함 1'));
+    await page.keyboard.press('v');
+    await page.waitForFunction(
+        () => document.querySelector('.badge.reviewed') === null,
+        undefined,
+        { timeout: 8000 },
+    );
+    check('다시 누르면 되돌아간다', (await page.locator('.badge.reviewed').count()) === 0);
+
+    console.log(`${NL}[노드 메뉴 (V08)]`);
+    await page.locator('#root > .node > .hd').first().click({ button: 'right' });
+    await page.waitForSelector('.node-menu', { timeout: 8000 });
+    const menuItems = await page.locator('.node-menu-item').allTextContents();
+    check('메뉴에 Markdown 복사와 링크 복사가 있다',
+        menuItems.includes('Markdown 복사') && menuItems.includes('링크 복사'), menuItems.join(', '));
+    await page.locator('.node-menu-item', { hasText: '링크 복사' }).click();
+    await page.waitForSelector('.notice', { timeout: 8000 });
+    const copyNotice = await page.locator('.notice').first().textContent();
+    check('링크를 복사했다고 알린다', copyNotice.includes('복사'), copyNotice);
+    await page.locator('.notice .notice-close').first().click();
+
+    // 링크가 실제로 그 노드를 연다. 클립보드를 읽을 수 없는 브라우저에서도
+    // 확인할 수 있도록 같은 모양의 주소로 새 탭을 연다.
+    const linkTarget = await page.locator('#root > .node').first().getAttribute('data-id');
+    const linkTrail = await page.evaluate(() => sessionStorage.getItem('codeTrail.trailId'));
+    const linked = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+    await linked.goto(
+        `${running.url}/#token=${running.token}&trail=${linkTrail ?? ''}&node=${linkTarget}`,
+    );
+    await linked.waitForSelector('.node.active', { timeout: 15000 });
+    check('노드 링크를 열면 그 노드가 활성이다',
+        (await linked.locator('.node.active').first().getAttribute('data-id')) === linkTarget);
+    check('주소에서 토큰은 지워진다',
+        !(await linked.evaluate(() => window.location.hash)).includes('token='));
+    await linked.close();
+
     console.log('\n[새 루트로 떼어내기]');
     await page.locator('.node .kids .node > .hd [data-act="root"]').first().click();
     await page.waitForFunction(
@@ -583,12 +686,14 @@ try {
     await second.waitForSelector('#root > .node', { timeout: 15000 });
     check('두 번째 탭도 같은 트리를 본다', (await second.locator('#root > .node').count()) === 2);
 
-    // 첫 탭에서 이름을 바꾸면 두 번째 탭의 목록도 따라 바뀐다.
-    await page.getByRole('button', { name: '✎ 이름' }).click();
-    await page.locator('.rename input').fill('바뀐 이름');
-    await page.locator('.rename button[type="submit"]').click();
+    // 첫 탭에서 이름을 바꾸면 두 번째 탭의 이름도 따라 바뀐다.
+    await page.locator('.trail-pick').click();
+    await page.locator('.trail-list-rows li.active button[aria-label="트레일 이름 바꾸기"]').click();
+    await page.locator('.trail-list .rename input').fill('바뀐 이름');
+    await page.locator('.trail-list .rename button[type="submit"]').click();
+    await page.keyboard.press('Escape');
     await second.waitForFunction(
-        () => document.querySelector('.trail-pick option')?.textContent?.includes('바뀐 이름') === true,
+        () => document.querySelector('.trail-pick')?.textContent?.includes('바뀐 이름') === true,
         undefined,
         { timeout: 8000 },
     );

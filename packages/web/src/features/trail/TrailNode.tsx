@@ -6,6 +6,7 @@ import {
     describeCount,
     marksInRange,
     type AnnotationIndex,
+    type SubtreeSummary,
 } from './annotationIndex.js';
 import { sortChildren, type BoardPoint } from './board.js';
 import { CodeBody, callSiteKey } from './CodeBody.js';
@@ -59,6 +60,10 @@ export interface TrailNodeProps {
     annotations: AnnotationIndex;
     /** 파일이 바뀌어 옛 코드를 보여주고 있는 노드(U08). */
     staleNodeIds: ReadonlySet<string>;
+    /** 접힌 헤더에 적을 하위 요약(V12). 노드 ID 로 찾는다. */
+    summaries: ReadonlyMap<string, SubtreeSummary>;
+    /** 본문에서 필터에 걸린 줄(V09). 강조에만 쓴다. */
+    filterHits: ReadonlyMap<string, number[]>;
 
     onToggle: (node: TrailNodeView) => void;
     onRemove: (node: TrailNodeView) => void;
@@ -93,6 +98,12 @@ export interface TrailNodeProps {
     onOpenAnnotation: (annotationId: string) => void;
     /** 이 노드에 포커스가 들어왔다. roving tabindex 를 옮긴다. */
     onFocusHeader: (nodeId: string) => void;
+    /** 헤더의 `☐/☑` — 이 노드를 확인함으로 표시하거나 되돌린다(V02). */
+    onToggleReview: (node: TrailNodeView) => void;
+    /** 헤더의 `경로:줄` — 코드 화면에서 이 위치를 연다(V05). */
+    onOpenInCodeView: (node: TrailNodeView) => void;
+    /** 헤더의 `⋯` 또는 우클릭 — 노드 메뉴를 연다(V08). */
+    onOpenMenu: (node: TrailNodeView, anchor: { x: number; y: number }) => void;
 }
 
 /** 본문 높이 저장을 몰아 보내는 간격. 끄는 동안 매 프레임 보내지 않는다. */
@@ -207,6 +218,9 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
         bodyEnd,
     );
     const active = props.activeNodeId === node.id;
+    const review = props.annotations.reviewByNode.get(node.id) ?? 'unreviewed';
+    const summary = props.summaries.get(node.id);
+    const hitLines = props.filterHits.get(node.id);
     const spot = props.positions[node.id];
     const style = board && spot !== undefined
         ? { left: `${Math.round(spot.x)}px`, top: `${Math.round(spot.y)}px` }
@@ -232,6 +246,12 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
                 aria-selected={active}
                 data-node-header={node.id}
                 onFocus={() => props.onFocusHeader(node.id)}
+                onContextMenu={(event) => {
+                    // 헤더 우클릭은 노드 메뉴다(V08). 본문 우클릭은 브라우저
+                    // 기본 메뉴 그대로다 — 코드를 복사하려던 것일 수 있다.
+                    event.preventDefault();
+                    props.onOpenMenu(node, { x: event.clientX, y: event.clientY });
+                }}
                 onClick={(event) => {
                     // 헤더 버튼을 눌렀으면 접기까지 하지 않는다.
                     if ((event.target as HTMLElement).closest('button')) {
@@ -255,10 +275,33 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
 
                 <span className="name" title={node.symbol.name}>{parts.name}</span>
                 {children.length > 0 ? <span className="cnt">{`↳ ${children.length}`}</span> : null}
+                {/*
+                  * 접힌 노드만 하위 요약을 단다(V12). 펼쳐져 있으면 그 안이
+                  * 이미 보이므로 같은 말을 두 번 하는 것이다.
+                  */}
+                {node.collapsed && summary !== undefined && summary.nodes > 0 ? (
+                    <span className="sub-summary" title="접힌 하위 노드 요약">
+                        {`하위 ${summary.nodes}`}
+                        {summary.notes > 0 ? ` · ✎ ${summary.notes}` : ''}
+                        {summary.open > 0 ? ` · 미해결 ${summary.open}` : ''}
+                        {summary.needsReview > 0 ? ` · 재검토 ${summary.needsReview}` : ''}
+                    </span>
+                ) : null}
                 {parts.sig !== '' ? (
                     <span className="sig" title={parts.sig}>{parts.sig}</span>
                 ) : null}
-                <span className="loc">{locationLabel(node.symbol)}</span>
+                <button
+                    type="button"
+                    className="loc"
+                    data-act="goto"
+                    disabled={node.symbol.relPath === null}
+                    title={node.symbol.relPath === null
+                        ? '프로젝트 밖 파일은 코드 화면에서 열 수 없다.'
+                        : '코드 화면에서 보기 (g)'}
+                    onClick={() => props.onOpenInCodeView(node)}
+                >
+                    {locationLabel(node.symbol)}
+                </button>
 
                 {node.recursive ? <span className="badge rec">재귀</span> : null}
                 {node.symbol.declarationOnly ? (
@@ -283,6 +326,17 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
                         title="이 노드의 파일이 바뀌었다. ↻ 로 현재 코드를 다시 읽는다."
                     >
                         바뀜
+                    </span>
+                ) : null}
+                {review === 'reviewed' ? (
+                    <span className="badge reviewed" title="이 노드를 확인했다.">✓</span>
+                ) : null}
+                {review === 'needsReview' ? (
+                    <span
+                        className="badge needs-review"
+                        title="확인한 뒤 코드가 바뀌었다. 다시 본다."
+                    >
+                        재검토
                     </span>
                 ) : null}
                 {noteCount.total > 0 ? (
@@ -312,6 +366,19 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
                   * 다음 줄로 떨어져 나가 헤더가 깨져 보인다. 줄바꿈은 묶음 단위로 한다.
                   */}
                 <span className="acts">
+                <button
+                    type="button"
+                    className={`act review${review === 'reviewed' ? ' on' : ''}`}
+                    data-act="review"
+                    aria-pressed={review === 'reviewed'}
+                    title={review === 'reviewed'
+                        ? '확인함 — 다시 누르면 되돌린다 (v)'
+                        : '이 노드를 확인함으로 표시 (v)'}
+                    onClick={() => props.onToggleReview(node)}
+                >
+                    {review === 'reviewed' ? '☑' : '☐'}
+                </button>
+
                 <button
                     type="button"
                     className="act"
@@ -384,6 +451,20 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
                 >
                     ✕
                 </button>
+
+                <button
+                    type="button"
+                    className="act"
+                    data-act="menu"
+                    aria-haspopup="menu"
+                    title="노드 메뉴 (m · 헤더 우클릭)"
+                    onClick={(event) => {
+                        const box = event.currentTarget.getBoundingClientRect();
+                        props.onOpenMenu(node, { x: box.left, y: box.bottom });
+                    }}
+                >
+                    ⋯
+                </button>
                 </span>
             </div>
 
@@ -411,6 +492,7 @@ export function TrailNode(props: TrailNodeProps): JSX.Element | null {
                     maxCodeLines={props.maxCodeLines}
                     visited={visited}
                     marks={marks}
+                    {...(hitLines === undefined ? {} : { hitLines })}
                     {...(ui?.codeFontSize === undefined
                         ? {}
                         : { fontSize: ui.codeFontSize })}

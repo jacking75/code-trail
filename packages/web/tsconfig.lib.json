@@ -16,6 +16,9 @@
     "src/features/trail/types.ts",
     "src/features/trail/board.ts",
     "src/features/trail/annotationIndex.ts",
-    "src/features/trail/keyboard.ts"
+    "src/features/trail/filter.ts",
+    "src/features/trail/keyboard.ts",
+    "src/features/source/gutterIndex.ts",
+    "src/features/annotations/annotationList.ts"
   ]
 }

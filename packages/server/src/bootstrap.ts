@@ -22,6 +22,7 @@ import { DocumentRegistry } from './workspace/documents.js';
 import { WorkspaceTree } from './workspace/tree.js';
 import { WorkspaceWatcher } from './workspace/watcher.js';
 import { AnalysisStore } from './persistence/analysisStore.js';
+import { LocalUiStateStore } from './persistence/localUiStateStore.js';
 import { AnalysisService } from './analysis/service.js';
 import { SharingService } from './sharing/service.js';
 import { GitService } from './git/service.js';
@@ -122,6 +123,12 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     await analysisStore.initialize();
     const analyses = new AnalysisService(analysisStore, logger);
     await analyses.load();
+    const localUiState = new LocalUiStateStore({
+        localDir: store.localDir,
+        logger,
+        readOnly: options.readOnlyShare ?? false,
+    });
+    await localUiState.load();
 
     const tree = new WorkspaceTree({ projectRoot });
     const documents = new DocumentRegistry(projectRoot);
@@ -191,6 +198,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         sharing,
         git,
         ai,
+        localUiState,
         readOnlyShare: options.readOnlyShare ?? false,
     };
 
@@ -261,6 +269,29 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         }
     };
 
+    /**
+     * 기록 위치를 자동으로 다시 판정한다 (V17).
+     *
+     * "파일이 바뀌면 알리되 자동으로 다시 읽지 않는다" 는 **문서와 노드 본문**에
+     * 대한 규칙이다. 앵커 재확인은 코드를 다시 읽는 것이 아니라 기록의 상태를
+     * 다시 판정하는 것이고, 재연결은 여전히 사람이 한다.
+     */
+    analyses.attachSource(
+        async (relPath) => {
+            const grant = await documents.grantInsideProject(relPath).catch(() => null);
+            if (grant === null) return null;
+            const content = await documents.read(grant.documentId).catch(() => null);
+            return content === null
+                ? null
+                : { text: content.text, contentHash: content.contentHash };
+        },
+        (document) => {
+            // 명령 없이 온 snapshot 이다. `commandId` 를 싣지 않는다.
+            app.gateway.broadcast('analysis.snapshot', { analysis: document }, {});
+            app.gateway.broadcast('analysis.listChanged', { analyses: analyses.list() }, {});
+        },
+    );
+
     const watcher = new WorkspaceWatcher({
         tree,
         logger,
@@ -270,6 +301,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
             // 갱신 시점은 화면(과 사용자)이 정한다.
             app.gateway.broadcast('workspace.filesChanged', { relPaths }, {});
             void announceStaleNodes(relPaths);
+            analyses.queueRecheck(relPaths);
             // 언어 서버에는 알린다. 그쪽은 낡은 내용으로 답하면 안 된다.
             for (const relPath of relPaths) {
                 void lsp.notifyFileChanged(
@@ -306,6 +338,8 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         app.gateway.closeAll();
         watcher.stop();
         // 3. 대기 중인 저장을 끝낸다.
+        await analyses.flushRecheck();
+        await localUiState.flush();
         await trails.flush();
         await scheduler.stop();
         // 4~6. 언어 서버에 shutdown/exit 를 보내고, 제한 시간을 넘긴 것만 끝낸다.

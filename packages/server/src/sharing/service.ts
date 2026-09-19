@@ -12,7 +12,9 @@ import {
     planShareMerge,
     shareBundleSchema,
     sharePayloadWithoutIntegrity,
+    fromStoredTrail,
     toStoredTrail,
+    trailToMarkdown,
     type AnalysisDocument,
     type AnnotationTarget,
     type ShareBundle,
@@ -475,16 +477,15 @@ export class SharingService {
         else unresolved.forEach((item) => lines.push(`- ${plain(item.body).replace(/\n/g, ' ')}`));
         if (bundle.exportPolicy.includeCode) {
             lines.push('## 포함된 코드', '');
-            for (const trail of bundle.trails) {
-                const stack = [...trail.roots];
-                while (stack.length > 0) {
-                    const node = stack.shift();
-                    if (!node) break;
-                    lines.push(`### ${node.symbol.name}`, '', `경로: ${node.symbol.displayPath}:${node.symbol.anchorLine + 1}`, '');
-                    const fence = node.symbol.code.includes('```') ? '````' : '```';
-                    lines.push(`${fence}${node.symbol.languageId}`, node.symbol.code, fence, '');
-                    stack.unshift(...node.children);
-                }
+            // 트레일 Markdown 과 같은 함수를 쓴다(V23). 두 내보내기가 다른 문서를
+            // 만들면 같은 이름의 내보내기 둘이 다른 문서가 된다.
+            for (const stored of bundle.trails) {
+                lines.push(trailToMarkdown(fromStoredTrail(stored), {
+                    title: oneLine(stored.title),
+                    trailId: stored.id,
+                    annotations: bundle.analysis.annotations,
+                    reviews: bundle.analysis.reviews,
+                }).replace(/^# /, '### '), '');
             }
         }
         return `${lines.join('\n').trimEnd()}\n`;
@@ -504,7 +505,9 @@ export class SharingService {
         };
         const annotations = bundle.analysis.annotations.map((item) =>
             `<article id="${escape(reference({ annotation: item.id }))}"><h3>${escape(kindLabel(item.kind))}</h3><p>${escape(item.body).replace(/\n/g, '<br>')}</p><small>${escape(item.tags.join(', '))}</small><a href="#${escape(reference({ annotation: item.id }))}">기록 링크</a></article>`).join('');
-        const steps = bundle.analysis.walkthroughs.flatMap((walkthrough) => walkthrough.steps.map((step) => ({ walkthrough, step })))
+        const flatSteps = bundle.analysis.walkthroughs.flatMap((walkthrough) =>
+            walkthrough.steps.map((step) => ({ walkthrough, step })));
+        const steps = flatSteps
             .map(({ walkthrough, step }, index) => {
                 const stepReference = reference({ walkthrough: walkthrough.id, step: step.id });
                 const annotationLink = step.annotationId
@@ -513,16 +516,40 @@ export class SharingService {
                 const nodeLink = !step.annotationId && step.target?.kind === 'node'
                     ? `<a href="#${escape(reference({ trail: step.target.trailId, node: step.target.nodeId }))}">연결된 노드</a>`
                     : '';
-                return `<li id="${escape(stepReference)}"><strong>${index + 1}. ${escape(step.title)}</strong><p>${escape(step.body)}</p>${annotationLink}${nodeLink}<a href="#${escape(stepReference)}">단계 링크</a></li>`;
+                // 스크립트가 없으므로 앵커 링크로만 따라 읽는다(V13). `:target` 이
+                // 지금 단계를 표시하고, 이전·다음이 그 자리를 옮긴다.
+                const neighbour = (offset: -1 | 1, label: string): string => {
+                    const other = flatSteps[index + offset];
+                    if (!other) return '';
+                    const href = reference({ walkthrough: other.walkthrough.id, step: other.step.id });
+                    return `<a class="walk-nav" href="#${escape(href)}">${label}</a>`;
+                };
+                return `<li id="${escape(stepReference)}"><strong>${index + 1}. ${escape(step.title)}</strong><p>${escape(step.body)}</p>${annotationLink}${nodeLink}${neighbour(-1, '← 이전')}${neighbour(1, '다음 →')}<a href="#${escape(stepReference)}">단계 링크</a></li>`;
             }).join('');
-        const code = bundle.trails.flatMap((trail) => {
-            const out: Array<{ trailId: string; node: StoredTrailNode }> = [];
-            const stack = [...trail.roots];
-            while (stack.length > 0) { const node = stack.shift(); if (node) { out.push({ trailId: trail.id, node }); stack.unshift(...node.children); } }
-            return out;
-        }).map(({ trailId, node }) => `<details id="${escape(reference({ trail: trailId, node: node.id }))}"><summary>${escape(node.symbol.name)} · ${escape(node.symbol.displayPath)}</summary><pre><code>${escape(node.symbol.code || '코드가 포함되지 않았다.')}</code></pre></details>`).join('');
+        // 트리 구조를 지킨다(V23). 평평하게 늘어놓으면 "무엇에서 무엇으로
+        // 들어갔는지" 가 사라져 코드 조각 목록이 된다.
+        const renderNode = (trailId: string, node: StoredTrailNode, ordinal: number): string => {
+            const id = escape(reference({ trail: trailId, node: node.id }));
+            const index = ordinal > 0 ? `${circledOrdinal(ordinal)} ` : '';
+            const children = node.children
+                .map((child, position) => renderNode(trailId, child, position + 1)).join('');
+            const origin = node.origin
+                ? `<small>↑ 부모의 ${node.origin.line + 1}번째 줄 ${escape(node.origin.text)}</small>`
+                : '';
+            return `<details id="${id}" open><summary>${index}${escape(node.symbol.name)} · ${escape(node.symbol.displayPath)}</summary>${origin}<pre><code>${escape(node.symbol.code || '코드가 포함되지 않았다.')}</code></pre>${children}</details>`;
+        };
+        const code = bundle.trails.map((trail) => trail.roots
+            .map((root, index) => renderNode(trail.id, root, trail.roots.length > 1 ? index + 1 : 0))
+            .join('')).join('');
         return `<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><title>${escape(bundle.analysis.title)}</title><style>body{font:16px/1.6 system-ui;max-width:1100px;margin:auto;padding:2rem;color:#18212b}main{display:grid;grid-template-columns:minmax(0,2fr) minmax(18rem,1fr);gap:2rem}article,details{border:1px solid #ccd5df;border-radius:8px;padding:.8rem;margin:.7rem 0}article:target,details:target,li:target{outline:3px solid #4f72d8;outline-offset:3px}pre{overflow:auto;background:#f4f6f8;padding:1rem}small{color:#526170}a{color:#315fbd;margin-right:.8rem}@media(max-width:760px){main{display:block}}</style><body><header><h1>${escape(bundle.analysis.title)}</h1><p>${escape(bundle.analysis.purpose)}</p><p>읽기 전용 공유 자료 · ${escape(bundle.createdAt)}</p></header><main><section><h2>코드</h2>${code}</section><aside><h2>안내 순서</h2><ol>${steps}</ol><h2>분석 기록</h2>${annotations}</aside></main></body></html>`;
     }
+}
+
+/** 형제 순번. 트레일 패널의 ①과 같은 글자다. */
+function circledOrdinal(index: number): string {
+    return index >= 1 && index <= 20
+        ? String.fromCharCode(0x2460 + index - 1)
+        : `(${index})`;
 }
 
 function kindLabel(kind: string): string {

@@ -122,3 +122,71 @@ test('원본 조회는 HEAD 와 커밋 해시만 받는다', async () => {
         await removeProject(root);
     }
 });
+
+test('변경 기준을 고르면 브랜치·커밋 목록과 merge-base 범위가 나온다', async () => {
+    // 브랜치 전체나 특정 커밋을 리뷰할 시작점이 없으면, 커밋한 뒤에는 변경
+    // 목록이 비어 리뷰가 끊긴다(V01).
+    const root = await makeProject({ 'src/a.txt': '처음\n' });
+    try {
+        await git(root, 'init', '-b', 'main');
+        await git(root, 'config', 'user.name', 'Code Trail Test');
+        await git(root, 'config', 'user.email', 'test@invalid.local');
+        await git(root, 'add', '--', '.');
+        await git(root, 'commit', '-m', 'base');
+        const base = (await git(root, 'rev-parse', 'HEAD')).trim();
+
+        await git(root, 'checkout', '-b', 'feature');
+        await writeFile(path.join(root, 'src', 'b.txt'), '새 파일\n', 'utf8');
+        await git(root, 'add', '--', '.');
+        await git(root, 'commit', '-m', 'feature work');
+
+        const service = new GitService(root);
+        const refs = await service.recentRefs();
+        assert.equal(refs.currentBranch, 'feature');
+        assert.equal(refs.defaultBranch, 'main');
+        assert.equal(refs.branches.includes('main'), true);
+        assert.equal(refs.commits[0].subject, 'feature work');
+
+        assert.equal(await service.mergeBase('main', 'feature'), base);
+
+        // 커밋한 뒤에도 그 범위가 리뷰 대상으로 남는다.
+        const between = await service.changesBetween('main', 'feature');
+        assert.deepEqual(between.map((item) => item.relPath), ['src/b.txt']);
+        assert.equal(between[0].area, 'commit');
+    } finally {
+        await removeProject(root);
+    }
+});
+
+test('기준 커밋만 주면 작업 트리까지 비교한다', async () => {
+    // `to` 를 `HEAD` 로 채워 넣으면 커밋한 뒤 고친 줄이 조용히 빠진다(V01).
+    const original = Array.from({ length: 6 }, (_, index) => `line ${index}`).join('\n') + '\n';
+    const root = await makeProject({ 'src/a.txt': original });
+    try {
+        await git(root, 'init');
+        await git(root, 'config', 'user.name', 'Code Trail Test');
+        await git(root, 'config', 'user.email', 'test@invalid.local');
+        await git(root, 'add', '--', '.');
+        await git(root, 'commit', '-m', 'base');
+        const base = (await git(root, 'rev-parse', 'HEAD')).trim();
+
+        const lines = original.split('\n');
+        lines[1] = 'line 1 — 커밋한 변경';
+        await writeFile(path.join(root, 'src', 'a.txt'), lines.join('\n'), 'utf8');
+        await git(root, 'add', '--', '.');
+        await git(root, 'commit', '-m', 'committed change');
+
+        lines[4] = 'line 4 — 아직 커밋 안 한 변경';
+        await writeFile(path.join(root, 'src', 'a.txt'), lines.join('\n'), 'utf8');
+
+        const service = new GitService(root);
+        const sinceBase = await service.hunks('src/a.txt', base);
+        assert.deepEqual(sinceBase.map((hunk) => hunk.newStart), [2, 5]);
+
+        // `to` 를 주면 커밋 사이만 본다.
+        const committedOnly = await service.hunks('src/a.txt', base, 'HEAD');
+        assert.deepEqual(committedOnly.map((hunk) => hunk.newStart), [2]);
+    } finally {
+        await removeProject(root);
+    }
+});

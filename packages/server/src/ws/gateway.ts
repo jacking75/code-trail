@@ -17,6 +17,8 @@ import {
     type AnnotationTarget,
     type Author,
     type CodeRange,
+    type LocalUiState,
+    type PromotedNode,
     type ShareExportPolicy,
     type WalkthroughStep,
 } from '@code-trail/shared';
@@ -26,6 +28,7 @@ import { EditorDeniedError } from '../editor/service.js';
 import type { SupportedLanguage } from '../workspace/languages.js';
 import type { ResolveFlowResult } from '../trails/resolveFlow.js';
 import { contextForRange, createBaselineFile, reanchor, sha256 } from '../analysis/baselines.js';
+import { markdownOptionsFor } from '../trails/markdownOptions.js';
 
 /**
  * WebSocket 게이트웨이.
@@ -40,6 +43,16 @@ import { contextForRange, createBaselineFile, reanchor, sha256 } from '../analys
  * 것이 다른 탭에도 즉시 보여야 한다. 그래서 이벤트는 명령을 보낸 연결이 아니라
  * 전체에 나간다 — 보낸 쪽은 `commandId` 로 자기 것을 알아본다.
  */
+
+/**
+ * 노드 검토의 기준 해시 (V02).
+ *
+ * 언어 서버가 파일 해시를 주지 않은 노드도 있다. 그때는 본문 자체를 내용으로
+ * 삼는다 — 기준이 없으면 "코드가 바뀌었다" 를 판정할 근거가 없다.
+ */
+function nodeContentHash(node: TrailNode): string {
+    return node.symbol.contentHash ?? sha256(node.symbol.code);
+}
 
 /** 중복 처리를 막기 위해 기억하는 최근 commandId 수. */
 const RECENT_COMMAND_LIMIT = 512;
@@ -181,6 +194,39 @@ export class WebSocketGateway {
         } catch {
             // 노드를 붙이는 일이 에디터 때문에 실패하면 안 된다.
         }
+    }
+
+    /**
+     * 노드 대상 검토의 기준을 만든다 (V02).
+     *
+     * 그 노드가 지금 보여주는 파일과 내용 해시를 기준으로 삼는다. 다시 읽어
+     * 해시가 달라지면 `확인함` 이 `재검토` 로 내려가는 근거가 이 값이다.
+     */
+    private async baselineForNode(
+        analysisId: string,
+        target: { trailId: string; nodeId: string },
+        commandId: string,
+    ): Promise<string | null> {
+        const node = this.context.trails.get(target.trailId)?.get(target.nodeId);
+        if (!node || node.symbol.relPath === null) {
+            return null;
+        }
+        const { baseline } = createBaselineFile({
+            relPath: node.symbol.relPath,
+            contentHash: nodeContentHash(node),
+        });
+        const saved = await this.context.analyses.addBaseline({
+            analysisId, commandId: `${commandId}:node-baseline`, baseline,
+        });
+        return saved.ok ? baseline.id : null;
+    }
+
+    /** 트레일 Markdown 에 함께 실을 것 (V23). */
+    private markdownOptions(
+        trailId: string,
+        payload: { analysisId?: string | undefined; mermaid?: boolean | undefined },
+    ): ReturnType<typeof markdownOptionsFor> {
+        return markdownOptionsFor(this.context.analyses, trailId, payload);
     }
 
     private snapshotPayload(trail: Trail): unknown {
@@ -472,6 +518,17 @@ export class WebSocketGateway {
                     return;
 
                 case 'refreshed': {
+                    // 코드가 달라졌으면 그 노드의 `확인함` 은 옛 코드에 대한
+                    // 말이다. `재검토` 로 내리고 화면에 알린다(V02).
+                    const node = this.context.trails.get(trailId)?.get(result.nodeId);
+                    for (const document of await this.context.analyses.downgradeNodeReviews(
+                        result.nodeId, node === undefined ? null : nodeContentHash(node),
+                    )) {
+                        this.broadcast('analysis.snapshot', { analysis: document }, {});
+                        this.broadcast('analysis.listChanged', {
+                            analyses: this.context.analyses.list(),
+                        }, {});
+                    }
                     // 이 노드는 이제 현재 코드다. `바뀜` 배지를 떼라고 알린다.
                     this.broadcast('trail.nodesStale', {
                         trailId,
@@ -572,9 +629,9 @@ export class WebSocketGateway {
 
         if (this.context.readOnlyShare && ![
             'trail.select', 'trail.toggleNode', 'trail.setMode', 'trail.setActiveNode',
-            'trail.setChildOrder',
+            'trail.setChildOrder', 'trail.resetBoardLayout',
             'trail.exportMarkdown', 'share.prepare', 'share.export',
-            'settings.updateLocalAuthor',
+            'settings.updateLocalAuthor', 'ui.saveLocalState',
         ].includes(command.type)) {
             this.sendError(client, {
                 code: 'UNAUTHORIZED',
@@ -786,17 +843,30 @@ export class WebSocketGateway {
             case 'trail.promoteToRoot': {
                 const trailId = command.trailId as string;
                 const { nodeId } = command.payload as { nodeId: string };
+                let promoted: PromotedNode | undefined;
                 const result = await trails.mutate(
                     trailId,
                     command.baseRevision as number,
-                    (trail) => trail.promoteToRoot(nodeId) !== undefined,
+                    (trail) => {
+                        promoted = trail.promoteToRoot(nodeId);
+                        return promoted !== undefined;
+                    },
                 );
                 if (!result.ok) {
                     this.sendStaleRecovery(client, trailId, result.error, command.commandId);
                     return;
                 }
+                // 되돌리기는 삭제와 같은 한 단계 버퍼를 쓴다(V10).
+                // `mutate` 가 버퍼를 비운 **뒤**에 담아야 한다.
+                if (promoted) {
+                    trails.rememberPromoted(trailId, promoted);
+                }
                 // 트리 모양이 바뀌었다. 부분 갱신 대신 통째로 다시 그리게 한다.
-                this.broadcast('trail.nodePromoted', { nodeId }, {
+                this.broadcast('trail.nodePromoted', {
+                    nodeId,
+                    ...(promoted ? { name: promoted.node.symbol.name } : {}),
+                    undoable: promoted !== undefined,
+                }, {
                     commandId: command.commandId,
                     trailId,
                     revision: result.value.revision,
@@ -805,6 +875,57 @@ export class WebSocketGateway {
                     trailId,
                     revision: result.value.revision,
                 });
+                return;
+            }
+
+            case 'trail.undoPromote': {
+                const trailId = command.trailId as string;
+                const { nodeId } = command.payload as { nodeId: string };
+                const result = await trails.undoPromote(
+                    trailId,
+                    command.baseRevision as number,
+                    nodeId,
+                );
+                if (!result.ok) {
+                    if (result.error.code === 'STALE_REVISION') {
+                        this.sendStaleRecovery(client, trailId, result.error, command.commandId);
+                        return;
+                    }
+                    this.sendError(client, result.error, command.commandId);
+                    return;
+                }
+                this.broadcast(
+                    'trail.snapshot',
+                    await this.snapshotPayloadWithGrants(result.value.trail),
+                    {
+                        commandId: command.commandId,
+                        trailId,
+                        revision: result.value.revision,
+                    },
+                );
+                return;
+            }
+
+            case 'trail.resetBoardLayout': {
+                const trailId = command.trailId as string;
+                const result = await trails.resetBoardLayout(trailId);
+                if (!result.ok) {
+                    this.sendError(client, result.error, command.commandId);
+                    return;
+                }
+                // 좌표가 통째로 사라졌다. 부분 갱신 대신 다시 그리게 한다.
+                // revision 은 그대로다 — 화면 상태이기 때문이다(V11).
+                this.broadcast('trail.snapshot', this.snapshotPayload(result.value.trail), {
+                    commandId: command.commandId,
+                    trailId,
+                    revision: result.value.revision,
+                });
+                return;
+            }
+
+            case 'ui.saveLocalState': {
+                const { state } = command.payload as { state: LocalUiState };
+                this.context.localUiState.save(state);
                 return;
             }
 
@@ -883,15 +1004,20 @@ export class WebSocketGateway {
 
             case 'trail.exportMarkdown': {
                 const trailId = command.trailId as string;
-                const result = trails.markdown(trailId);
+                const payload = command.payload as { analysisId?: string; mermaid?: boolean };
+                const result = trails.markdown(trailId, this.markdownOptions(trailId, payload));
                 if (!result.ok) {
                     this.sendError(client, result.error, command.commandId);
                     return;
                 }
                 const trail = trails.get(trailId) as Trail;
+                const query = new URLSearchParams();
+                if (payload.analysisId !== undefined) query.set('analysis', payload.analysisId);
+                if (payload.mermaid === true) query.set('mermaid', '1');
+                const suffix = query.toString();
                 this.broadcast('trail.exportReady', {
                     trailId,
-                    url: `/api/trails/${trailId}/export.md`,
+                    url: `/api/trails/${trailId}/export.md${suffix === '' ? '' : `?${suffix}`}`,
                     fileName: `${trail.title}.md`,
                 }, { commandId: command.commandId, trailId });
                 return;
@@ -1195,7 +1321,18 @@ export class WebSocketGateway {
                     state: 'unreviewed' | 'reviewing' | 'reviewed' | 'needsReview';
                     authorId: string; evidenceIds: string[];
                 };
-                const result = await this.context.analyses.setReview({ ...payload, commandId: command.commandId });
+                // 노드 대상 검토는 그 노드가 지금 보여주는 코드가 기준이다(V02).
+                // 기준이 없으면 "코드가 바뀌었다" 를 판정할 근거가 없다.
+                const baselineId = payload.target.kind === 'node'
+                    ? await this.baselineForNode(payload.analysisId, payload.target, command.commandId)
+                    : payload.baselineId;
+                if (baselineId === null) {
+                    this.sendError(client, {
+                        code: 'NOT_FOUND', message: '검토 기준을 만들 노드를 찾을 수 없다.', retryable: false,
+                    }, command.commandId);
+                    return;
+                }
+                const result = await this.context.analyses.setReview({ ...payload, baselineId, commandId: command.commandId });
                 if (!result.ok) { this.sendError(client, result.error, command.commandId); return; }
                 this.analysisChanged('review.changed', result.value.document, result.value.result, command.commandId);
                 return;
@@ -1223,6 +1360,18 @@ export class WebSocketGateway {
                 const context = contextForRange(content.text, payload.range);
                 if (!context) {
                     this.sendError(client, { code: 'INVALID_COMMAND', message: '선택 범위가 원본 코드와 맞지 않는다.', retryable: false }, command.commandId);
+                    return;
+                }
+                // 같은 파일·같은 범위·같은 내용이면 앵커를 새로 만들지 않는다(V03).
+                // hunk 검토 표시가 같은 범위를 몇 번이고 다시 잡기 때문이다.
+                const existing = this.context.analyses.findAnchor(
+                    payload.analysisId, grant.relPath, payload.range, content.contentHash,
+                );
+                if (existing !== null) {
+                    const document = this.context.analyses.get(payload.analysisId);
+                    if (document) {
+                        this.analysisChanged('anchor.checked', document, existing, command.commandId);
+                    }
                     return;
                 }
                 const { baseline, fileId } = createBaselineFile({ relPath: grant.relPath, contentHash: content.contentHash });

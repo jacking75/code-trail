@@ -44,6 +44,8 @@ export interface CodeBodyProps {
     ) => void;
     /** 줄 왼쪽 색 띠를 눌렀을 때. 그 기록으로 간다. */
     onMarkClick?: (annotationId: string) => void;
+    /** 본문 필터에 걸린 줄(원본 파일 기준 0-based). 강조만 한다(V09). */
+    hitLines?: readonly number[];
 }
 
 /** 호출부를 가리키는 키. 줄과 컬럼이 같으면 같은 지점이다. */
@@ -82,6 +84,9 @@ export function CodeBody(props: CodeBodyProps): JSX.Element {
         }
         return map;
     }, [props.marks]);
+
+    /** 필터에 걸린 줄. 매번 배열을 훑지 않는다. */
+    const hitSet = useMemo(() => new Set(props.hitLines ?? []), [props.hitLines]);
 
     const onClick = (event: MouseEvent<HTMLSpanElement>, token: Token): void => {
         if (!isClickable(token)) {
@@ -139,7 +144,8 @@ export function CodeBody(props: CodeBodyProps): JSX.Element {
                     // 줄은 순서가 고정이고 재배열되지 않는다. 인덱스 키로 충분하다.
                     // eslint-disable-next-line react/no-array-index-key
                     <div
-                        className={mark === undefined ? 'cl' : `cl noted${mark.open ? ' open' : ''}`}
+                        className={`${mark === undefined ? 'cl' : `cl noted${mark.open ? ' open' : ''}`}${
+                            hitSet.has(lineNumber) ? ' hit' : ''}`}
                         key={index}
                         {...(mark === undefined ? {} : { 'data-kind': mark.kind, title: mark.preview })}
                         {...(mark === undefined ? {} : {

@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="596" viewBox="0 0 1000 596" role="img" aria-labelledby="t d">
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="632" viewBox="0 0 1000 632" role="img" aria-labelledby="t d">
 <title id="t">Code Trail 용어 지도</title>
-<desc id="d">부모가 위에 있고 형제 자식이 아래의 같은 행에 놓이는 트레일 패널에서 툴바·브레드크럼·노드·헤더·본문·진입 링크·호출부·순번·배지·기록 표시·수평 스크롤의 위치를 표시한 그림</desc>
+<desc id="d">부모가 위에 있고 형제 자식이 아래의 같은 행에 놓이는 트레일 패널에서 툴바·브레드크럼·노드·헤더·본문·진입 링크·호출부·순번·배지·검토 표시·기록 표시·하위 요약·노드 메뉴·수평 스크롤의 위치를 표시한 그림</desc>
 
 <style>
   .u    { font-family: "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
@@ -12,6 +12,7 @@
   .fn   { fill: #dcdcaa; }
   .pu   { fill: #9aa3b2; }
   .hit  { fill: #ffb454; text-decoration: underline; }
+  .loc  { fill: #7aa2f7; text-decoration: underline; }
   .nm   { font-size: 12px; fill: #e4e7ec; font-weight: 600; }
   .dim  { font-size: 10px; fill: #7f8794; }
   .chip { font-size: 9.5px; }
@@ -23,7 +24,7 @@
   .dot  { fill: #ffb454; }
 </style>
 
-<rect width="1000" height="596" fill="#12151a"/>
+<rect width="1000" height="632" fill="#12151a"/>
 
 <!-- ─────────────────────────────── 트레일 패널 -->
 <rect x="40" y="56" width="560" height="414" rx="4" fill="#1e1e1e" stroke="#383d47"/>
@@ -36,10 +37,11 @@
   <rect x="122" y="64" width="60" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="128" y="75">⤡ 전체 접기</text>
   <rect x="188" y="64" width="62" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="194" y="75">⇅ 코드 순서</text>
   <rect x="256" y="64" width="40" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="261" y="75">⬚ 보드</text>
-  <rect x="302" y="64" width="92" height="16" rx="3" fill="#26292f" stroke="#3d424c"/><text x="308" y="75" fill="#7f8794">이름/경로 필터…</text>
-  <rect x="400" y="64" width="58" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="406" y="75">Markdown</text>
-  <rect x="464" y="64" width="38" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="471" y="75">지우기</text>
-  <text x="520" y="75" fill="#7f8794">노드 4 · 기록 3</text>
+  <rect x="302" y="64" width="70" height="16" rx="3" fill="#26292f" stroke="#3d424c"/><text x="306" y="75" fill="#7f8794" style="font-size:9px">이름/경로 필터…</text>
+  <rect x="376" y="64" width="36" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="380" y="75" style="font-size:9px">대상 ▾</text>
+  <rect x="418" y="64" width="58" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="424" y="75">Markdown</text>
+  <rect x="482" y="64" width="38" height="16" rx="3" fill="#2a2d34" stroke="#3d424c"/><text x="489" y="75">지우기</text>
+  <text x="526" y="75" fill="#7f8794" style="font-size:9px">노드 4 · 기록 3 · ✓1</text>
 </g>
 
 <!-- 브레드크럼 -->
@@ -57,13 +59,17 @@
 <rect x="175" y="139" width="24" height="14" rx="3" fill="#2b2f37"/>
 <text class="u chip" x="180" y="150" fill="#9aa3b2">↳2</text>
 <text class="c" x="207" y="150" fill="#7f8794" style="font-size:10.5px">(Op op, Packet&amp; p)</text>
-<text class="c" x="330" y="150" fill="#7f8794" style="font-size:10px">registry.cpp:118</text>
+<text class="c loc" x="330" y="150" style="font-size:9.5px">registry.cpp:118</text>
+<rect x="414" y="139" width="18" height="14" rx="3" fill="#24361f"/>
+<text class="u chip" x="419" y="150" fill="#9ece6a">✓</text>
 <rect x="436" y="139" width="30" height="14" rx="3" fill="#4a3a1e"/>
 <text class="u chip" x="441" y="150" fill="#e0af68">✎ 2</text>
-<text class="u btn" x="478" y="150">＋</text>
-<text class="u btn" x="504" y="150">⚑</text>
-<text class="u btn" x="526" y="150">↗</text>
-<text class="u btn" x="548" y="150">✕</text>
+<text class="u btn" x="472" y="150" fill="#9ece6a">☑</text>
+<text class="u btn" x="492" y="150">＋</text>
+<text class="u btn" x="512" y="150">⚑</text>
+<text class="u btn" x="532" y="150">↗</text>
+<text class="u btn" x="552" y="150">✕</text>
+<text class="u btn" x="572" y="150">⋯</text>
 
 <!-- 노드 A 본문 -->
 <rect x="48" y="160" width="544" height="102" rx="3" fill="#181818" stroke="#2b2b2b"/>
@@ -91,9 +97,9 @@
 <text class="u nm" x="133" y="309">Find</text>
 <rect x="168" y="298" width="24" height="14" rx="3" fill="#2b2f37"/>
 <text class="u chip" x="173" y="309" fill="#9aa3b2">↳1</text>
-<text class="c" x="198" y="309" fill="#7f8794" style="font-size:10px">registry.cpp:126</text>
-<text class="u btn" x="282" y="309">↗</text>
-<text class="u btn" x="298" y="309">✕</text>
+<text class="c loc" x="196" y="309" style="font-size:8.5px">registry.cpp:126</text>
+<text class="u btn" x="280" y="309" style="font-size:11px">↗</text>
+<text class="u btn" x="296" y="309" style="font-size:11px">✕</text>
 
 <!-- 진입 링크 -->
 <text class="u" x="58" y="329" style="font-size:10.5px" fill="#4daafc">↑ Dispatch 의 119번째 줄 Find</text>
@@ -112,7 +118,8 @@
 <rect x="366" y="298" width="46" height="14" rx="3" fill="#23304d"/>
 <text class="u chip" x="371" y="309" fill="#7aa2f7">method</text>
 <text class="u nm" x="419" y="309">Invoke</text>
-<text class="c" x="465" y="309" fill="#7f8794" style="font-size:10px">handler.h:31</text>
+<rect x="462" y="298" width="34" height="14" rx="3" fill="#2b2f37"/>
+<text class="u chip" x="466" y="309" fill="#9aa3b2" style="font-size:9px">하위 3</text>
 <rect x="516" y="298" width="42" height="14" rx="3" fill="#4a3a1e"/>
 <text class="u chip" x="521" y="309" fill="#e0af68">선언만</text>
 <text class="u btn" x="566" y="309" fill="#e0af68">⚑</text>
@@ -136,7 +143,7 @@
   <!-- 툴바 -->
   <path class="lead" d="M612 82 L594 78"/><circle class="dot" cx="594" cy="78" r="2.5"/>
   <text class="u lbl" x="620" y="80">툴바</text>
-  <text class="u sub" x="660" y="80">펼치기·접기 / 정렬 / 보드 / 필터 / 내보내기 / 지우기</text>
+  <text class="u sub" x="660" y="80">펼치기·접기 / 정렬 / 보드 / 필터·대상 / 내보내기 / 지우기</text>
 
   <!-- 브레드크럼 -->
   <path class="lead" d="M612 112 L594 110"/><circle class="dot" cx="594" cy="110" r="2.5"/>
@@ -147,6 +154,7 @@
   <path class="lead" d="M612 146 L584 148"/><circle class="dot" cx="584" cy="148" r="2.5"/>
   <text class="u lbl" x="620" y="144">헤더</text>
   <text class="u sub" x="620" y="158">종류 · 이름 · 시그니처 · 경로:줄 · 배지 · 버튼. 누르면 접힌다</text>
+  <text class="u sub" x="620" y="171"><tspan fill="#7aa2f7">경로:줄</tspan> 을 누르면 코드 화면의 그 줄로. <tspan fill="#7f8794">⋯</tspan> 는 노드 메뉴</text>
 
   <!-- 호출부 · 순번 -->
   <path class="lead" d="M612 191 L268 191"/><circle class="dot" cx="268" cy="191" r="2.5"/>
@@ -176,12 +184,17 @@
   <!-- 배지 -->
   <path class="lead" d="M612 303 L558 303"/><circle class="dot" cx="558" cy="303" r="2.5"/>
   <text class="u lbl" x="620" y="300">배지</text>
-  <text class="u sub" x="620" y="314">재귀 · 선언만 · 근사 · 바뀜</text>
+  <text class="u sub" x="620" y="314">재귀 · 선언만 · 근사 · 바뀜 · <tspan fill="#9ece6a">✓</tspan>(확인함) · 재검토</text>
 
   <!-- ⚑ -->
   <path class="lead" d="M612 411 L566 309"/><circle class="dot" cx="566" cy="309" r="2.5"/>
   <text class="u lbl" x="620" y="408">⚑ 구현 보기</text>
   <text class="u sub" x="700" y="408">구현이 둘 이상이면 이 헤더 바로 아래 후보 팝오버에서 고른다</text>
+
+  <!-- 하위 요약 -->
+  <path class="lead" d="M612 352 L498 306"/><circle class="dot" cx="498" cy="306" r="2.5"/>
+  <text class="u lbl" x="620" y="355">하위 요약</text>
+  <text class="u sub" x="688" y="355">접힌 노드에만. 하위 노드 · 기록 · 미해결 · 재검토 수</text>
 
   <!-- 수평 스크롤 -->
   <path class="lead" d="M612 454 L594 458"/><circle class="dot" cx="594" cy="458" r="2.5"/>
@@ -194,5 +207,7 @@
 <text class="u leg" x="40" y="518">트레일 — 이 패널에 담긴 트리 전체. 자동 저장과 Markdown 내보내기의 단위다. 최상위 노드 A 가 루트.</text>
 <text class="u leg" x="40" y="536">심볼(ResolvedSymbol) — 노드가 감싸고 있는 알맹이. 언어 서버가 준 정의 + 본문 코드 + 좌표.</text>
 <text class="u leg" x="40" y="554">기록 표시 — 헤더의 <tspan fill="#e0af68">✎ 2</tspan> 배지와 본문 줄 왼쪽의 색 띠. 그 노드·줄에 분석 기록이 있다는 뜻이고, 미해결 질문·우려가 있으면 주황이다.</text>
-<text class="u leg" x="40" y="572">기록 열 — 헤더의 <tspan fill="#e0af68">✎ 2</tspan> 나 <tspan fill="#7f8794">＋</tspan> 를 누르면 패널 오른쪽에 접이식 열이 열려 그 노드의 기록을 코드 옆에서 읽고 쓴다.</text>
+<text class="u leg" x="40" y="572">기록 열 — 헤더의 <tspan fill="#e0af68">✎ 2</tspan> 나 <tspan fill="#7f8794">＋</tspan> 를 누르면 패널 오른쪽에 접이식 열이 열려 그 노드의 기록을 코드 옆에서 읽고 쓴다. 코드 화면에도 같은 열이 붙는다.</text>
+<text class="u leg" x="40" y="590">검토 표시 — 헤더의 <tspan fill="#9ece6a">☑</tspan> 로 “이 함수는 봤다” 를 남긴다. 배지 <tspan fill="#9ece6a">✓</tspan> 가 붙고, 코드가 바뀌어 다시 읽으면 <tspan fill="#e0af68">재검토</tspan> 로 내려간다.</text>
+<text class="u leg" x="40" y="608">노드 메뉴 — 헤더의 <tspan fill="#7f8794">⋯</tspan> 나 우클릭. 코드 화면에서 보기 · 검토 표시 · 안내 순서에 추가 · Markdown 복사 · 링크 복사처럼 버튼 자리가 모자란 행동이 있다.</text>
 </svg>

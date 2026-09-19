@@ -13,7 +13,9 @@ import {
 } from 'react';
 
 import type { ClickTarget } from '../../tokenizer/tokenize.js';
-import type { AnnotationIndex } from './annotationIndex.js';
+import { subtreeSummary, type AnnotationIndex } from './annotationIndex.js';
+import { filterTrail, type FilterScope } from './filter.js';
+import { NodeMenu, type NodeMenuItem } from './NodeMenu.js';
 import {
     BOARD_DEFAULT_HEIGHT,
     BOARD_DEFAULT_WIDTH,
@@ -103,8 +105,16 @@ export interface TrailViewProps {
         anchor: { x: number; y: number } | null,
     ) => void;
     onFocusNode: (nodeId: string) => void;
+    /** 헤더의 `☐/☑`·키 `v` — 이 노드를 확인함으로 (V02). */
+    onToggleReview: (node: TrailNodeView) => void;
+    /** 헤더의 `경로:줄`·키 `g` — 코드 화면에서 열기 (V05). */
+    onOpenInCodeView: (node: TrailNodeView) => void;
+    /** 노드 메뉴가 만드는 항목. `App` 이 무엇을 할 수 있는지 안다 (V08). */
+    nodeMenuItems: (node: TrailNodeView) => NodeMenuItem[];
+    /** 보드 자동 배치 초기화 (V11). */
+    onResetBoardLayout: () => void;
     onClear: () => void;
-    onExportMarkdown: () => void;
+    onExportMarkdown: (options: { includeNotes: boolean; mermaid: boolean }) => void;
     onChooseCandidate: (choiceId: string, candidateId: string) => void;
     onAttachAllImplementations: (nodeId: string) => void;
     onDismissChoice: () => void;
@@ -119,38 +129,6 @@ export interface TrailViewProps {
             codeFontSize?: number | null;
         },
     ) => void;
-}
-
-/**
- * 필터에 걸린 노드와 그 조상.
- *
- * 조상을 함께 남기는 이유는 트리 모양을 지키기 위해서다. 걸린 노드만 남기면
- * 부모가 사라져 어디서 갈라진 것인지 알 수 없다.
- */
-function filterIds(roots: readonly TrailNodeView[], query: string): Set<string> | null {
-    const needle = query.trim().toLowerCase();
-    if (needle === '') {
-        return null;
-    }
-    const keep = new Set<string>();
-    const walk = (node: TrailNodeView, chain: TrailNodeView[]): boolean => {
-        const nextChain = [...chain, node];
-        const hit = node.symbol.name.toLowerCase().includes(needle)
-            || node.symbol.displayPath.toLowerCase().includes(needle);
-        let anyChild = false;
-        for (const child of node.children) {
-            anyChild = walk(child, nextChain) || anyChild;
-        }
-        if (hit || anyChild) {
-            for (const inChain of nextChain) {
-                keep.add(inChain.id);
-            }
-            return true;
-        }
-        return false;
-    };
-    roots.forEach((root) => walk(root, []));
-    return keep;
 }
 
 /** 끌고 있는 노드. 저장하기 전의 임시 좌표다. */
@@ -170,7 +148,13 @@ const FLASH_MS = 800;
 export function TrailView(props: TrailViewProps): JSX.Element {
     const { trail } = props;
     const [filter, setFilter] = useState('');
+    const [filterScope, setFilterScope] = useState<FilterScope>('name');
     const [confirmClear, setConfirmClear] = useState(false);
+    const [confirmReset, setConfirmReset] = useState(false);
+    const [exportOpen, setExportOpen] = useState(false);
+    const [exportNotes, setExportNotes] = useState(true);
+    const [exportMermaid, setExportMermaid] = useState(false);
+    const [menu, setMenu] = useState<{ node: TrailNodeView; anchor: { x: number; y: number } } | null>(null);
     const filterRef = useRef<HTMLInputElement | null>(null);
 
     const rootRef = useRef<HTMLDivElement | null>(null);
@@ -178,7 +162,17 @@ export function TrailView(props: TrailViewProps): JSX.Element {
     // 트레일이 따로 고르지 않았으면 설정 기본값을 따른다(U17).
     const childOrder: ChildOrder = trail.childOrder ?? props.childOrderDefault;
 
-    const visibleIds = useMemo(() => filterIds(trail.roots, filter), [trail.roots, filter]);
+    const filtered = useMemo(
+        () => filterTrail(trail.roots, filter, filterScope, props.annotations),
+        [trail.roots, filter, filterScope, props.annotations],
+    );
+    const visibleIds = filtered.visibleIds;
+
+    /** 접힌 헤더의 하위 요약(V12). 트리 한 번 순회로 전부 구한다. */
+    const summaries = useMemo(
+        () => subtreeSummary(trail.roots, props.annotations),
+        [trail.roots, props.annotations],
+    );
 
     const breadcrumb = useMemo(
         () => (trail.activeNodeId === null ? [] : ancestorsOf(trail.roots, trail.activeNodeId)),
@@ -529,6 +523,20 @@ export function TrailView(props: TrailViewProps): JSX.Element {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [props.onFocusNode, focusHeader]);
 
+    /**
+     * 필터 칸에서 `Enter` — 다음 매치로 (V09).
+     *
+     * 걸린 노드만 돈다. 조상은 트리 모양을 지키려고 남긴 것이지 매치가 아니다.
+     */
+    const nextMatch = useCallback((): void => {
+        const hits = order.filter((item) => filtered.hitIds.has(item.id));
+        if (hits.length === 0) return;
+        const current = hits.findIndex((item) => item.id === trail.activeNodeId);
+        const next = hits[(current + 1) % hits.length];
+        if (next) props.onFocusNode(next.id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [order, filtered.hitIds, trail.activeNodeId, props.onFocusNode]);
+
     const onTreeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>): void => {
         const target = event.target as HTMLElement;
         const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
@@ -604,10 +612,25 @@ export function TrailView(props: TrailViewProps): JSX.Element {
                 event.preventDefault();
                 filterRef.current?.focus();
                 return;
+            case 'Escape':
+                if (menu !== null) {
+                    event.preventDefault();
+                    setMenu(null);
+                    return;
+                }
+                break;
             default:
                 break;
         }
 
+        if (event.key === 'F10' && event.shiftKey && node !== undefined) {
+            event.preventDefault();
+            const header = rootRef.current
+                ?.querySelector<HTMLElement>(`[data-node-header="${node.id}"]`);
+            const box = header?.getBoundingClientRect();
+            setMenu({ node, anchor: { x: box?.left ?? 80, y: box?.bottom ?? 80 } });
+            return;
+        }
         if (node === undefined || event.ctrlKey || event.metaKey || event.altKey) {
             return;
         }
@@ -634,12 +657,34 @@ export function TrailView(props: TrailViewProps): JSX.Element {
                 event.preventDefault();
                 props.onNote(node);
                 return;
+            case 'v':
+                event.preventDefault();
+                props.onToggleReview(node);
+                return;
+            case 'g':
+                event.preventDefault();
+                if (node.symbol.relPath !== null) props.onOpenInCodeView(node);
+                return;
+            case 'm': {
+                event.preventDefault();
+                const header = rootRef.current
+                    ?.querySelector<HTMLElement>(`[data-node-header="${node.id}"]`);
+                const box = header?.getBoundingClientRect();
+                setMenu({
+                    node,
+                    anchor: { x: box?.left ?? 80, y: box?.bottom ?? 80 },
+                });
+                return;
+            }
             default:
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [order, trail.activeNodeId, trail.roots, move, focusHeader, jumpToOrigin, props]);
 
     const nodeCount = flat.length;
+    const reviewCounts = props.annotations.reviewCounts;
+    const placedCount = Object.values(trail.nodeUi)
+        .filter((state) => state.boardX !== undefined || state.boardY !== undefined).length;
 
     const shared = {
         activeNodeId: trail.activeNodeId,
@@ -667,6 +712,12 @@ export function TrailView(props: TrailViewProps): JSX.Element {
         onOpenAnnotation: props.onOpenAnnotation,
         onFocusHeader: props.onFocusNode,
         onNodeUi,
+        summaries,
+        filterHits: filtered.hitLines,
+        onToggleReview: props.onToggleReview,
+        onOpenInCodeView: props.onOpenInCodeView,
+        onOpenMenu: (node: TrailNodeView, anchor: { x: number; y: number }) =>
+            setMenu({ node, anchor }),
     };
 
     return (
@@ -693,18 +744,102 @@ export function TrailView(props: TrailViewProps): JSX.Element {
                     >
                         {board ? '▤ 트리' : '⬚ 보드'}
                     </button>
+                    {board ? (
+                        <div className="toolbar-confirm">
+                            <button
+                                type="button"
+                                id="board-reset"
+                                onClick={() => setConfirmReset((open) => !open)}
+                                title="손으로 옮긴 자리를 지우고 다시 배치한다"
+                            >
+                                ⟲ 자동 배치
+                            </button>
+                            {confirmReset ? (
+                                <ConfirmPopover
+                                    message={`손으로 옮긴 자리 ${placedCount}개를 지우고 다시 배치한다. 되돌릴 수 없다.`}
+                                    confirmLabel="다시 배치"
+                                    onConfirm={() => {
+                                        setConfirmReset(false);
+                                        props.onResetBoardLayout();
+                                    }}
+                                    onCancel={() => setConfirmReset(false)}
+                                />
+                            ) : null}
+                        </div>
+                    ) : null}
                     <span className="sep" />
                     <input
                         id="filter"
                         type="search"
                         ref={filterRef}
                         value={filter}
-                        placeholder="이름/경로 필터…"
-                        aria-label="이름/경로 필터"
+                        placeholder={FILTER_PLACEHOLDER[filterScope]}
+                        aria-label="트레일 필터"
                         onChange={(event) => setFilter(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+                            event.preventDefault();
+                            nextMatch();
+                        }}
                     />
+                    <select
+                        id="filter-scope"
+                        aria-label="필터 대상"
+                        value={filterScope}
+                        onChange={(event) => setFilterScope(event.target.value as FilterScope)}
+                    >
+                        <option value="name">이름·경로</option>
+                        <option value="body">본문</option>
+                        <option value="notes">기록</option>
+                    </select>
+                    {filter.trim() === '' ? null : (
+                        <span className="muted" id="filter-count">{`${filtered.hitIds.size}개`}</span>
+                    )}
                     <span className="sep" />
-                    <button type="button" onClick={props.onExportMarkdown}>Markdown</button>
+                    <div className="toolbar-confirm">
+                        <button
+                            type="button"
+                            id="export-markdown"
+                            onClick={() => setExportOpen((open) => !open)}
+                        >
+                            Markdown
+                        </button>
+                        {exportOpen ? (
+                            <div className="export-popover" role="dialog" aria-label="Markdown 내보내기">
+                                <label>
+                                    <input
+                                        type="checkbox"
+                                        checked={exportNotes}
+                                        onChange={(event) => setExportNotes(event.target.checked)}
+                                    />
+                                    {' 기록 포함'}
+                                </label>
+                                <label>
+                                    <input
+                                        type="checkbox"
+                                        checked={exportMermaid}
+                                        onChange={(event) => setExportMermaid(event.target.checked)}
+                                    />
+                                    {' Mermaid 포함'}
+                                </label>
+                                <div className="confirm-row">
+                                    <button type="button" onClick={() => setExportOpen(false)}>취소</button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setExportOpen(false);
+                                            props.onExportMarkdown({
+                                                includeNotes: exportNotes,
+                                                mermaid: exportMermaid,
+                                            });
+                                        }}
+                                    >
+                                        내려받기
+                                    </button>
+                                </div>
+                            </div>
+                        ) : null}
+                    </div>
                     <div className="toolbar-confirm">
                         <button
                             type="button"
@@ -731,6 +866,16 @@ export function TrailView(props: TrailViewProps): JSX.Element {
                         <span className="muted">
                             {`기록 ${props.annotations.total}`}
                             {props.annotations.open > 0 ? ` · 미해결 ${props.annotations.open}` : ''}
+                        </span>
+                    ) : null}
+                    {/*
+                      * 개수만 적는다(V02). 분모를 노드 수로 잡으면 "노드를 펼친
+                      * 횟수를 이해 완료율로 계산하지 않는다" 에 어긋난다.
+                      */}
+                    {reviewCounts.reviewed + reviewCounts.needsReview > 0 ? (
+                        <span className="muted" id="review-counts">
+                            {`확인함 ${reviewCounts.reviewed}`}
+                            {reviewCounts.needsReview > 0 ? ` · 재검토 ${reviewCounts.needsReview}` : ''}
                         </span>
                     ) : null}
                 </div>
@@ -818,7 +963,22 @@ export function TrailView(props: TrailViewProps): JSX.Element {
                 </div>
             </div>
 
+            {menu === null ? null : (
+                <NodeMenu
+                    anchor={menu.anchor}
+                    title={splitName(menu.node.symbol).name}
+                    items={props.nodeMenuItems(menu.node)}
+                    onDismiss={() => setMenu(null)}
+                />
+            )}
+
             {props.annotationColumn}
         </div>
     );
 }
+
+const FILTER_PLACEHOLDER: Record<FilterScope, string> = {
+    name: '이름/경로 필터…',
+    body: '본문에서 찾기…',
+    notes: '기록에서 찾기(우려·미해결…)',
+};

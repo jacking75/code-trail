@@ -68,6 +68,9 @@ export interface TrailSummaryView {
     revision: number;
     nodeCount: number;
     rootCount: number;
+    /** 서버가 주는 시각. 트레일 목록이 최근순으로 세울 때 쓴다(V22). */
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 export interface CandidateView {

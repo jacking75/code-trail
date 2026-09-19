@@ -49,8 +49,10 @@ export interface AnnotationItemProps {
     onDelete: () => void;
     onRestore: () => void;
     onReply: (body: string) => void;
-    /** 범위 대상에만 있다. */
-    review?: { state: string; onChange: (state: string) => void; onCompare: () => void };
+    /** 범위·노드 대상에 있다. `onCompare` 는 범위 대상에만 있다(V02). */
+    review?: { state: string; onChange: (state: string) => void; onCompare?: () => void };
+    /** 이 분석에 이미 쓰인 태그. 태그 칸의 `<datalist>` 가 쓴다(V15). */
+    tagSuggestions?: readonly string[];
     /** 코드 비교 같은 덧붙이는 내용. */
     children?: ReactNode;
 }
@@ -141,8 +143,13 @@ export function AnnotationItem(props: AnnotationItemProps): JSX.Element {
                         value={draftTags}
                         aria-label="태그"
                         placeholder="태그, 쉼표로 구분"
+                        list={`tags-${props.anchorId}`}
                         onChange={(event) => setDraftTags(event.target.value)}
                     />
+                    {/* 이미 쓴 태그를 다시 치지 않게 한다(V15). */}
+                    <datalist id={`tags-${props.anchorId}`}>
+                        {(props.tagSuggestions ?? []).map((tag) => <option key={tag} value={tag} />)}
+                    </datalist>
                     <div className="annotation-edit-row">
                         <button type="button" onClick={save} disabled={!draftBody.trim()}>
                             저장
@@ -205,7 +212,9 @@ export function AnnotationItem(props: AnnotationItemProps): JSX.Element {
                 </a>
                 {props.review ? (
                     <>
-                        <button type="button" onClick={props.review.onCompare}>코드 비교</button>
+                        {props.review.onCompare === undefined ? null : (
+                            <button type="button" onClick={props.review.onCompare}>코드 비교</button>
+                        )}
                         <select
                             aria-label="검토 상태"
                             disabled={props.readOnly}

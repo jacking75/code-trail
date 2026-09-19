@@ -1,8 +1,19 @@
 import { useEffect, useMemo, useState, type JSX } from 'react';
 
-import type { AnchorComparisonView, AnalysisDocumentView, AnalysisSummaryView } from '../../api/http.js';
+import { api, type AnchorComparisonView, type AnalysisDocumentView, type AnalysisSummaryView } from '../../api/http.js';
 import { AnnotationComposer, type ComposerTargetKind } from './AnnotationComposer.js';
 import { AnnotationItem, KIND_LABEL, type AnnotationKind, type TargetLink } from './AnnotationItem.js';
+import {
+    EMPTY_FILTERS,
+    filterAnnotations,
+    groupByFile,
+    sortAnnotations,
+    tagSuggestions,
+    type ListContext,
+    type ListFilters,
+    type ListSort,
+} from './annotationList.js';
+import { WalkthroughEditor, type WalkthroughView } from './WalkthroughEditor.js';
 
 export type AnalysisTarget =
     | { kind: 'trail'; trailId: string }
@@ -96,6 +107,14 @@ export interface AnalysisPanelProps {
     onRecheck: () => void;
     onCreateWalkthrough: () => void;
     onUpdateWalkthrough: (walkthrough: AnalysisDocumentView['walkthroughs'][number]) => void;
+    /** 안내 순서 `따라 읽기` (V13). */
+    onPlayWalkthrough: (walkthroughId: string) => void;
+    /** 안내 순서에 현재 위치를 더한다 (V14). `null` 이면 새로 만든다. */
+    onAddWalkthroughStep: (walkthroughId: string | null) => void;
+    /** 지금 가리킬 수 있는 곳이 있는지. 활성 노드나 선택 범위다. */
+    canAddWalkthroughStep: boolean;
+    /** 노드 ID → 트레일에서 보이는 순서. 위치순 정렬이 쓴다 (V15). */
+    nodeOrder: ReadonlyMap<string, number>;
     onPrepareShare: (includeCode: boolean) => void;
     onExport: (planId: string, format: 'ctshare' | 'markdown' | 'html') => void;
     onChooseImport: (file: File) => void;
@@ -118,18 +137,18 @@ export interface AnalysisPanelProps {
 export function AnalysisPanel(props: AnalysisPanelProps): JSX.Element {
     const [newTitle, setNewTitle] = useState('');
     const [newPurpose, setNewPurpose] = useState('');
-    const [query, setQuery] = useState('');
-    const [filterKind, setFilterKind] = useState<'all' | AnnotationKind>('all');
-    const [showDeleted, setShowDeleted] = useState(false);
+    const [filters, setFilters] = useState<ListFilters>(EMPTY_FILTERS);
+    const [sortBy, setSortBy] = useState<ListSort>('recent');
+    const [groupFiles, setGroupFiles] = useState(false);
+    const [globalQuery, setGlobalQuery] = useState('');
+    const [globalResults, setGlobalResults] = useState<Array<{ analysisId: string; annotation: { id: string; body: string; kind: string } }> | null>(null);
     const [includeCode, setIncludeCode] = useState(false);
     const [goalTitle, setGoalTitle] = useState('');
     const [editingPurpose, setEditingPurpose] = useState<string | null>(null);
     const [locationTitle, setLocationTitle] = useState<string | null>(null);
 
     const focusInternalReference = (href: string): void => {
-        setQuery('');
-        setFilterKind('all');
-        setShowDeleted(true);
+        setFilters({ ...EMPTY_FILTERS, showDeleted: true });
         window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${href}`);
         window.setTimeout(() => {
             const element = document.getElementById(href.slice(1));
@@ -144,9 +163,7 @@ export function AnalysisPanel(props: AnalysisPanelProps): JSX.Element {
         const identity = analysisReferenceIdentity(props.analysis);
         if (params.get('bundle') !== identity.bundleId
             || params.get('analysis') !== identity.analysisId) return;
-        setQuery('');
-        setFilterKind('all');
-        setShowDeleted(true);
+        setFilters({ ...EMPTY_FILTERS, showDeleted: true });
         const timer = window.setTimeout(() => {
             const element = document.getElementById(window.location.hash.slice(1));
             element?.focus({ preventScroll: true });
@@ -155,14 +172,47 @@ export function AnalysisPanel(props: AnalysisPanelProps): JSX.Element {
         return () => window.clearTimeout(timer);
     }, [props.analysis?.id]);
 
-    const records = useMemo(() => {
-        const needle = query.trim().toLocaleLowerCase('ko');
-        return (props.analysis?.annotations ?? []).filter((item) => {
-            if (!showDeleted && item.deletedAt !== null) return false;
-            if (filterKind !== 'all' && item.kind !== filterKind) return false;
-            return needle === '' || `${item.body} ${item.tags.join(' ')}`.toLocaleLowerCase('ko').includes(needle);
-        });
-    }, [props.analysis, query, filterKind, showDeleted]);
+    /** 앵커 → 파일·줄. 위치순 정렬과 파일별 묶기가 쓴다(V15). */
+    const listContext: ListContext = useMemo(() => {
+        const anchorPlace = new Map<string, { relPath: string; line: number }>();
+        const fileById = new Map<string, string>();
+        for (const baseline of props.analysis?.baselines ?? []) {
+            for (const file of (baseline as { files?: Array<{ fileId: string; relPath: string }> }).files ?? []) {
+                fileById.set(file.fileId, file.relPath);
+            }
+        }
+        for (const raw of props.analysis?.anchors ?? []) {
+            const anchor = raw as {
+                id?: string; fileId?: string;
+                range?: { start: { line: number } }; currentRange?: { start: { line: number } } | null;
+            };
+            const relPath = anchor.fileId === undefined ? undefined : fileById.get(anchor.fileId);
+            const line = (anchor.currentRange ?? anchor.range)?.start.line;
+            if (anchor.id !== undefined && relPath !== undefined && line !== undefined) {
+                anchorPlace.set(anchor.id, { relPath, line });
+            }
+        }
+        return { anchorPlace, nodeOrder: props.nodeOrder };
+    }, [props.analysis, props.nodeOrder]);
+
+    const records = useMemo(
+        () => sortAnnotations(
+            filterAnnotations(props.analysis?.annotations ?? [], filters),
+            sortBy,
+            listContext,
+        ),
+        [props.analysis, filters, sortBy, listContext],
+    );
+
+    const grouped = useMemo(
+        () => (groupFiles ? groupByFile(records, listContext) : null),
+        [groupFiles, records, listContext],
+    );
+
+    const tags = useMemo(
+        () => tagSuggestions(props.analysis?.annotations ?? []),
+        [props.analysis],
+    );
 
     const selectedTarget = (): AnalysisTarget | SelectedCodeRange | null => {
         if (props.composerTarget === 'range') return props.selectedRange;
@@ -357,104 +407,207 @@ export function AnalysisPanel(props: AnalysisPanelProps): JSX.Element {
             {props.analysis === null ? null : (
                 <>
                     <div className="annotation-tools">
-                        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="기록 본문·태그 검색" />
-                        <select value={filterKind} onChange={(event) => setFilterKind(event.target.value as typeof filterKind)}>
+                        <input
+                            value={filters.query}
+                            onChange={(event) => setFilters({ ...filters, query: event.target.value })}
+                            placeholder="기록 본문·태그 검색"
+                        />
+                        <select
+                            aria-label="종류 거르기"
+                            value={filters.kind}
+                            onChange={(event) => setFilters({ ...filters, kind: event.target.value as ListFilters['kind'] })}
+                        >
                             <option value="all">모든 종류</option>
                             {(Object.keys(KIND_LABEL) as AnnotationKind[]).map((value) => (
                                 <option key={value} value={value}>{KIND_LABEL[value]}</option>
                             ))}
                         </select>
-                        <label><input type="checkbox" checked={showDeleted} onChange={(event) => setShowDeleted(event.target.checked)} /> 삭제 포함</label>
+                        <select
+                            aria-label="처리 상태 거르기"
+                            value={filters.status}
+                            onChange={(event) => setFilters({ ...filters, status: event.target.value as ListFilters['status'] })}
+                        >
+                            <option value="all">열림·해결 전부</option>
+                            <option value="open">열림</option>
+                            <option value="resolved">해결됨</option>
+                        </select>
+                        <select
+                            aria-label="작성자 거르기"
+                            value={filters.authorId}
+                            onChange={(event) => setFilters({ ...filters, authorId: event.target.value })}
+                        >
+                            <option value="all">모든 작성자</option>
+                            {props.analysis.authors.map((author) => (
+                                <option key={author.id} value={author.id}>{author.displayName}</option>
+                            ))}
+                        </select>
+                        <select
+                            aria-label="대상 거르기"
+                            value={filters.targetKind}
+                            onChange={(event) => setFilters({ ...filters, targetKind: event.target.value as ListFilters['targetKind'] })}
+                        >
+                            <option value="all">모든 대상</option>
+                            <option value="trail">트레일</option>
+                            <option value="node">노드</option>
+                            <option value="range">코드 범위</option>
+                        </select>
+                        <select
+                            aria-label="정렬"
+                            value={sortBy}
+                            onChange={(event) => setSortBy(event.target.value as ListSort)}
+                        >
+                            <option value="recent">최신순</option>
+                            <option value="location">위치순</option>
+                            <option value="kind">종류순</option>
+                        </select>
+                        <label><input type="checkbox" checked={groupFiles} onChange={(event) => setGroupFiles(event.target.checked)} /> 파일별 묶기</label>
+                        <label><input type="checkbox" checked={filters.showDeleted} onChange={(event) => setFilters({ ...filters, showDeleted: event.target.checked })} /> 삭제 포함</label>
                         <button type="button" onClick={props.onRecheck} disabled={props.analysis.anchors.length === 0}>위치 다시 확인</button>
                     </div>
 
+                    {/*
+                      * 다른 분석의 기록까지 찾는다(V15). 고르면 그 분석으로 전환한
+                      * 뒤 그 카드로 간다 — 트레일 전환이 덮지 않게 직접 고른 것으로 둔다.
+                      */}
+                    <form
+                        className="annotation-global"
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            if (globalQuery.trim() === '') { setGlobalResults(null); return; }
+                            void api.annotationSearch(globalQuery)
+                                .then((value) => setGlobalResults(value.results))
+                                .catch(() => setGlobalResults([]));
+                        }}
+                    >
+                        <input
+                            value={globalQuery}
+                            aria-label="모든 분석에서 찾기"
+                            placeholder="모든 분석에서 찾기…"
+                            onChange={(event) => setGlobalQuery(event.target.value)}
+                        />
+                        <button type="submit">찾기</button>
+                        {globalResults === null ? null : (
+                            <button type="button" onClick={() => { setGlobalResults(null); setGlobalQuery(''); }}>닫기</button>
+                        )}
+                    </form>
+                    {globalResults === null ? null : (
+                        <ul className="annotation-global-results">
+                            {globalResults.length === 0 ? <li className="muted">찾은 기록이 없다.</li> : null}
+                            {globalResults.slice(0, 50).map((result) => {
+                                const title = props.analyses.find((item) => item.id === result.analysisId)?.title
+                                    ?? '다른 분석';
+                                return (
+                                    <li key={`${result.analysisId}:${result.annotation.id}`}>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                props.onSelect(result.analysisId);
+                                                window.setTimeout(() => {
+                                                    const element = document.getElementById(
+                                                        `annotation-${result.annotation.id}`,
+                                                    );
+                                                    element?.scrollIntoView({ block: 'nearest' });
+                                                }, 200);
+                                            }}
+                                        >
+                                            <b>{title}</b>
+                                            <span>{result.annotation.body.split(/\r?\n/)[0]?.slice(0, 80)}</span>
+                                        </button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+
                     <div className="annotation-list" aria-live="polite">
-                        {records.map((item) => {
-                            const author = props.analysis?.authors.find((value) => value.id === item.authorId)?.displayName ?? '알 수 없음';
-                            const target = item.target as unknown as AnalysisTarget;
-                            const replies = props.analysis?.replies.filter((value) => value.annotationId === item.id && value.deletedAt === null) ?? [];
-                            const href = props.analysis
-                                ? internalReference(props.analysis, { annotationId: item.id })
-                                : '#';
-                            const reviewState = props.analysis?.reviews.find(
-                                (value) => JSON.stringify(value.target) === JSON.stringify(target),
-                            )?.state ?? 'unreviewed';
-                            return (
-                                <AnnotationItem
-                                    key={item.id}
-                                    anchorId={href.slice(1)}
-                                    annotation={item as never}
-                                    authorName={author}
-                                    replies={replies}
-                                    readOnly={props.readOnly}
-                                    referenceHref={href}
-                                    targetLinks={targetLinks(props.analysis, target, props.onNavigateTarget)}
-                                    onFocusReference={focusInternalReference}
-                                    onUpdate={(patch) => props.onUpdateAnnotation(item.id, item.version, patch)}
-                                    onDelete={() => props.onDeleteAnnotation(item.id, item.version)}
-                                    onRestore={() => props.onRestoreAnnotation(item.id, item.version)}
-                                    onReply={(body) => props.onReply(item.id, body)}
-                                    {...(target.kind === 'range' ? {
-                                        review: {
-                                            state: reviewState,
-                                            onChange: (state: string) => props.onReview(target, state, [item.id]),
-                                            onCompare: () => props.onCompareAnchor(target.anchorId),
-                                        },
-                                    } : {})}
-                                >
-                                    {target.kind === 'range' && props.comparison?.anchorId === target.anchorId ? (
-                                        <AnchorComparison comparison={props.comparison} onClose={props.onCloseComparison} />
-                                    ) : null}
-                                </AnnotationItem>
-                            );
-                        })}
+                        {(grouped ?? [{ relPath: null, items: records }]).map((group) => (
+                            <div key={group.relPath ?? '__loose'} className="annotation-group">
+                                {grouped === null ? null : (
+                                    <h4 className="annotation-group-head">
+                                        {group.relPath ?? '파일에 붙지 않은 기록'}
+                                    </h4>
+                                )}
+                                {group.items.map((item) => {
+                                    const author = props.analysis?.authors.find((value) => value.id === item.authorId)?.displayName ?? '알 수 없음';
+                                    const target = item.target as unknown as AnalysisTarget;
+                                    const replies = props.analysis?.replies.filter((value) => value.annotationId === item.id && value.deletedAt === null) ?? [];
+                                    const href = props.analysis
+                                        ? internalReference(props.analysis, { annotationId: item.id })
+                                        : '#';
+                                    const reviewState = props.analysis?.reviews.find(
+                                        (value) => JSON.stringify(value.target) === JSON.stringify(target),
+                                    )?.state ?? 'unreviewed';
+                                    return (
+                                        <AnnotationItem
+                                            key={item.id}
+                                            anchorId={href.slice(1)}
+                                            annotation={item as never}
+                                            authorName={author}
+                                            replies={replies}
+                                            readOnly={props.readOnly}
+                                            referenceHref={href}
+                                            tagSuggestions={tags}
+                                            targetLinks={targetLinks(props.analysis, target, props.onNavigateTarget)}
+                                            onFocusReference={focusInternalReference}
+                                            onUpdate={(patch) => props.onUpdateAnnotation(item.id, item.version, patch)}
+                                            onDelete={() => props.onDeleteAnnotation(item.id, item.version)}
+                                            onRestore={() => props.onRestoreAnnotation(item.id, item.version)}
+                                            onReply={(body) => props.onReply(item.id, body)}
+                                            {...(target.kind === 'range' ? {
+                                                review: {
+                                                    state: reviewState,
+                                                    onChange: (state: string) => props.onReview(target, state, [item.id]),
+                                                    onCompare: () => props.onCompareAnchor(target.anchorId),
+                                                },
+                                            } : {})}
+                                            {...(target.kind === 'node' ? {
+                                                review: {
+                                                    state: reviewState,
+                                                    onChange: (state: string) => props.onReview(target, state, [item.id]),
+                                                },
+                                            } : {})}
+                                        >
+                                            {target.kind === 'range' && props.comparison?.anchorId === target.anchorId ? (
+                                                <AnchorComparison comparison={props.comparison} onClose={props.onCloseComparison} />
+                                            ) : null}
+                                        </AnnotationItem>
+                                    );
+                                })}
+                            </div>
+                        ))}
                         {records.length === 0 ? <p className="muted">조건에 맞는 기록이 없다.</p> : null}
                     </div>
 
-                    <section className="walkthrough-section">
-                        <h3>안내 순서</h3>
-                        {props.analysis.walkthroughs.map((walkthrough) => (
-                            <div key={walkthrough.id}>
-                                <strong>{walkthrough.title}</strong>
-                                {walkthrough.steps.map((step, index) => (
-                                    <div
-                                        className="walkthrough-row"
-                                        key={step.id}
-                                        id={internalReference(props.analysis, { walkthroughId: walkthrough.id, stepId: step.id }).slice(1)}
-                                        tabIndex={-1}
-                                    >
-                                        <button className="walkthrough-step" type="button" onClick={() => {
-                                            if (step.annotationId) {
-                                                focusInternalReference(internalReference(props.analysis, { annotationId: step.annotationId }));
-                                                return;
-                                            }
-                                            const target = step.target as AnalysisTarget | null;
-                                            if (target) props.onNavigateTarget(target);
-                                        }}><b>{`${index + 1}. ${step.title}`}</b><span>{step.body}</span></button>
-                                        <a
-                                            className="internal-reference"
-                                            href={internalReference(props.analysis, { walkthroughId: walkthrough.id, stepId: step.id })}
-                                            onClick={(event) => {
-                                                event.preventDefault();
-                                                focusInternalReference(event.currentTarget.hash);
-                                            }}
-                                        >단계 링크</a>
-                                        <button type="button" aria-label="앞 단계로 옮기기" disabled={props.readOnly || index === 0} onClick={() => {
-                                            const steps = [...walkthrough.steps];
-                                            [steps[index - 1], steps[index]] = [steps[index]!, steps[index - 1]!];
-                                            props.onUpdateWalkthrough({ ...walkthrough, steps });
-                                        }}>↑</button>
-                                        <button type="button" aria-label="뒤 단계로 옮기기" disabled={props.readOnly || index === walkthrough.steps.length - 1} onClick={() => {
-                                            const steps = [...walkthrough.steps];
-                                            [steps[index], steps[index + 1]] = [steps[index + 1]!, steps[index]!];
-                                            props.onUpdateWalkthrough({ ...walkthrough, steps });
-                                        }}>↓</button>
-                                    </div>
-                                ))}
-                            </div>
-                        ))}
-                        <button type="button" disabled={props.readOnly || props.analysis.annotations.length === 0} onClick={props.onCreateWalkthrough}>현재 기록 순서로 만들기</button>
-                    </section>
+                    <WalkthroughEditor
+                        walkthroughs={props.analysis.walkthroughs as WalkthroughView[]}
+                        readOnly={props.readOnly}
+                        hasAnnotations={props.analysis.annotations.length > 0}
+                        canAddHere={props.canAddWalkthroughStep}
+                        stepHref={(walkthroughId, stepId) => internalReference(
+                            props.analysis, { walkthroughId, stepId },
+                        )}
+                        onCreate={props.onCreateWalkthrough}
+                        onUpdate={(walkthrough) => props.onUpdateWalkthrough(
+                            walkthrough as unknown as AnalysisDocumentView['walkthroughs'][number],
+                        )}
+                        onOpenStep={(walkthroughId, stepIndex) => {
+                            const walkthrough = props.analysis?.walkthroughs
+                                .find((item) => item.id === walkthroughId);
+                            const step = walkthrough?.steps[stepIndex];
+                            if (!step) return;
+                            if (step.annotationId && props.analysis) {
+                                focusInternalReference(internalReference(
+                                    props.analysis, { annotationId: step.annotationId },
+                                ));
+                                return;
+                            }
+                            const target = step.target as AnalysisTarget | null;
+                            if (target) props.onNavigateTarget(target);
+                        }}
+                        onPlay={props.onPlayWalkthrough}
+                        onAddCurrent={props.onAddWalkthroughStep}
+                    />
+
                 </>
             )}
 
@@ -670,8 +823,16 @@ export function internalReference(
 
 function Progress({ analysis }: { analysis: AnalysisDocumentView }): JSX.Element {
     const reviewed = analysis.reviews.filter((item) => item.state === 'reviewed').length;
+    const needsReview = analysis.reviews.filter((item) => item.state === 'needsReview').length;
     const total = analysis.reviews.length;
-    return <div className="review-progress"><span>{`확인함 ${reviewed}/${total}개 범위`}</span><progress max={Math.max(1, total)} value={reviewed} /></div>;
+    // 분모는 **검토 기록 수**다(V02). 노드 수를 분모로 두면 "노드를 펼친 횟수를
+    // 이해 완료율로 계산하지 않는다" 에 어긋난다.
+    return (
+        <div className="review-progress">
+            <span>{`확인함 ${reviewed}/${total}개 대상${needsReview > 0 ? ` · 재검토 ${needsReview}` : ''}`}</span>
+            <progress max={Math.max(1, total)} value={reviewed} />
+        </div>
+    );
 }
 
 function formatBytes(bytes: number): string {

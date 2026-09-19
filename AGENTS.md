@@ -25,6 +25,13 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 | **분석 기록 화면** | `AnalysisPanel`, `.analysis-panel` | 트레일·노드·코드 범위에 설명·질문·우려·결론을 남기고 검토·공유하는 탭 |
 | **읽기 시작점** | `ReadingStarts`, `.reading-starts` | 파일 탐색기 아래의 Git 변경 목록·문서 심볼·제한된 내용 검색 |
 | **AI 설명 초안** | `AiExplanationDraft`, `.ai-draft` | 선택한 코드 범위만 로컬 제공자에게 보내 받아온 채택 전 설명. 사람이 검토해 채택하기 전에는 분석 기록도 검토 완료도 아니다 |
+| **변경 기준** | `ChangeBase`, `.change-base` | 변경 목록·hunk·변경 보기가 무엇과 비교하는지. 작업 트리(기본)·커밋·브랜치 |
+| **검토 표시** | `.act.review`, `.badge.reviewed` | 노드 헤더와 hunk 줄의 `☐/☑`. 눌러 `확인함` 을 남기고, 코드가 바뀌면 `재검토` 로 내려간다 |
+| **여백 표식** | `.glyph-node`, `.glyph-note` | 코드 화면 왼쪽 여백의 트레일 노드·기록 표시. 누르면 그 노드·기록으로 간다 |
+| **분할 보기** | `.main.split` | 코드 화면과 트레일 패널을 나란히 놓은 상태. 좁은 화면에서는 탭으로 돌아간다 |
+| **안내 순서 재생** | `WalkthroughPlayer`, `.walkthrough-player` | 화면 아래 고정 막대. `n/m · 제목 · ← 이전 · 다음 →` 로 단계를 따라간다 |
+| **개인 화면 상태** | `LocalUiState`, `.code-trail/local/ui-state.json` | 사이드바·기록 열·마지막 문서·이동 이력처럼 이 기계의 이 사람에게만 속한 값 |
+| **트레일 목록** | `TrailList`, `.trail-list` | 앱 바에서 여는 트레일 관리 팝오버 |
 | **트레일 패널** (줄여서 **패널**) | `TrailView`, `.trail` | 함수 본문이 펼쳐지는 탭 **전체**. "뷰어", "윈도우", "미리보기 창"이라 부르지 않는다 |
 | **진단 화면** | `DiagnosticsView`, `#diagnostics` | 언어 서버 상태·점검 결과·로그와 외부 에디터 설정을 보여주는 탭 |
 | **서버 상태 표시** | `LspStatus`, `.lsp-status` | 앱 바와 코드 화면 문서 줄에 붙는 현재 문서 언어의 언어 서버 상태. 누르면 진단 화면의 그 언어 카드로 간다 |
@@ -39,12 +46,13 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 | **진입 링크** | `TrailOrigin`, `.origin` | 헤더 밑의 `↑ A 의 127번째 줄 Find`. 누르면 부모의 호출부로 돌아간다 |
 | **호출부** | `origin.line` / `origin.char`, `.clickable.visited` | 부모 본문에서 클릭했던 그 지점. 펼쳐본 뒤에는 ①②③ 순번이 붙는다 |
 | **순번** | `.idx`(헤더), `data-idx`(호출부) | 형제 노드 번호. 부모 호출부의 ①과 자식 노드의 ①이 한 짝이다 |
-| **배지** | `.badge` | 헤더 오른쪽의 `재귀` · `선언만` · `근사` · `바뀜` |
+| **배지** | `.badge` | 헤더 오른쪽의 `재귀` · `선언만` · `근사` · `바뀜` · `✓`(확인함) · `재검토` |
 | **기록 표시** | `.badge.notes`, `.cl.noted` | 노드 헤더의 `✎ N` 배지와 본문 줄 왼쪽의 색 띠. 그 노드·줄에 분석 기록이 있다는 뜻 |
-| **기록 열** | `AnnotationColumn`, `.annotation-column` | 트레일 패널 오른쪽의 접이식 세로 영역. 활성 노드의 기록 목록과 작성 칸이 있다 |
+| **기록 열** | `AnnotationColumn`, `.annotation-column` | 트레일 패널과 코드 화면 오른쪽의 접이식 세로 영역. 보고 있는 것(활성 노드 또는 열린 파일)의 기록 목록과 작성 칸이 있다 |
 | **후보 팝오버** | `ChoicePopover`, `.choice` | 정의·구현 후보를 클릭한 식별자(또는 그 노드 헤더) 바로 아래에서 고르는 창 |
+| **노드 메뉴** | `NodeMenu`, `.node-menu` | 헤더 우클릭 또는 `⋯` 로 여는 노드 단위 행동 목록 |
 | **브레드크럼** | `#breadcrumb` | 패널 위쪽의 현재 경로 줄 |
-| **툴바** | `#toolbar` | 전체 펼치기·접기, 정렬, 보드 전환, 필터, 내보내기, 지우기 버튼 줄. 오른쪽 끝에 노드 수와 기록 수 |
+| **툴바** | `#toolbar` | 전체 펼치기·접기, 정렬, 보드 전환, 자동 배치, 필터, 내보내기, 지우기 버튼 줄. 오른쪽 끝에 노드 수·기록 수·검토 수 |
 | **트리 모드 / 보드 모드** | `#root.board`, `Trail.mode` | 기본은 **트리 모드**(자식이 부모 안에 중첩). **보드 모드**는 노드를 캔버스에 자유 배치하고 헤더를 끌어 옮긴다 |
 | **연결선** | `.board-lines path` | 보드 모드에서 부모 오른쪽 → 자식 왼쪽을 잇는 곡선. 트리 모드의 가이드선에 해당한다 |
 | **폭 맞춤** | `useFitToWidth`, `--ct-code-font-size` | 가장 빠듯한 노드에 맞춰 **코드 본문** 글자만 줄이는 것. 헤더는 안 줄인다 |
@@ -61,13 +69,14 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 
 ## 지금 무엇을 하고 있나
 
-**세 가지가 끝났다.** 독립 프로그램 전환(1.0.0), 코드 이해·공유(1.1.0), 그리고
-리뷰 도구로서의 사용성 개선(1.2.0~1.4.0)이다. 지금 진행의 정본은
-[`docs/review-ux-improvement-plan.md`](docs/review-ux-improvement-plan.md) 이고,
-그 문서 0장의 U01~U20 체크리스트가 무엇이 끝났는지를 말한다.
+**네 가지가 끝났다.** 독립 프로그램 전환(1.0.0), 코드 이해·공유(1.1.0),
+리뷰 도구로서의 사용성 개선(1.2.0~1.4.0), 그리고 변경 기준·검토 표시·안내 순서(1.7.0)다.
+지금 진행의 정본은 [`docs/feature-ux-improvement-plan.md`](docs/feature-ux-improvement-plan.md)
+이고, 그 문서 0장의 V01~V23 체크리스트가 무엇이 끝났는지를 말한다.
 
-앞의 둘은 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md) 와
-[`docs/code-understanding-and-sharing-plan.md`](docs/code-understanding-and-sharing-plan.md) 에 있다.
+앞의 셋은 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md),
+[`docs/code-understanding-and-sharing-plan.md`](docs/code-understanding-and-sharing-plan.md),
+[`docs/review-ux-improvement-plan.md`](docs/review-ux-improvement-plan.md) 에 있다.
 남은 것은 **이 기계에서 할 수 없는 확인**뿐이다 — 실제 언어 서버 다섯(T02·T23·T37),
 macOS·Linux 확인(구현서 0.13·0.14), 실제 참여자 사용성 평가(T33·T40), npm 배포.
 
@@ -139,6 +148,13 @@ textDocument/typeDefinition    정의 폴백
 낙관적으로 먼저 그려두면 서버가 거절했을 때(오래된 revision, 권한 없는 문서) 두 상태가
 어긋나고, 그 어긋남은 다음 명령의 `baseRevision` 을 타고 번진다.
 
+**개인 화면 상태는 `localStorage` 가 아니라 서버에 남긴다.** origin 이
+`127.0.0.1:<포트>` 이고 포트 기본값이 0(운영체제가 고른다)이라 서버를 다시 띄우면 다른
+origin 이 된다 — `localStorage` 에 넣은 값은 매번 초기화된다. 사이드바 폭·기록 열·탭·
+마지막 문서·이동 이력·변경 기준은 `.code-trail/local/ui-state.json` 이 들고 있고,
+**절대경로·documentId·토큰은 담지 않는다.** 방송하지도 않는다 — 옆 탭의 사이드바 폭이
+따라 움직이면 방해다.
+
 **화면 상태는 revision 을 올리지 않는다.** 접기(`trail.toggleNode`), 모드 전환,
 보드 좌표, 활성 노드는 트리 모양을 바꾸지 않는다. revision 을 올리면 노드를 하나 누른
 것만으로 그 순간 날아가던 구조 명령이 `STALE_REVISION` 으로 거절된다.
@@ -200,12 +216,14 @@ A 안에서 B, C를 클릭하면 둘 다 A의 형제 자식이다. 이 규칙을
 확인한다" 한 줄로는 사용자가 무엇을 할지 모른다. **맥락에 경로·실행 파일 위치를 담지
 않는다** — 담는 것은 상태뿐이다.
 
-**되돌릴 수 없는 삭제에만 확인을 붙인다.** `지우기` 와 `✕ 트레일` 은 인라인 확인을
-거치고, 노드 삭제는 확인 대신 되돌리기(8초 알림 / 서버 버퍼 60초)다. 리뷰 중 수십 번
-일어나는 일에 매번 확인을 띄우면 사람은 곧 읽지 않고 누른다.
+**되돌릴 수 없는 삭제에만 확인을 붙인다.** 툴바 `지우기`, 트레일 목록의 트레일 삭제,
+보드 `⟲ 자동 배치` 는 인라인 확인을 거치고, 노드 삭제와 `⇱` 는 확인 대신
+되돌리기(8초 알림 / 서버 버퍼 60초)다. 리뷰 중 수십 번 일어나는 일에 매번 확인을 띄우면
+사람은 곧 읽지 않고 누른다.
 
-**되돌리기 버퍼는 한 단계다.** 삭제 뒤 다른 구조 명령이 들어오면 원래 자리가 더 이상
-그 자리가 아니므로 `TrailService.mutate` 가 버퍼를 비운다. 여러 단계를 쌓으려면 트리
+**되돌리기 버퍼는 한 단계다.** 삭제·승격 뒤 다른 구조 명령이 들어오면 원래 자리가 더 이상
+그 자리가 아니므로 `TrailService.mutate` 가 버퍼를 비운다. 둘은 **같은 버퍼**를 나눠
+쓴다 — 직전 한 번만 되돌릴 수 있다. 여러 단계를 쌓으려면 트리
 변경 이력을 통째로 들고 있어야 한다.
 
 **CI 를 두지 않는다.** 저장소 주인의 결정이다. `.github/workflows/` 를 만들지 않고,
@@ -224,6 +242,7 @@ packages/shared/src/protocol/   명령·이벤트 타입과 Zod 런타임 스키
 
 packages/server/src/security/   토큰, Host·Origin 검사, 경로 경계, CSP
 packages/server/src/persistence/ .code-trail/ 저장소, 원자적 쓰기, debounce, 잠금 파일
+                                localUiStateStore.ts(개인 화면 상태)
 packages/server/src/workspace/  파일 트리, 이름 검색, 문서 권한(documentId), 파일 감시
 packages/server/src/trails/     트레일 정본과 mutation queue
 packages/server/src/config/     로그. 절대경로와 토큰을 남기지 않는다
@@ -251,8 +270,11 @@ packages/web/src/features/settings/     설정 화면
 packages/web/src/features/start/        시작하기 카드
 packages/web/src/features/help/         단축키 도움말
 packages/web/src/features/trail/board.ts           보드 배치 계산 (순수 함수)
-packages/web/src/features/trail/annotationIndex.ts 기록 색인 (순수 함수)
+packages/web/src/features/trail/annotationIndex.ts 기록·검토 색인, 하위 요약 (순수 함수)
+packages/web/src/features/trail/filter.ts          이름·본문·기록 필터 (순수 함수)
 packages/web/src/features/trail/keyboard.ts        키보드 이동 (순수 함수)
+packages/web/src/features/source/gutterIndex.ts    코드 화면 여백 표식 색인 (순수 함수)
+packages/web/src/features/annotations/annotationList.ts 기록 목록 거르기·정렬 (순수 함수)
 packages/web/src/styles/        app.css(변수·뼈대) 와 trail.css(노드·보드)
 packages/cli/src/               인자 해석, 서버 재사용 감지, 브라우저 열기
 
@@ -266,8 +288,8 @@ test/perf/                      1,000개 노드 성능 측정과 분석 규모 �
 test/fixtures/                  확장 시절 데이터를 굳혀 둔 것. **고치지 않는다**
 ```
 
-브라우저 없이 테스트하는 웹 모듈(`board.ts`·`annotationIndex.ts`·`keyboard.ts`·
-`tokenizer/`)은 `packages/web/tsconfig.lib.json` 의 `include` 에 있어야 한다.
+브라우저 없이 테스트하는 웹 모듈(`board.ts`·`annotationIndex.ts`·`filter.ts`·
+`keyboard.ts`·`gutterIndex.ts`·`annotationList.ts`·`tokenizer/`)은 `packages/web/tsconfig.lib.json` 의 `include` 에 있어야 한다.
 `npm run build:lib` 가 그것만 `packages/web/lib/` 로 내보내고 `test/unit/` 이 그걸 읽는다.
 **순수 함수를 새로 만들면 그 목록에 넣는다** — 안 넣으면 테스트가 모듈을 못 찾는다.
 
@@ -304,6 +326,11 @@ test/fixtures/                  확장 시절 데이터를 굳혀 둔 것. **고
 | 공유 묶음에 들어가는 필드 | `docs/share-format.md` 의 포함 정책, `examples/first-review.ctshare.json` 무결성 재계산 |
 | 기록이 노드·줄에 붙는 규칙 (`features/trail/annotationIndex.ts`) | `test/unit/annotation-index.test.mjs`, `test/e2e/analysis.e2e.mjs` |
 | 키보드 이동 규칙 (`features/trail/keyboard.ts`) | `test/unit/keyboard.test.mjs`, `features/help/ShortcutsHelp.tsx`, README `## 사용법` 의 키 표 |
+| 트레일 필터 규칙 (`features/trail/filter.ts`) | `test/unit/trail-filter.test.mjs`, README `## 사용법` 필터 줄 |
+| 여백 표식 규칙 (`features/source/gutterIndex.ts`) | `test/unit/gutter-index.test.mjs`, `test/e2e/trail.e2e.mjs` |
+| 기록 목록 거르기·정렬 (`features/annotations/annotationList.ts`) | `test/unit/annotation-list.test.mjs` |
+| 개인 화면 상태에 항목 추가 (`protocol/schemas.ts` 의 `localUiStateSchema`) | `persistence/localUiStateStore.ts`, `App.tsx` 의 저장·복원, `test/integration/persistence.test.mjs`, `docs/data-and-recovery.md` |
+| Markdown 형식 (`shared/domain/markdown.ts`) | `test/unit/markdown.test.mjs`, `server/src/sharing/service.ts` 의 `staticHtml`, `docs/share-format.md` |
 | 알림을 새로 띄우는 자리 | `features/notices/useNotices.ts` 를 지난다. 새 표시 요소를 만들지 않는다 |
 | `package.json` 의 `files`·`bin`·의존성 | `npm run test:pack` 과 `npm run test:install` 을 돌린다. 새 런타임 의존성은 `THIRD-PARTY-NOTICES.md` 에도 |
 | CLI 인자 추가 | `packages/cli/src/args.ts` 의 `USAGE`, README `## 설치와 실행` 표, `test/unit/cli-args.test.mjs` |

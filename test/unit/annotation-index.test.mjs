@@ -112,3 +112,66 @@ test('트레일 대상 기록은 노드에 붙지 않는다', () => {
     assert.equal(index.byNode.size, 0);
     assert.equal(countForNode(index, NODE, null, 0, 0).total, 0);
 });
+
+// ── 검토 표시 (V02 · V03) ─────────────────────────────────────────────────
+
+const { reviewForRange, subtreeSummary } = await import(
+    new URL('../../packages/web/lib/features/trail/annotationIndex.js', import.meta.url).href
+);
+
+test('노드 검토와 범위 검토는 섞이지 않는다', () => {
+    // 같은 목록에서 나오지만 붙는 자리가 다르다. 섞이면 노드 헤더에 남의
+    // hunk 검토가 뜨고, hunk 줄에 노드 검토가 뜬다.
+    const index = buildAnnotationIndex(analysis({
+        baselines: [{ files: [{ fileId: 'f1', relPath: 'src/a.cpp' }] }],
+        anchors: [anchor('a1', 'f1', 10, 12)],
+        reviews: [
+            { target: { kind: 'node', nodeId: NODE }, state: 'reviewed' },
+            { target: { kind: 'range', anchorId: 'a1' }, state: 'needsReview' },
+        ],
+    }));
+
+    assert.equal(index.reviewByNode.get(NODE), 'reviewed');
+    assert.equal(index.reviewsByFile.get('src/a.cpp').length, 1);
+    assert.deepEqual(index.reviewCounts, { reviewed: 1, needsReview: 1 });
+});
+
+test('확인함 범위가 hunk 를 덮으면 확인한 것이고, 재검토가 이긴다', () => {
+    // 함수 하나를 통째로 확인하면 그 안의 hunk 도 본 것이다. 다시 봐야 한다는
+    // 신호는 놓치면 안 되므로 겹치면 재검토가 이긴다.
+    const index = buildAnnotationIndex(analysis({
+        baselines: [{ files: [{ fileId: 'f1', relPath: 'src/a.cpp' }] }],
+        anchors: [anchor('a1', 'f1', 10, 40), anchor('a2', 'f1', 100, 120)],
+        reviews: [
+            { target: { kind: 'range', anchorId: 'a1' }, state: 'reviewed' },
+            { target: { kind: 'range', anchorId: 'a2' }, state: 'needsReview' },
+        ],
+    }));
+
+    assert.equal(reviewForRange(index, 'src/a.cpp', 20, 25), 'reviewed');
+    assert.equal(reviewForRange(index, 'src/a.cpp', 105, 110), 'needsReview');
+    // 범위 밖은 아직 안 본 것이다. 덮지 않은 곳까지 확인함이 되면 안 된다.
+    assert.equal(reviewForRange(index, 'src/a.cpp', 60, 70), 'unreviewed');
+});
+
+test('하위 요약은 자기 아래만 센다', () => {
+    const child = { id: 'c1', symbol: { relPath: null, startLine: 0, code: '' }, children: [] };
+    const grand = { id: 'g1', symbol: { relPath: null, startLine: 0, code: '' }, children: [] };
+    child.children = [grand];
+    const sibling = { id: 's1', symbol: { relPath: null, startLine: 0, code: '' }, children: [] };
+    const root = { id: NODE, symbol: { relPath: null, startLine: 0, code: '' }, children: [child] };
+
+    const index = buildAnnotationIndex(analysis({
+        annotations: [
+            annotation('n1', { kind: 'node', nodeId: 'g1' }, { kind: 'concern' }),
+            annotation('n2', { kind: 'node', nodeId: 's1' }),
+        ],
+        reviews: [{ target: { kind: 'node', nodeId: 'c1' }, state: 'needsReview' }],
+    }));
+    const summary = subtreeSummary([root, sibling], index);
+
+    assert.deepEqual(summary.get(NODE), { nodes: 2, notes: 1, open: 1, needsReview: 1 });
+    assert.deepEqual(summary.get('g1'), { nodes: 0, notes: 1, open: 1, needsReview: 0 });
+    // 형제 것이 섞이면 접힌 노드를 보고 엉뚱한 곳을 펼친다.
+    assert.deepEqual(summary.get('s1'), { nodes: 0, notes: 1, open: 0, needsReview: 0 });
+});

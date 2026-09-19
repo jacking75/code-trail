@@ -117,10 +117,18 @@
     gap: 6px;
 }
 
+.trail-bar {
+    position: relative;
+}
+
 .trail-pick {
     display: flex;
     align-items: center;
     gap: 4px;
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .trail-bar select {
@@ -131,6 +139,77 @@
     border-radius: 3px;
     font: inherit;
     max-width: 220px;
+}
+
+/* 앱 바에서 여는 트레일 관리 팝오버 (V22). */
+.trail-list {
+    position: absolute;
+    inset-block-start: calc(100% + 6px);
+    inset-inline-start: 0;
+    z-index: 20;
+    inline-size: min(420px, 90vw);
+    padding: 10px;
+    background: var(--ct-bg-raised);
+    border: 1px solid var(--ct-border);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.trail-list-tools {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.trail-list-tools input {
+    flex: 1;
+    min-inline-size: 0;
+}
+
+.trail-list-rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-block-size: 50vh;
+    overflow: auto;
+}
+
+.trail-list-rows li {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.trail-list-rows li.active .trail-list-pick {
+    border-inline-start: 2px solid var(--ct-accent);
+}
+
+.trail-list-pick {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: start;
+    background: none;
+    border: 0;
+    border-inline-start: 2px solid transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    padding: 3px 6px;
+}
+
+.trail-list-pick:hover {
+    background: rgb(122 162 247 / 14%);
+}
+
+.trail-list-pick small {
+    color: var(--ct-fg-muted);
+    font-size: 11px;
 }
 
 .rename {
@@ -351,10 +430,34 @@
     min-width: 0;
 }
 
+/* 누르면 코드 화면의 그 줄로 간다 (V05). */
 .hd .loc {
     color: var(--ct-fg-muted);
     font-family: var(--ct-code-font);
     font-size: 11px;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+}
+
+.hd .loc:hover:not(:disabled) {
+    color: var(--ct-accent);
+    text-decoration: underline;
+}
+
+.hd .loc:disabled {
+    cursor: default;
+    opacity: 0.7;
+}
+
+/* 접힌 노드가 감추고 있는 것 (V12). */
+.hd .sub-summary {
+    color: var(--ct-fg-muted);
+    font-size: 11px;
+    background: rgb(127 136 176 / 18%);
+    border-radius: 8px;
+    padding: 0 6px;
 }
 
 .badge {
@@ -406,6 +509,16 @@
 
 .badge.notes:hover { color: var(--ct-fg); }
 
+.badge.reviewed {
+    color: #9ece6a;
+    background: rgb(158 206 106 / 22%);
+}
+
+.badge.needs-review {
+    color: #e0af68;
+    background: rgb(224 175 104 / 25%);
+}
+
 .badge.busy {
     background: rgba(122, 162, 247, 0.2);
     color: var(--ct-accent);
@@ -439,6 +552,11 @@
 }
 
 /* 다음에 눌러야 할 버튼. 선언만인 노드의 ⚑ 와 바뀐 노드의 ↻ 가 그렇다. */
+/* 검토 표시 (V02). 켜지면 초록이다. */
+.hd .act.review.on {
+    color: #9ece6a;
+}
+
 .hd .act.hot {
     color: #e0af68;
 }
@@ -530,6 +648,16 @@
     padding: 4px 0;
     white-space: pre;
     min-inline-size: max-content;
+    /*
+     * 탭 폭은 표시 설정이다 (V20). 코드 화면의 Monaco 와 같은 값을 쓴다 —
+     * 원본 문자열과 컬럼 좌표는 그대로다.
+     */
+    tab-size: var(--ct-tab-size, 4);
+}
+
+/* 본문 필터에 걸린 줄 (V09). */
+.cl.hit {
+    background: rgb(224 175 104 / 18%);
 }
 
 .cl {
@@ -702,4 +830,85 @@
     background: var(--ct-bg-raised);
     border-color: var(--ct-border);
     color: var(--ct-fg);
+}
+
+/* ── 노드 메뉴 (V08) ─────────────────────────────────────────────────── */
+
+.node-menu {
+    position: fixed;
+    z-index: 30;
+    min-inline-size: 190px;
+    padding: 4px;
+    background: var(--ct-bg-raised);
+    border: 1px solid var(--ct-accent);
+    border-radius: 5px;
+    box-shadow: 0 6px 20px rgb(0 0 0 / 40%);
+    display: flex;
+    flex-direction: column;
+}
+
+.node-menu:focus-visible {
+    outline: none;
+}
+
+.node-menu-title {
+    color: var(--ct-fg-muted);
+    font-family: var(--ct-code-font);
+    font-size: 11px;
+    padding: 2px 8px 4px;
+    border-block-end: 1px solid var(--ct-border);
+    margin-block-end: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.node-menu-item {
+    text-align: start;
+    background: none;
+    border: 0;
+    border-radius: 3px;
+    color: var(--ct-fg);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
+.node-menu-item.active:not(:disabled) {
+    background: rgb(122 162 247 / 22%);
+}
+
+.node-menu-item.danger {
+    color: var(--ct-danger);
+}
+
+.node-menu-item:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* ── Markdown 내보내기 팝오버 (V23) ──────────────────────────────────── */
+
+.export-popover {
+    position: absolute;
+    inset-block-start: calc(100% + 6px);
+    inset-inline-start: 0;
+    z-index: 15;
+    inline-size: max-content;
+    padding: 10px 12px;
+    background: var(--ct-bg-raised);
+    border: 1px solid var(--ct-accent);
+    border-radius: 5px;
+    box-shadow: 0 6px 20px rgb(0 0 0 / 40%);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+}
+
+.export-popover .confirm-row {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
 }

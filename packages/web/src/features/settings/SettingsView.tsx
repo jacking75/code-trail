@@ -142,6 +142,18 @@ export function SettingsView(props: SettingsViewProps): JSX.Element {
                         onChange={(event) => setUi({ maxCodeLines: Number(event.target.value) })}
                     />
                 </label>
+                <label>
+                    탭 폭
+                    <input
+                        type="number"
+                        min={1}
+                        max={16}
+                        value={ui.tabSize}
+                        disabled={props.readOnly}
+                        title="코드 화면과 노드 본문이 같은 값을 쓴다. 원본 문자열은 바뀌지 않는다."
+                        onChange={(event) => setUi({ tabSize: Number(event.target.value) })}
+                    />
+                </label>
             </section>
 
             <section className="settings-card">

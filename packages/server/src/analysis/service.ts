@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import {
     MAX_ANALYSIS_ENTITIES,
     MAX_TAGS,
+    SYSTEM_ACTOR_ID,
     cloneAnalysis,
     createAnalysis,
     newEntityId,
@@ -27,6 +28,7 @@ import {
 
 import type { Logger } from '../config/logger.js';
 import type { AnalysisStore } from '../persistence/analysisStore.js';
+import { reanchor } from './baselines.js';
 
 export type AnalysisResult<T> = { ok: true; value: T } | { ok: false; error: CommandError };
 
@@ -442,10 +444,20 @@ export class AnalysisService {
         return this.change(args.analysisId, args.commandId, args, (document) => {
             const anchor = document.anchors.find((item) => item.id === args.anchorId);
             if (!anchor) return fail('NOT_FOUND', '기록 위치를 찾을 수 없다.');
+            const previousState = anchor.state;
             anchor.version += 1;
             anchor.state = args.state;
             anchor.currentRange = args.currentRange;
             anchor.candidateIds = args.candidateIds;
+            if (args.actorId === SYSTEM_ACTOR_ID && previousState !== args.state) {
+                // 자동 재확인이 언제 돌았는지 모르면 "누가 상태를 바꿨나" 를
+                // 답할 수 없다. 사람이 누른 재확인은 그 명령 자체가 기록이다.
+                document.history.push({
+                    id: newEntityId(), targetId: anchor.id, fromVersion: anchor.version - 1,
+                    toVersion: anchor.version, kind: 'reviewed', actorId: SYSTEM_ACTOR_ID,
+                    at: new Date().toISOString(), previousBody: null, changedFields: ['state'],
+                });
+            }
             if (args.state !== 'matched') {
                 for (const review of document.reviews) {
                     if (review.target.kind === 'range' && review.target.anchorId === anchor.id
@@ -457,6 +469,196 @@ export class AnalysisService {
             }
             return { ok: true, value: anchor.id };
         });
+    }
+
+    /**
+     * 같은 파일·같은 범위·같은 내용의 앵커가 이미 있는지 (V03).
+     *
+     * hunk 검토 표시는 같은 범위를 몇 번이고 다시 잡는다. 그때마다 앵커를 새로
+     * 만들면 한 hunk 에 검토 기록이 여러 개 생겨 "봤다" 가 둘로 갈린다.
+     */
+    findAnchor(
+        analysisId: string,
+        relPath: string,
+        range: CodeRange,
+        contentHash: string,
+    ): string | null {
+        const document = this.documents.get(analysisId);
+        if (!document) return null;
+        const key = JSON.stringify(range);
+        for (const anchor of document.anchors) {
+            const baseline = document.baselines.find((item) => item.id === anchor.baselineId);
+            const file = baseline?.files.find((item) => item.fileId === anchor.fileId);
+            if (file?.relPath === relPath && file.contentHash === contentHash
+                && JSON.stringify(anchor.range) === key) {
+                return anchor.id;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 노드 대상 검토를 재검토로 내린다 (V02).
+     *
+     * `trail.refreshNode` 로 본문을 다시 읽었는데 내용 해시가 기준과 다르면
+     * "봤다" 는 이제 옛 코드에 대한 말이다. 조용히 남겨 두면 안 된다.
+     */
+    async downgradeNodeReviews(nodeId: string, contentHash: string | null): Promise<AnalysisDocument[]> {
+        const changed: AnalysisDocument[] = [];
+        for (const [id, document] of [...this.documents]) {
+            let dirty = false;
+            for (const review of document.reviews) {
+                if (review.target.kind !== 'node' || review.target.nodeId !== nodeId) continue;
+                if (review.state !== 'reviewed') continue;
+                const baseline = document.baselines.find((item) => item.id === review.baselineId);
+                const file = baseline?.files[0];
+                if (file !== undefined && contentHash !== null && file.contentHash === contentHash) {
+                    continue;
+                }
+                review.state = 'needsReview';
+                review.version += 1;
+                document.history.push({
+                    id: newEntityId(), targetId: review.id, fromVersion: review.version - 1,
+                    toVersion: review.version, kind: 'reviewed', actorId: SYSTEM_ACTOR_ID,
+                    at: new Date().toISOString(), previousBody: null, changedFields: ['state'],
+                });
+                dirty = true;
+            }
+            if (!dirty) continue;
+            document.revision += 1;
+            document.updatedAt = new Date().toISOString();
+            await this.store.save(document).catch(() => undefined);
+            this.documents.set(id, document);
+            changed.push(cloneAnalysis(document));
+        }
+        return changed;
+    }
+
+    // ── 자동 재확인 (V17) ───────────────────────────────────────────────────
+
+    /**
+     * 프로젝트 안 파일을 읽는 통로. 부트스트랩이 문서 권한 경계를 지나 꽂아 준다.
+     *
+     * 이 서비스가 직접 파일 시스템을 건드리지 않게 한다 — 경로 경계 판정은
+     * `DocumentRegistry` 한 곳에만 있어야 한다.
+     */
+    private reader: ((relPath: string) => Promise<{ text: string; contentHash: string } | null>) | null = null;
+    private autoRecheckListener: ((document: AnalysisDocument) => void) | null = null;
+    private readonly pendingRecheck = new Set<string>();
+    private recheckTimer: ReturnType<typeof setTimeout> | undefined;
+    private recheckChain: Promise<void> = Promise.resolve();
+
+    attachSource(
+        reader: (relPath: string) => Promise<{ text: string; contentHash: string } | null>,
+        listener: (document: AnalysisDocument) => void,
+    ): void {
+        this.reader = reader;
+        this.autoRecheckListener = listener;
+    }
+
+    /**
+     * 파일이 바뀌었다고 감시자가 알렸다. 1초 모아 한 번 돈다 (V17).
+     *
+     * "파일이 바뀌면 알리되 자동으로 다시 읽지 않는다" 는 **문서와 노드 본문**에
+     * 대한 규칙이다. 앵커 재확인은 코드를 다시 읽는 것이 아니라 기록의 상태를
+     * 다시 판정하는 것이고, 재연결(`anchor.rebind`)은 여전히 사람이 한다.
+     */
+    queueRecheck(relPaths: readonly string[], delayMs = 1_000): void {
+        if (this.reader === null) return;
+        for (const relPath of relPaths) this.pendingRecheck.add(relPath);
+        if (this.recheckTimer !== undefined) clearTimeout(this.recheckTimer);
+        this.recheckTimer = setTimeout(() => {
+            this.recheckTimer = undefined;
+            const paths = [...this.pendingRecheck];
+            this.pendingRecheck.clear();
+            this.recheckChain = this.recheckChain
+                .then(() => this.recheckForFiles(paths))
+                .then((documents) => {
+                    for (const document of documents) this.autoRecheckListener?.(document);
+                })
+                .catch((error: unknown) => this.logger.warn('자동 재확인이 실패했다.', {
+                    reason: error instanceof Error ? error.message : String(error),
+                }));
+        }, delayMs);
+    }
+
+    /** 대기 중인 자동 재확인을 끝낸다. 종료 절차와 테스트가 쓴다. */
+    async flushRecheck(): Promise<void> {
+        if (this.recheckTimer !== undefined) {
+            clearTimeout(this.recheckTimer);
+            this.recheckTimer = undefined;
+            const paths = [...this.pendingRecheck];
+            this.pendingRecheck.clear();
+            this.recheckChain = this.recheckChain
+                .then(() => this.recheckForFiles(paths))
+                .then((documents) => {
+                    for (const document of documents) this.autoRecheckListener?.(document);
+                })
+                .catch(() => undefined);
+        }
+        await this.recheckChain;
+    }
+
+    /**
+     * 이 파일들을 기준으로 하는 앵커를 다시 판정한다.
+     *
+     * 자동으로 바뀌는 것은 `state` 와 `currentRange` 뿐이다. 후보가 여럿이면
+     * 고르지 않는다 — 재연결은 사람의 항목이다. `reviewed` 였던 범위가
+     * 일치하지 않게 되면 `needsReview` 로 내려간다.
+     */
+    async recheckForFiles(relPaths: readonly string[]): Promise<AnalysisDocument[]> {
+        const read = this.reader;
+        if (read === null || relPaths.length === 0) return [];
+        const wanted = new Set(relPaths);
+        const contents = new Map<string, { text: string; contentHash: string } | null>();
+        const changed: AnalysisDocument[] = [];
+
+        for (const id of [...this.documents.keys()]) {
+            const document = this.documents.get(id);
+            if (!document) continue;
+            const fileById = new Map<string, string>();
+            for (const baseline of document.baselines) {
+                for (const file of baseline.files) fileById.set(file.fileId, file.relPath);
+            }
+            const targets = document.anchors.filter((anchor) => {
+                const relPath = fileById.get(anchor.fileId);
+                return relPath !== undefined && wanted.has(relPath);
+            });
+            if (targets.length === 0) continue;
+
+            let latest = document;
+            for (const anchor of targets) {
+                const relPath = fileById.get(anchor.fileId) as string;
+                if (!contents.has(relPath)) {
+                    contents.set(relPath, await read(relPath).catch(() => null));
+                }
+                const content = contents.get(relPath) ?? null;
+                const current = latest.anchors.find((item) => item.id === anchor.id);
+                if (!current) continue;
+                const checked = content
+                    ? reanchor(current, content.text, content.contentHash)
+                    : { state: 'missing' as const, currentRange: null, candidates: [] };
+                if (checked.state === current.state
+                    && JSON.stringify(checked.currentRange) === JSON.stringify(current.currentRange)) {
+                    continue;
+                }
+                const result = await this.setAnchorCheck({
+                    analysisId: latest.id,
+                    commandId: `auto:${latest.id}:${anchor.id}:${content?.contentHash ?? 'missing'}`,
+                    anchorId: anchor.id,
+                    state: checked.state,
+                    currentRange: checked.currentRange,
+                    // 후보 ID 는 `anchor.rebind` 가 쓰는 세션 키다. 사람이 누르지
+                    // 않은 자동 재확인에서는 만들지 않는다.
+                    candidateIds: [],
+                    actorId: SYSTEM_ACTOR_ID,
+                });
+                if (!result.ok) break;
+                latest = result.value.document;
+            }
+            if (latest !== document) changed.push(latest);
+        }
+        return changed;
     }
 
     async rebindAnchor(args: {

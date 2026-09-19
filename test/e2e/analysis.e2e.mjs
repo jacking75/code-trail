@@ -140,13 +140,15 @@ try {
         (await page.locator('.pane-tabs .tab.active').textContent()).includes('트레일'),
     );
 
+    // `＋ 기록` 은 탭을 바꾸지 않고 그 자리에 기록 열을 연다(V16).
+    // 코드를 떠나야 기록할 수 있으면 읽던 흐름이 끊긴다.
     await page.locator('.selection-chip button', { hasText: '＋ 기록' }).click();
-    await page.waitForFunction(
-        () => document.querySelector('.pane-tabs .tab.active')?.textContent?.includes('분석 기록') === true,
-        undefined,
-        { timeout: 8000 },
+    await page.waitForSelector('.annotation-column', { timeout: 8000 });
+    check(
+        '기록 열이 열려도 탭은 그대로다',
+        (await page.locator('.pane-tabs .tab.active').textContent()).includes('트레일'),
     );
-    const targetValue = await page.locator('.annotation-composer select').first().inputValue();
+    const targetValue = await page.locator('.annotation-column .annotation-composer select').first().inputValue();
     check('대상이 선택한 코드 범위로 잡힌다', targetValue === 'range', targetValue);
     check(
         '어느 줄인지 보여준다',
@@ -156,12 +158,15 @@ try {
 
     await composer.fill('이 줄의 범위를 기록한다.');
     await composer.press('Control+Enter');
+    await page.locator('.pane-tabs .tab', { hasText: '분석 기록' }).click();
     await page.waitForFunction(() => document.querySelectorAll('.annotation-item').length === 2,
         undefined, { timeout: 15000 });
     check('범위 기록이 저장된다', (await page.locator('.annotation-item').count()) === 2);
 
     console.log('\n[노드에 붙는 기록 표시]');
     await page.locator('.pane-tabs .tab', { hasText: '트레일' }).click();
+    // 기록 열은 열려 있다. 배지 확인은 헤더 쪽이므로 그대로 둔다.
+
     await page.waitForSelector('.node .hd .badge.notes', { timeout: 8000 });
     check('헤더에 기록 수 배지가 붙는다',
         (await page.locator('.node .hd .badge.notes').textContent()).includes('1'));
@@ -171,6 +176,7 @@ try {
 
     console.log('\n[기록 열]');
     // 노드를 보면서 바로 옆에서 기록을 읽고 쓴다(U12).
+    // 배지는 열을 여는 것만이 아니라 활성 노드를 그 노드로 옮긴다.
     await page.locator('.node .hd .badge.notes').click();
     await page.waitForSelector('.annotation-column', { timeout: 8000 });
     check('배지를 누르면 열이 열린다', (await page.locator('.annotation-column').count()) === 1);
@@ -267,7 +273,87 @@ try {
     check('안내 단계 링크가 만들어진다',
         (await page.getByRole('link', { name: '단계 링크' }).count()) === 3);
 
+    console.log('\n[기록 거르기 (V15)]');
+    await page.locator('.pane-tabs .tab', { hasText: '분석 기록' }).click();
+    await page.waitForSelector('.annotation-item', { timeout: 8000 });
+    const allItems = await page.locator('.annotation-item').count();
+    await page.locator('.annotation-tools select[aria-label="대상 거르기"]').selectOption('range');
+    await page.waitForTimeout(250);
+    const rangeOnly = await page.locator('.annotation-item').count();
+    check('대상으로 거른다', rangeOnly < allItems && rangeOnly >= 1, `${allItems} → ${rangeOnly}`);
+    await page.locator('.annotation-tools select[aria-label="대상 거르기"]').selectOption('all');
+    await page.waitForTimeout(250);
+
+    await page.locator('.annotation-tools select[aria-label="정렬"]').selectOption('location');
+    await page.waitForTimeout(250);
+    check('위치순으로 세운다', (await page.locator('.annotation-item').count()) === allItems);
+    await page.locator('.annotation-tools label', { hasText: '파일별 묶기' }).locator('input').check();
+    await page.waitForSelector('.annotation-group-head', { timeout: 8000 });
+    check('파일별로 묶인다', (await page.locator('.annotation-group-head').count()) >= 1);
+    await page.locator('.annotation-tools label', { hasText: '파일별 묶기' }).locator('input').uncheck();
+    await page.locator('.annotation-tools select[aria-label="정렬"]').selectOption('recent');
+    await page.waitForTimeout(250);
+
+    // 다른 분석의 기록까지 찾는다.
+    await page.locator('.annotation-global input').fill('범위를 기록한다');
+    await page.locator('.annotation-global button[type="submit"]').click();
+    await page.waitForSelector('.annotation-global-results li', { timeout: 8000 });
+    check('모든 분석에서 찾는다',
+        (await page.locator('.annotation-global-results li').count()) >= 1);
+    await page.locator('.annotation-global button', { hasText: '닫기' }).click();
+
+    console.log('\n[안내 순서 다듬기와 따라 읽기 (V13 · V14)]');
+    await page.locator('.walkthrough-section button', { hasText: '현재 기록 순서로 만들기' }).click();
+    await page.waitForSelector('.walkthrough-row', { timeout: 8000 });
+    const steps = await page.locator('.walkthrough-row').count();
+    check('기록 순서로 단계가 만들어진다', steps >= 2, String(steps));
+
+    // 제목을 고친다. 설명하기 좋은 순서로 다듬을 수 있어야 한다.
+    await page.locator('.walkthrough-row button[aria-label="단계 수정"]').first().click();
+    await page.waitForSelector('.walkthrough-row .inline-edit input', { timeout: 8000 });
+    await page.locator('.walkthrough-row .inline-edit input').fill('여기서부터 읽는다');
+    await page.locator('.walkthrough-row .inline-edit button[type="submit"]').click();
+    await page.waitForFunction(
+        () => (document.querySelector('.walkthrough-row')?.textContent ?? '').includes('여기서부터 읽는다'),
+        undefined,
+        { timeout: 8000 },
+    );
+    check('단계 제목을 고칠 수 있다', true);
+
+    // 단계를 지운다. 확인 없이 지우고 되돌리기로 되살린다.
+    await page.locator('.walkthrough-row button[aria-label="단계 지우기"]').first().click();
+    await page.waitForFunction(
+        (before) => document.querySelectorAll('.walkthrough-row').length === before - 1,
+        steps,
+        { timeout: 12000 },
+    );
+    check('단계를 지운다', (await page.locator('.walkthrough-row').count()) === steps - 1);
+
+    await page.locator('.walkthrough-section button', { hasText: '따라 읽기' }).first().click();
+    await page.waitForSelector('.walkthrough-player', { timeout: 8000 });
+    const first = await page.locator('.walkthrough-count').textContent();
+    check('막대가 몇 번째인지 보여준다', /^1\//.test(first), first);
+    if (steps - 1 >= 2) {
+        await page.locator('.walkthrough-player button', { hasText: '다음' }).click();
+        await page.waitForFunction(
+            () => document.querySelector('.walkthrough-count')?.textContent?.startsWith('2/') === true,
+            undefined,
+            { timeout: 8000 },
+        );
+        check('다음 으로 단계가 넘어간다', true);
+    }
+    await page.locator('.walkthrough-player button[aria-label="따라 읽기 끝내기"]').click();
+    await page.waitForFunction(
+        () => document.querySelector('.walkthrough-player') === null,
+        undefined,
+        { timeout: 8000 },
+    );
+    check('× 로 끝낸다', (await page.locator('.walkthrough-player').count()) === 0);
+
     console.log('\n[검색과 공유]');
+    // 따라 읽기가 단계의 대상으로 데려갔다. 분석 화면으로 돌아온다.
+    await page.locator('.pane-tabs .tab', { hasText: '분석 기록' }).click();
+    await page.waitForSelector('.annotation-tools', { timeout: 8000 });
     const search = page.getByPlaceholder('기록 본문·태그 검색');
     await search.fill('없는 내용');
     await page.waitForSelector('.annotation-list .muted');

@@ -200,9 +200,13 @@ export class GitService {
      * 파일 전체를 hunk 하나로 본다 — 리뷰하는 쪽에서는 새 파일도 "바뀐 곳" 이다.
      */
     async hunks(relPath: string, from?: string, to?: string): Promise<GitHunk[]> {
+        // `to` 가 없으면 기준 커밋 → **작업 트리** 다. `HEAD` 를 채워 넣으면
+        // 커밋한 뒤 고친 줄이 사라져 리뷰 중에 조용히 빠진다(V01).
         const range = from === undefined
             ? []
-            : [await this.resolveRevision(from), await this.resolveRevision(to ?? 'HEAD')];
+            : to === undefined
+                ? [await this.resolveRevision(from)]
+                : [await this.resolveRevision(from), await this.resolveRevision(to)];
         const tracked = await this.run(['ls-files', '--error-unmatch', '--', relPath])
             .then(() => true, () => false);
         if (!tracked) {
@@ -243,12 +247,19 @@ export class GitService {
         return { ref, text };
     }
 
-    async changesBetween(fromInput: string, toInput = 'HEAD'): Promise<GitChange[]> {
+    /**
+     * 두 지점 사이, 또는 한 지점과 작업 트리 사이의 변경 (V01).
+     *
+     * `toInput` 이 없으면 기준 커밋과 **작업 트리**를 비교한다. 커밋을 만든 뒤에도
+     * 리뷰가 이어지려면 이쪽이 기본 동선이다.
+     */
+    async changesBetween(fromInput: string, toInput?: string): Promise<GitChange[]> {
         const from = await this.resolveRevision(fromInput);
-        const to = await this.resolveRevision(toInput);
+        const to = toInput === undefined ? null : await this.resolveRevision(toInput);
+        const range = to === null ? [from] : [from, to];
         const [names, stats] = await Promise.all([
-            this.run(['diff', '--no-ext-diff', '--no-textconv', '--name-status', '-z', '-M', from, to, '--']),
-            this.numstat(['diff', '--no-ext-diff', '--no-textconv', '--numstat', '-z', '-M', from, to, '--']),
+            this.run(['diff', '--no-ext-diff', '--no-textconv', '--name-status', '-z', '-M', ...range, '--']),
+            this.numstat(['diff', '--no-ext-diff', '--no-textconv', '--numstat', '-z', '-M', ...range, '--']),
         ]);
         return parseNameStatus(names).map((item) => ({
             ...item,
@@ -257,4 +268,56 @@ export class GitService {
             deletedLines: stats.get(item.relPath)?.deleted ?? null,
         }));
     }
+
+    /** 두 지점이 갈라진 자리. 브랜치 전체를 리뷰할 때의 기준이다. */
+    async mergeBase(a: string, b: string): Promise<string> {
+        const left = await this.resolveRevision(a);
+        const right = await this.resolveRevision(b);
+        const found = (await this.run(['merge-base', left, right])).trim();
+        if (!/^[a-f0-9]{40,64}$/i.test(found)) {
+            throw new Error('공통 조상을 찾지 못했다.');
+        }
+        return found;
+    }
+
+    /**
+     * 변경 기준으로 고를 수 있는 것들 (V01).
+     *
+     * 브랜치와 최근 커밋만 준다. 이름은 화면에 그대로 보이므로 사람이 읽는 값이고,
+     * 실제 git 인자로 쓰기 전에는 `resolveRevision` 을 다시 지난다.
+     */
+    async recentRefs(): Promise<GitRefs> {
+        const currentBranch = (await this.run(['rev-parse', '--abbrev-ref', 'HEAD'])
+            .then((value) => value.trim(), () => '')) || null;
+        const rawBranches = await this.run([
+            'for-each-ref', '--sort=-committerdate', '--count=30',
+            '--format=%(refname:short)', 'refs/heads', 'refs/remotes',
+        ]).catch(() => '');
+        const branches = rawBranches.split(/\r?\n/).map((line) => line.trim())
+            .filter((line) => line !== '' && !line.endsWith('/HEAD'));
+        const rawCommits = await this.run(['log', '-n', '20', '--format=%H%x00%s']).catch(() => '');
+        const commits = rawCommits.split(/\r?\n/).flatMap((line) => {
+            const [hash, subject] = line.split('\0');
+            if (!hash || !/^[a-f0-9]{40,64}$/i.test(hash)) return [];
+            return [{ hash, shortHash: hash.slice(0, 8), subject: subject ?? '' }];
+        });
+        // 기본 브랜치 추측. `origin/HEAD` 가 있으면 그것이 정답이고, 없으면
+        // 흔한 이름을 찾는다. 못 찾아도 나머지 목록은 그대로 쓸 수 있다.
+        const originHead = await this.run(['rev-parse', '--abbrev-ref', 'origin/HEAD'])
+            .then((value) => value.trim(), () => '');
+        const defaultBranch = originHead !== '' && branches.includes(originHead)
+            ? originHead
+            : ['main', 'master', 'origin/main', 'origin/master']
+                .find((name) => branches.includes(name)) ?? null;
+        return { currentBranch, defaultBranch, branches, commits };
+    }
+}
+
+export interface GitRefs {
+    /** 지금 체크아웃된 브랜치 이름. 분리 HEAD 면 `HEAD` 가 온다. */
+    currentBranch: string | null;
+    /** 추천 기준. `현재 브랜치 ← 기본 브랜치` 를 만들 때 쓴다. */
+    defaultBranch: string | null;
+    branches: string[];
+    commits: Array<{ hash: string; shortHash: string; subject: string }>;
 }

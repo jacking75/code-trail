@@ -5,9 +5,12 @@
  * fragment 를 쓰는 이유는 그 부분이 **서버로 전송되지 않기** 때문이다 —
  * query 에 넣으면 접근 로그, Referer, 브라우저 방문 기록에 남는다.
  *
- * 화면이 뜨자마자 fragment 를 `sessionStorage` 로 옮기고 주소에서 지운다.
- * `sessionStorage` 는 탭 하나에 묶이고 탭을 닫으면 사라진다 — 새로고침은
- * 견디고, 다른 탭이나 다음 세션으로는 새지 않는다.
+ * 화면이 뜨자마자 fragment 를 `sessionStorage` 로 옮기고 **토큰만** 주소에서
+ * 지운다. `sessionStorage` 는 탭 하나에 묶이고 탭을 닫으면 사라진다 —
+ * 새로고침은 견디고, 다른 탭이나 다음 세션으로는 새지 않는다.
+ *
+ * 나머지 fragment 는 남긴다. 노드 링크(`#trail=…&node=…`, V08)와 기록 링크가
+ * 그 자리를 쓰기 때문이다 — 통째로 지우면 링크를 열어도 아무 데도 가지 않는다.
  */
 
 const TOKEN_KEY = 'codeTrail.token';
@@ -50,13 +53,17 @@ export function bootstrapSession(): Session {
     if (fragment.trail) {
         sessionStorage.setItem(TRAIL_KEY, fragment.trail);
     }
-    if (fragment.token || fragment.trail) {
-        // 주소창과 방문 기록에서 즉시 지운다. `replaceState` 라 뒤로 가기로도
-        // 토큰이 있던 주소로 돌아갈 수 없다.
+    if (fragment.token) {
+        // 토큰만 주소창과 방문 기록에서 즉시 지운다. `replaceState` 라
+        // 뒤로 가기로도 토큰이 있던 주소로 돌아갈 수 없다.
+        const rest = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+        rest.delete('token');
+        const remaining = rest.toString();
         window.history.replaceState(
             null,
             '',
-            window.location.pathname + window.location.search,
+            window.location.pathname + window.location.search
+                + (remaining === '' ? '' : `#${remaining}`),
         );
     }
 

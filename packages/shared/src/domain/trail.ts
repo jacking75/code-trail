@@ -66,6 +66,25 @@ export interface RemovedSubtree {
     count: number;
 }
 
+/**
+ * `⇱` 로 새 루트가 된 노드가 원래 있던 자리 (V10).
+ *
+ * 승격은 부모 관계를 바꾸는 유일한 동작이다. 되돌리려면 어느 부모의 몇 번째에
+ * 어떤 진입 링크로 달려 있었는지가 그 순간에만 남아 있으므로 함께 들고 있는다.
+ */
+export interface PromotedNode {
+    /** 승격된 노드. 자식이 그대로 달려 있다. */
+    node: TrailNode;
+    /** 승격 전 부모. 루트였던 노드는 승격되지 않으므로 `null` 이 아니다. */
+    previousParentId: string;
+    /** 부모 안에서의 형제 인덱스. */
+    index: number;
+    /** 지워진 진입 링크. */
+    origin: TrailOrigin | null;
+    /** 승격 전 재귀 표시. */
+    recursiveBefore: boolean;
+}
+
 export interface TrailInit {
     id?: string;
     title?: string;
@@ -316,15 +335,20 @@ export class Trail {
      * 않으므로 진입 링크를 지우고, 조상 사슬이 달라졌으니 하위 노드의 재귀 표시를
      * 새 사슬 기준으로 다시 계산한다.
      */
-    promoteToRoot(id: string): TrailNode | undefined {
+    promoteToRoot(id: string): PromotedNode | undefined {
         const node = this.index.get(id);
         if (!node || node.parentId === null) {
             return undefined;
         }
-        const parent = this.index.get(node.parentId);
+        const previousParentId = node.parentId;
+        const origin = node.origin;
+        const recursiveBefore = node.recursive;
+        const parent = this.index.get(previousParentId);
+        let index = 0;
         if (parent) {
             const i = parent.children.indexOf(node);
             if (i >= 0) {
+                index = i;
                 parent.children.splice(i, 1);
             }
         }
@@ -334,7 +358,39 @@ export class Trail {
         this.roots.push(node);
         this.recomputeRecursive(node);
         this.touch();
-        return node;
+        return { node, previousParentId, index, origin, recursiveBefore };
+    }
+
+    /**
+     * 승격을 되돌려 원래 부모의 원래 자리에 다시 단다 (V10).
+     *
+     * 되돌리기 버퍼는 한 단계다. 그 사이에 다른 구조 명령이 들어오면 원래 자리가
+     * 더 이상 그 자리가 아니라서 `TrailService.mutate` 가 버퍼를 비운다. 여기서는
+     * 부모가 아직 있고 노드가 아직 루트인지만 확인한다.
+     */
+    undoPromote(record: PromotedNode): boolean {
+        const node = this.index.get(record.node.id);
+        const parent = this.index.get(record.previousParentId);
+        if (!node || !parent || node.parentId !== null) {
+            return false;
+        }
+        const at = this.roots.indexOf(node);
+        if (at < 0) {
+            return false;
+        }
+        this.roots.splice(at, 1);
+        node.parentId = parent.id;
+        node.origin = record.origin;
+        parent.children.splice(
+            Math.max(0, Math.min(record.index, parent.children.length)),
+            0,
+            node,
+        );
+        // 조상 사슬이 되돌아왔으므로 재귀 표시도 다시 센다. 저장값을 믿지 않는다.
+        node.recursive = this.isAncestorSymbol(parent, node.symbol);
+        this.recomputeRecursive(node);
+        this.touch();
+        return true;
     }
 
     clear(): boolean {
@@ -437,6 +493,45 @@ export class Trail {
         }
         this.touch(false);
         return true;
+    }
+
+    /**
+     * 보드에서 손으로 옮긴 자리를 모두 지운다 (V11).
+     *
+     * 좌표만 지운다 — 본문 높이와 코드 글자 크기는 보드 배치와 상관없는 값이다.
+     * 화면 상태이므로 revision 을 올리지 않는다.
+     */
+    resetBoardLayout(): number {
+        let cleared = 0;
+        for (const [id, state] of [...this.ui]) {
+            if (state.boardX === undefined && state.boardY === undefined) {
+                continue;
+            }
+            cleared += 1;
+            const next: NodeUiState = { ...state };
+            delete next.boardX;
+            delete next.boardY;
+            if (Object.keys(next).length === 0) {
+                this.ui.delete(id);
+            } else {
+                this.ui.set(id, next);
+            }
+        }
+        if (cleared > 0) {
+            this.touch(false);
+        }
+        return cleared;
+    }
+
+    /** 보드에서 손으로 옮긴 노드 수. 초기화 확인 문구가 쓴다. */
+    placedNodeCount(): number {
+        let count = 0;
+        for (const state of this.ui.values()) {
+            if (state.boardX !== undefined || state.boardY !== undefined) {
+                count += 1;
+            }
+        }
+        return count;
     }
 
     // ── 조회 ──────────────────────────────────────────────────────────────

@@ -332,3 +332,141 @@ test('진행 중인 AI 설명 요청은 requestId로 취소되고 초안을 남�
         await removeProject(root);
     }
 });
+
+test('같은 파일·같은 범위·같은 내용이면 앵커를 새로 만들지 않는다', async () => {
+    // hunk 검토 표시는 같은 범위를 몇 번이고 다시 잡는다. 그때마다 앵커가
+    // 늘면 한 hunk 에 검토 기록이 여러 개 생겨 "봤다" 가 둘로 갈린다(V03).
+    const root = await makeProject(FILES);
+    try {
+        await withServer(root, async (running) => {
+            const analysis = await running.context.analyses.create({ title: 'hunk 검토' });
+            const grant = await running.context.documents.grantInsideProject('src/a.cpp');
+            const content = await running.context.documents.read(grant.documentId);
+            const range = { start: { line: 1, char: 0 }, end: { line: 1, char: 8 } };
+            const selected = contextForRange(content.text, range);
+            const { baseline, fileId } = createBaselineFile({
+                relPath: 'src/a.cpp', contentHash: content.contentHash,
+            });
+            await running.context.analyses.addBaseline({
+                analysisId: analysis.id, commandId: randomUUID(), baseline,
+            });
+            const added = await running.context.analyses.addAnchor({
+                analysisId: analysis.id, commandId: randomUUID(), baselineId: baseline.id, fileId,
+                range, selectedText: selected.selectedText, selectedTextHash: sha256(selected.selectedText),
+                contextBefore: selected.before, contextBeforeHash: null,
+                contextAfter: selected.after, contextAfterHash: null,
+            });
+
+            assert.equal(
+                running.context.analyses.findAnchor('nope', 'src/a.cpp', range, content.contentHash),
+                null,
+            );
+            assert.equal(
+                running.context.analyses.findAnchor(
+                    analysis.id, 'src/a.cpp', range, content.contentHash,
+                ),
+                added.value.result,
+            );
+            // 내용이 달라졌으면 같은 앵커가 아니다 — 그 범위는 다른 코드다.
+            assert.equal(
+                running.context.analyses.findAnchor(
+                    analysis.id, 'src/a.cpp', range, sha256('다른 내용'),
+                ),
+                null,
+            );
+        });
+    } finally {
+        await removeProject(root);
+    }
+});
+
+test('노드 코드가 바뀌면 그 노드의 확인함이 재검토로 내려간다', async () => {
+    // "봤다" 가 옛 코드에 대한 말이 되면 조용히 남겨 두면 안 된다(V02).
+    const root = await makeProject(FILES);
+    const author = { id: randomUUID(), displayName: '검토자' };
+    try {
+        await withServer(root, async (running) => {
+            const trailId = (await running.context.trails.create('노드 검토')).trail.id;
+            const analysis = await running.context.analyses.create({
+                title: '노드 검토', trailIds: [trailId], author,
+            });
+            const nodeId = randomUUID();
+            const atReview = sha256('본 시점의 코드');
+            const { baseline } = createBaselineFile({
+                relPath: 'src/a.cpp', contentHash: atReview,
+            });
+            await running.context.analyses.addBaseline({
+                analysisId: analysis.id, commandId: randomUUID(), baseline,
+            });
+            assert.equal((await running.context.analyses.setReview({
+                analysisId: analysis.id, commandId: randomUUID(),
+                target: { kind: 'node', trailId, nodeId },
+                baselineId: baseline.id, state: 'reviewed', authorId: author.id, evidenceIds: [],
+            })).ok, true);
+
+            // 같은 해시면 그대로다. 같은 내용으로 다시 읽은 것은 아무 일도 아니다.
+            assert.deepEqual(
+                await running.context.analyses.downgradeNodeReviews(nodeId, atReview),
+                [],
+            );
+            assert.equal(running.context.analyses.get(analysis.id).reviews[0].state, 'reviewed');
+
+            const changed = await running.context.analyses.downgradeNodeReviews(
+                nodeId, sha256('고친 코드'),
+            );
+            assert.equal(changed.length, 1);
+            assert.equal(running.context.analyses.get(analysis.id).reviews[0].state, 'needsReview');
+            // 누가 상태를 바꿨는지 이력에 남는다.
+            const entry = running.context.analyses.get(analysis.id).history.at(-1);
+            assert.equal(entry.kind, 'reviewed');
+            assert.equal(entry.actorId, '00000000-0000-4000-8000-000000000000');
+        });
+    } finally {
+        await removeProject(root);
+    }
+});
+
+test('파일이 바뀌면 명령 없이도 기록 위치를 다시 판정한다', async () => {
+    // 옛 위치에 붙은 기록·색 띠를 그대로 믿고 읽게 되면 안 된다(V17).
+    const original = 'void a() {\n\treturn;\n}\n';
+    const root = await makeProject({ 'src/a.cpp': original });
+    try {
+        await withServer(root, async (running) => {
+            const analysis = await running.context.analyses.create({ title: '자동 재확인' });
+            const grant = await running.context.documents.grantInsideProject('src/a.cpp');
+            const content = await running.context.documents.read(grant.documentId);
+            const range = { start: { line: 1, char: 1 }, end: { line: 1, char: 8 } };
+            const selected = contextForRange(content.text, range);
+            const { baseline, fileId } = createBaselineFile({
+                relPath: 'src/a.cpp', contentHash: content.contentHash,
+            });
+            await running.context.analyses.addBaseline({
+                analysisId: analysis.id, commandId: randomUUID(), baseline,
+            });
+            const added = await running.context.analyses.addAnchor({
+                analysisId: analysis.id, commandId: randomUUID(), baselineId: baseline.id, fileId,
+                range, selectedText: selected.selectedText, selectedTextHash: sha256(selected.selectedText),
+                contextBefore: selected.before, contextBeforeHash: selected.before ? sha256(selected.before) : null,
+                contextAfter: selected.after, contextAfterHash: selected.after ? sha256(selected.after) : null,
+            });
+            const anchorId = added.value.result;
+
+            // 위에 줄을 끼워 넣는다. 같은 코드가 아래로 내려갔을 뿐이다.
+            await writeFile(
+                path.join(root, 'src', 'a.cpp'),
+                `// 새로 넣은 주석\n${original}`,
+                'utf8',
+            );
+            const changed = await running.context.analyses.recheckForFiles(['src/a.cpp']);
+
+            assert.equal(changed.length, 1);
+            const anchor = changed[0].anchors.find((item) => item.id === anchorId);
+            assert.equal(anchor.state, 'moved');
+            assert.equal(anchor.currentRange.start.line, 2);
+            // 후보를 자동으로 고르지 않는다. 재연결은 사람의 항목이다.
+            assert.deepEqual(anchor.candidateIds, []);
+        });
+    } finally {
+        await removeProject(root);
+    }
+});

@@ -55,6 +55,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     return (await response.json()) as T;
 }
 
+/** 본문이 JSON 이 아닌 응답. Markdown 복사가 쓴다(V08). */
+async function requestText(path: string): Promise<string> {
+    const token = currentToken();
+    if (token === null) {
+        throw new ApiError(401, 'UNAUTHORIZED', '세션 토큰이 없다.');
+    }
+    const response = await fetch(path, {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'omit',
+        mode: 'same-origin',
+    });
+    if (!response.ok) {
+        throw new ApiError(response.status, 'INTERNAL_ERROR', '내용을 받지 못했다.');
+    }
+    return response.text();
+}
+
 export interface WorkspaceEntry {
     id: string;
     name: string;
@@ -84,6 +101,41 @@ export interface GitHunkView {
     oldCount: number;
     newStart: number;
     newCount: number;
+}
+
+/**
+ * 변경 기준 (V01).
+ *
+ * 변경 목록·hunk·변경 보기가 무엇과 비교하는지. `from`·`to` 는 브랜치 이름이나
+ * 커밋 해시이고, 서버가 `resolveRevision` 으로 다시 확인한 뒤에만 git 에 넘어간다.
+ */
+export interface ChangeBaseView {
+    mode: 'working' | 'since' | 'between';
+    from: string | null;
+    to: string | null;
+    mergeBase: boolean;
+    label: string;
+}
+
+export const WORKING_BASE: ChangeBaseView = {
+    mode: 'working', from: null, to: null, mergeBase: false, label: '작업 트리',
+};
+
+/** 개인 화면 상태 (V18). 절대경로·documentId·토큰은 담기지 않는다. */
+export interface LocalUiStateView {
+    schemaVersion: 1;
+    layout: 'tabs' | 'split';
+    sidebar: { width: number; collapsed: boolean };
+    annotationColumn: { open: boolean; width: number };
+    lastPane: 'code' | 'trail' | 'analysis' | 'settings' | 'diagnostics';
+    lastDocument: { relPath: string; line: number; char: number } | null;
+    navigation: Array<{
+        pane: 'code' | 'trail';
+        relPath?: string; line?: number; char?: number;
+        trailId?: string; nodeId?: string;
+    }>;
+    navigationIndex: number;
+    changeBase: ChangeBaseView | null;
 }
 
 export interface TrailSummary {
@@ -121,6 +173,8 @@ export interface ProjectSettingsView {
         fitToWidth: boolean;
         minFontSize: number;
         fontSize: number;
+        /** 탭 한 칸을 몇 칸으로 보여줄지. 코드 화면과 노드 본문이 함께 쓴다(V20). */
+        tabSize: number;
         autoFollowSingleImplementation: boolean;
         revealInExternalEditorOnAdd: boolean;
     };
@@ -150,6 +204,8 @@ export interface Bootstrap {
     localAuthor: { id: string; displayName: string } | null;
     trails: TrailSummary[];
     activeTrailId: string | null;
+    /** 이 기계의 개인 화면 상태 (V18). 없으면 `null`. */
+    localUiState: LocalUiStateView | null;
     capabilities: {
         externalEditor: boolean;
         languages: string[];
@@ -251,6 +307,17 @@ export interface SolutionDiagnostics {
     selected: string | null;
 }
 
+/** 변경 기준을 질의 문자열로. 작업 트리 기준은 아무것도 붙이지 않는다. */
+function baseQuery(base: ChangeBaseView | null | undefined, lead: '?' | '&'): string {
+    if (!base || base.mode === 'working' || base.from === null) return '';
+    const params = new URLSearchParams({ from: base.from });
+    if (base.mode === 'between' && base.to !== null) {
+        params.set('to', base.to);
+        if (base.mergeBase) params.set('mergeBase', '1');
+    }
+    return `${lead}${params.toString()}`;
+}
+
 export const api = {
     bootstrap: () => request<Bootstrap>('/api/bootstrap'),
 
@@ -307,21 +374,53 @@ export const api = {
             { signal },
         ),
 
-    changes: (from?: string, to?: string) => request<{ repository: boolean; changes: Array<{ relPath: string; status: string; area: string; addedLines: number | null; deletedLines: number | null }> }>(
-        `/api/changes${from ? `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to ?? 'HEAD')}` : ''}`,
+    changes: (base?: ChangeBaseView | null) => request<{ repository: boolean; changes: Array<{ relPath: string; status: string; area: string; addedLines: number | null; deletedLines: number | null }> }>(
+        `/api/changes${baseQuery(base, '?')}`,
     ),
 
+    /** 변경 기준으로 고를 수 있는 브랜치와 최근 커밋 (V01). */
+    changeRefs: () => request<{
+        repository: boolean;
+        currentBranch: string | null;
+        defaultBranch: string | null;
+        branches: string[];
+        commits: Array<{ hash: string; shortHash: string; subject: string }>;
+    }>('/api/changes/refs'),
+
     /** 그 파일에서 바뀐 줄 덩어리. 변경 목록에 있는 파일만 받는다. */
-    hunks: (relPath: string, from?: string, to?: string) =>
+    hunks: (relPath: string, base?: ChangeBaseView | null) =>
         request<{ relPath: string; hunks: GitHunkView[] }>(
-            `/api/changes/hunks?relPath=${encodeURIComponent(relPath)}`
-            + (from ? `&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to ?? 'HEAD')}` : ''),
+            `/api/changes/hunks?relPath=${encodeURIComponent(relPath)}${baseQuery(base, '&')}`,
         ),
 
-    /** `HEAD`(또는 커밋 해시) 시점의 본문. 좌우 비교의 왼쪽에 넣는다. */
-    originalText: (relPath: string, ref = 'HEAD') =>
+    /** 그 기준 시점의 본문. 좌우 비교의 왼쪽에 넣는다. */
+    originalText: (relPath: string, base?: ChangeBaseView | null) =>
         request<{ ref: string; text: string }>(
-            `/api/changes/original?relPath=${encodeURIComponent(relPath)}&ref=${encodeURIComponent(ref)}`,
+            `/api/changes/original?relPath=${encodeURIComponent(relPath)}`
+            + `&ref=${encodeURIComponent(base?.from ?? 'HEAD')}`
+            + (base?.to ? `&to=${encodeURIComponent(base.to)}` : '')
+            + (base?.mergeBase ? '&mergeBase=1' : ''),
+        ),
+
+    /** 모든 분석에서 기록 찾기 (V15). */
+    annotationSearch: (
+        query: string,
+        filters: { kind?: string; status?: string; tag?: string } = {},
+    ) => {
+        const params = new URLSearchParams({ q: query });
+        if (filters.kind) params.set('kind', filters.kind);
+        if (filters.status) params.set('status', filters.status);
+        if (filters.tag) params.set('tag', filters.tag);
+        return request<{ results: Array<{ analysisId: string; annotation: { id: string; body: string; kind: string; status: string; tags: string[] } }> }>(
+            `/api/annotations/search?${params.toString()}`,
+        );
+    },
+
+    /** 노드 하나와 그 하위의 Markdown. 트레일 전체와 같은 형식이다(V08·V23). */
+    nodeMarkdown: (trailId: string, nodeId: string, analysisId?: string) =>
+        requestText(
+            `/api/trails/${encodeURIComponent(trailId)}/nodes/${encodeURIComponent(nodeId)}/export.md`
+            + (analysisId ? `?analysis=${encodeURIComponent(analysisId)}` : ''),
         ),
 
     contentSearch: (query: string, scope = '', caseSensitive = false, signal?: AbortSignal) =>

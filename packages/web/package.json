@@ -1,6 +1,6 @@
 {
   "name": "@code-trail/web",
-  "version": "1.4.0",
+  "version": "1.7.0",
   "description": "Code Trail 브라우저 프론트엔드. 파일 탐색기, 읽기 전용 코드 화면, 트레일·보드·진단 화면.",
   "license": "MIT",
   "type": "module",
@@ -29,7 +29,7 @@
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "devDependencies": {
-    "@code-trail/shared": "1.4.0",
+    "@code-trail/shared": "1.7.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^6.1.1",

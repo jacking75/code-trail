@@ -147,6 +147,8 @@ export const projectSettingsSchema = z.object({
         fitToWidth: z.boolean(),
         minFontSize: z.number().min(1),
         fontSize: z.number().min(0),
+        // 1.5.0 에서 늘어난 항목이다. 옛 설정 파일에는 없으므로 기본값을 둔다.
+        tabSize: z.int().min(1).max(16).default(4),
         autoFollowSingleImplementation: z.boolean(),
         revealInExternalEditorOnAdd: z.boolean(),
     }),
@@ -306,6 +308,60 @@ export const documentResponseSchema = z.object({
     /** 원문 그대로. 들여쓰기·탭·줄바꿈을 손대지 않는다. */
     text: z.string(),
 });
+
+/**
+ * 변경 기준 (V01).
+ *
+ * 변경 목록·hunk·변경 보기가 무엇과 비교하는지. `ref` 는 서버가
+ * `resolveRevision` 으로 다시 확인하므로 여기서는 길이와 글자만 본다.
+ */
+export const changeBaseSchema = z.object({
+    mode: z.enum(['working', 'since', 'between']),
+    from: z.string().max(200).nullable(),
+    to: z.string().max(200).nullable(),
+    /** `between` 에서 `from` 을 `merge-base(from, to)` 로 바꿀지. */
+    mergeBase: z.boolean(),
+    /** 셀렉트에 보일 이름. 사람이 읽는 값이고 git 인자로 쓰지 않는다. */
+    label: z.string().max(200),
+});
+
+/**
+ * 개인 화면 상태 (V18).
+ *
+ * `.code-trail/local/ui-state.json` 에 그대로 담긴다. **절대경로·documentId·
+ * 토큰을 담지 않는다** — `local/` 은 형상 관리에서 빠지지만 그래도 경계는 지킨다.
+ */
+export const localUiStateSchema = z.object({
+    schemaVersion: z.literal(1).default(1),
+    layout: z.enum(['tabs', 'split']).default('tabs'),
+    sidebar: z.object({
+        width: z.number().min(0).max(4_000).default(280),
+        collapsed: z.boolean().default(false),
+    }).default({ width: 280, collapsed: false }),
+    annotationColumn: z.object({
+        open: z.boolean().default(false),
+        width: z.number().min(0).max(4_000).default(320),
+    }).default({ open: false, width: 320 }),
+    lastPane: z.enum(['code', 'trail', 'analysis', 'settings', 'diagnostics']).default('code'),
+    lastDocument: z.object({
+        relPath: z.string().max(4_000),
+        line: offsetSchema,
+        char: offsetSchema,
+    }).nullable().default(null),
+    navigation: z.array(z.object({
+        pane: z.enum(['code', 'trail']),
+        relPath: z.string().max(4_000).optional(),
+        line: offsetSchema.optional(),
+        char: offsetSchema.optional(),
+        trailId: uuidSchema.optional(),
+        nodeId: uuidSchema.optional(),
+    })).max(100).default([]),
+    navigationIndex: z.int().min(-1).default(-1),
+    changeBase: changeBaseSchema.nullable().default(null),
+});
+
+export type ChangeBase = z.infer<typeof changeBaseSchema>;
+export type LocalUiState = z.infer<typeof localUiStateSchema>;
 
 export const bootstrapResponseSchema = z.object({
     protocolVersion: z.literal(PROTOCOL_VERSION),

@@ -10,6 +10,7 @@ import { PathDeniedError } from '../security/paths.js';
 import { DocumentTooLargeError } from '../workspace/documents.js';
 import { searchFiles } from '../workspace/search.js';
 import { searchContent } from '../workspace/contentSearch.js';
+import { markdownOptionsFor } from '../trails/markdownOptions.js';
 
 /**
  * HTTP API (구현서 15.1).
@@ -37,16 +38,41 @@ function denyStatus(reason: PathDeniedError['reason']): number {
 async function allowedChangedPath(
     context: ServerContext,
     raw: string,
+    base?: { from?: string; to?: string },
 ): Promise<string | null> {
     const grant = await context.documents.grantInsideProject(raw).catch(() => null);
     if (grant === null || grant.relPath === null) {
         return null;
     }
-    const changes = await context.git.workingChanges().catch(() => []);
+    // 변경 기준이 있으면 그 기준의 목록으로 본다(V01). 작업 트리 목록만 보면
+    // 이미 커밋된 변경의 hunk 를 열 수 없다.
+    const changes = base?.from
+        ? await context.git.changesBetween(base.from, base.to).catch(() => [])
+        : await context.git.workingChanges().catch(() => []);
     return changes.some((change) => change.relPath === grant.relPath
         || change.oldRelPath === grant.relPath)
         ? grant.relPath
         : null;
+}
+
+/**
+ * 변경 기준 질의를 실제 git 기준으로 바꾼다 (V01).
+ *
+ * `mergeBase=1` 이면 `from` 을 `merge-base(from, to)` 로 바꾼다. 화면이 보낸
+ * 문자열을 그대로 git 인자로 넘기지 않는다 — `resolveRevision` 이 먼저 확인한다.
+ */
+async function resolveBase(
+    context: ServerContext,
+    query: { from?: string; to?: string; mergeBase?: string },
+): Promise<{ from?: string; to?: string }> {
+    if (!query.from) {
+        return {};
+    }
+    const to = query.to && query.to !== '' ? query.to : undefined;
+    if (query.mergeBase === '1' && to !== undefined) {
+        return { from: await context.git.mergeBase(query.from, to), to };
+    }
+    return to === undefined ? { from: query.from } : { from: query.from, to };
 }
 
 export async function registerRoutes(app: FastifyInstance, context: ServerContext): Promise<void> {
@@ -68,6 +94,11 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
         localAuthor: context.store.getLocalAuthor(),
         trails: context.trails.list(),
         activeTrailId: context.trails.getActiveTrailId(),
+        /**
+         * 이 기계의 개인 화면 상태 (V18). 없으면 `null` 이고 화면이 기본값을 쓴다.
+         * 절대경로·documentId·토큰은 들어가지 않는다.
+         */
+        localUiState: context.localUiState.get(),
         capabilities: {
             externalEditor: context.editor.isConfigured(),
             // 실행 파일을 찾은 언어만 알린다. 실제로 뜨는지는 열어봐야 안다.
@@ -252,10 +283,16 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
         }
     });
 
-    app.get<{ Params: { trailId: string } }>(
+    app.get<{ Params: { trailId: string }; Querystring: { analysis?: string; mermaid?: string } }>(
         '/api/trails/:trailId/export.md',
         async (request, reply) => {
-            const result = context.trails.markdown(request.params.trailId);
+            const result = context.trails.markdown(
+                request.params.trailId,
+                markdownOptionsFor(context.analyses, request.params.trailId, {
+                    analysisId: request.query.analysis,
+                    mermaid: request.query.mermaid === '1',
+                }),
+            );
             if (!result.ok) {
                 return reply.code(404).send(result.error);
             }
@@ -268,14 +305,58 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
         },
     );
 
-    app.get<{ Querystring: { from?: string; to?: string } }>('/api/changes', async (request, reply) => {
+    /**
+     * 노드 하나와 그 하위의 Markdown (V08).
+     *
+     * 트레일 전체 내보내기와 **같은 함수**를 쓴다. 브라우저가 따로 만들면 같은
+     * 이름의 결과가 두 형식이 된다.
+     */
+    app.get<{
+        Params: { trailId: string; nodeId: string };
+        Querystring: { analysis?: string };
+    }>('/api/trails/:trailId/nodes/:nodeId/export.md', async (request, reply) => {
+        const result = context.trails.nodeMarkdown(
+            request.params.trailId,
+            request.params.nodeId,
+            markdownOptionsFor(context.analyses, request.params.trailId, {
+                analysisId: request.query.analysis,
+            }),
+        );
+        if (!result.ok) return reply.code(404).send(result.error);
+        return reply
+            .header('Content-Type', 'text/markdown; charset=utf-8')
+            .send(result.value);
+    });
+
+    app.get<{ Querystring: { from?: string; to?: string; mergeBase?: string } }>('/api/changes', async (request, reply) => {
         try {
-            const changes = request.query.from
-                ? await context.git.changesBetween(request.query.from, request.query.to ?? 'HEAD')
+            const base = await resolveBase(context, request.query);
+            const changes = base.from
+                ? await context.git.changesBetween(base.from, base.to)
                 : await context.git.workingChanges();
             return { repository: true, changes };
         } catch {
             return reply.code(200).send({ repository: false, changes: [], message: 'Git 변경 정보를 읽을 수 없다.' });
+        }
+    });
+
+    /**
+     * 변경 기준으로 고를 수 있는 브랜치와 최근 커밋 (V01).
+     *
+     * Git 저장소가 아니면 빈 목록을 준다 — 셀렉트가 비활성이 되고 나머지 화면은
+     * 그대로 돈다.
+     */
+    app.get('/api/changes/refs', async () => {
+        try {
+            return { repository: true, ...await context.git.recentRefs() };
+        } catch {
+            return {
+                repository: false,
+                currentBranch: null,
+                defaultBranch: null,
+                branches: [],
+                commits: [],
+            };
         }
     });
 
@@ -285,21 +366,19 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
      * 경로는 문서 권한 경계를 다시 통과시키고, 지금 변경 목록에 있는 파일만
      * 허용한다. 브라우저가 임의 파일의 diff 를 꺼내 가는 통로를 만들지 않는다.
      */
-    app.get<{ Querystring: { relPath?: string; from?: string; to?: string } }>(
+    app.get<{ Querystring: { relPath?: string; from?: string; to?: string; mergeBase?: string } }>(
         '/api/changes/hunks',
         async (request, reply) => {
-            const relPath = await allowedChangedPath(context, request.query.relPath ?? '');
+            const base = await resolveBase(context, request.query)
+                .catch((): { from?: string; to?: string } => ({}));
+            const relPath = await allowedChangedPath(context, request.query.relPath ?? '', base);
             if (relPath === null) {
                 return reply.code(403).send({
                     code: 'PATH_DENIED', message: '변경 목록에 없는 파일이다.', retryable: false,
                 });
             }
             try {
-                const hunks = await context.git.hunks(
-                    relPath,
-                    request.query.from,
-                    request.query.to,
-                );
+                const hunks = await context.git.hunks(relPath, base.from, base.to);
                 return { relPath, hunks };
             } catch {
                 return reply.code(200).send({ relPath, hunks: [] });
@@ -307,18 +386,26 @@ export async function registerRoutes(app: FastifyInstance, context: ServerContex
         },
     );
 
-    /** `HEAD`(또는 커밋 해시) 시점의 본문. 좌우 비교가 왼쪽에 넣는다. */
-    app.get<{ Querystring: { relPath?: string; ref?: string } }>(
+    /** 그 기준 시점의 본문. 좌우 비교가 왼쪽에 넣는다. */
+    app.get<{ Querystring: { relPath?: string; ref?: string; to?: string; mergeBase?: string } }>(
         '/api/changes/original',
         async (request, reply) => {
-            const relPath = await allowedChangedPath(context, request.query.relPath ?? '');
+            const requested = request.query.ref ?? 'HEAD';
+            // 브랜치 이름도 받는다. git 인자로 쓰기 전에 커밋 해시로 고정한다.
+            const resolved = requested === 'HEAD'
+                ? {}
+                : await resolveBase(context, { ...request.query, from: requested })
+                    .catch((): { from?: string; to?: string } => ({}));
+            const ref = resolved.from ?? 'HEAD';
+            const base = resolved.from === undefined ? {} : resolved;
+            const relPath = await allowedChangedPath(context, request.query.relPath ?? '', base);
             if (relPath === null) {
                 return reply.code(403).send({
                     code: 'PATH_DENIED', message: '변경 목록에 없는 파일이다.', retryable: false,
                 });
             }
             try {
-                return await context.git.originalText(request.query.ref ?? 'HEAD', relPath);
+                return await context.git.originalText(ref, relPath);
             } catch {
                 return reply.code(400).send({
                     code: 'INVALID_COMMAND',

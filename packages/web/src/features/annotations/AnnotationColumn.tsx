@@ -3,11 +3,11 @@ import { useEffect, useRef, type JSX, type ReactNode } from 'react';
 /**
  * 기록 열 (U12).
  *
- * 트레일 패널 오른쪽의 접이식 세로 영역. 노드를 보면서 바로 옆에서 기록을 읽고
- * 쓴다 — 분석 기록 탭으로 왕복하면 노드 하나에 기록을 달 때마다 코드를 잃는다.
+ * 트레일 패널과 코드 화면 오른쪽의 접이식 세로 영역. 보고 있는 것 바로 옆에서
+ * 기록을 읽고 쓴다 — 분석 기록 탭으로 왕복하면 기록을 달 때마다 코드를 잃는다.
  *
- * 열림 여부와 폭은 브라우저에 저장한다. 트레일과 함께 저장하지 않는다 —
- * 화면 상태이고, 같은 트레일을 다른 창에서 다르게 보고 싶을 수 있다.
+ * 열림 여부와 폭은 이 기계의 개인 화면 상태에 남는다(V18). 트레일과 함께
+ * 저장하지 않는다 — 화면 상태이고, 두 화면이 다른 폭이면 오갈 때 튄다.
  */
 
 export const ANNOTATION_COLUMN_MIN = 240;
@@ -16,6 +16,10 @@ export const ANNOTATION_COLUMN_DEFAULT = 320;
 export interface AnnotationColumnProps {
     /** 지금 무엇에 기록하는지. */
     targetLabel: string;
+    /** 이 열이 무엇의 기록을 보여주는지. 파일이거나 노드다(V16). */
+    scopeLabel: string;
+    /** 목록이 비었을 때의 문구. 파일과 노드가 다르다. */
+    emptyLabel: string;
     width: number;
     onWidth: (width: number) => void;
     onClose: () => void;
@@ -81,7 +85,7 @@ export function AnnotationColumn(props: AnnotationColumnProps): JSX.Element {
             />
             <header className="annotation-column-head">
                 <strong>기록</strong>
-                <span className="muted">{props.targetLabel}</span>
+                <span className="muted">{props.scopeLabel}</span>
                 <button type="button" aria-label="기록 열 닫기" onClick={props.onClose}>×</button>
             </header>
 
@@ -89,7 +93,7 @@ export function AnnotationColumn(props: AnnotationColumnProps): JSX.Element {
 
             <div className="annotation-column-list">
                 {props.itemCount === 0 ? (
-                    <p className="muted">이 노드에 달린 기록이 없다.</p>
+                    <p className="muted">{props.emptyLabel}</p>
                 ) : props.items}
             </div>
 

@@ -1,6 +1,6 @@
 {
   "name": "code-trail",
-  "version": "1.4.0",
+  "version": "1.7.0",
   "description": "함수를 클릭하면 코드를 인라인으로 펼쳐 보여주고, 그 안에서 또 클릭하면 계속 이어붙는 코드 탐색 트리. 로컬 서버를 띄우고 브라우저에서 연다.",
   "license": "MIT",
   "type": "module",
@@ -40,7 +40,7 @@
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "dependencies": {
-    "@code-trail/server": "1.4.0",
-    "@code-trail/shared": "1.4.0"
+    "@code-trail/server": "1.7.0",
+    "@code-trail/shared": "1.7.0"
   }
 }

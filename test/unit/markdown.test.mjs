@@ -13,9 +13,10 @@ test('루트는 ##, 깊이가 늘면 제목도 한 단계씩 내려간다', () =
     trail.addChild(b.id, makeSymbol({ name: 'C' }), makeOrigin());
 
     const md = trailToMarkdown(trail);
+    // 자식에는 형제 순번이 붙는다. 패널 헤더의 ①과 같은 글자다(V23).
     assert.match(md, /^## A `function`$/m);
-    assert.match(md, /^### B `function`$/m);
-    assert.match(md, /^#### C `function`$/m);
+    assert.match(md, /^### ① B `function`$/m);
+    assert.match(md, /^#### ① C `function`$/m);
 });
 
 test('제목 수준은 6 에서 멈춘다', () => {
@@ -26,7 +27,7 @@ test('제목 수준은 6 에서 멈춘다', () => {
     }
 
     const md = trailToMarkdown(trail);
-    assert.match(md, /^###### D8 /m);
+    assert.match(md, /^###### ① D8 /m);
     assert.equal(md.includes('####### '), false);
 });
 
@@ -55,7 +56,7 @@ test('재귀·선언만·근사가 배지로 나온다', () => {
     );
 
     const md = trailToMarkdown(trail);
-    assert.match(md, /^### Loop `function` _\(재귀, 선언만, 근사\)_$/m);
+    assert.match(md, /^### ① Loop `function` _\(재귀, 선언만, 근사\)_$/m);
 });
 
 test('코드 블록 언어가 매핑된다', () => {
@@ -99,4 +100,92 @@ test('문서 제목은 트레일 제목이고 인자로 덮어쓸 수 있다', (
 test('빈 트레일도 제목만 있는 문서가 된다', () => {
     const md = trailToMarkdown(makeTrail({ title: '빈 것' }));
     assert.equal(md, '# 빈 것\n');
+});
+
+// ── 기록·검토·Mermaid·서브트리 (V08 · V23) ────────────────────────────────
+
+const { subtreeToMarkdown } = shared;
+
+function noteFor(nodeId, overrides = {}) {
+    return {
+        id: `note-${nodeId}`,
+        version: 1,
+        target: { kind: 'node', trailId: 't1', nodeId },
+        kind: 'concern',
+        body: '여기서 경합이 난다',
+        tags: [],
+        status: 'open',
+        authorId: 'u1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        deletedAt: null,
+        ...overrides,
+    };
+}
+
+test('기록은 그 노드의 코드 블록 뒤에만 붙는다', () => {
+    const trail = makeTrail();
+    const a = trail.addRoot(makeSymbol({ name: 'A' }));
+    trail.addChild(a.id, makeSymbol({ name: 'B' }), makeOrigin());
+
+    const md = trailToMarkdown(trail, { annotations: [noteFor(a.id)] });
+    const aAt = md.indexOf('## A `function`');
+    const noteAt = md.indexOf('여기서 경합이 난다');
+    const bAt = md.indexOf('B `function`');
+
+    assert.ok(aAt < noteAt && noteAt < bAt, '기록이 A 와 B 사이에 있어야 한다');
+    // 기록 본문은 Markdown 으로 해석하지 않는다.
+    assert.equal(md.includes('**우려** — 여기서 경합이 난다'), true);
+});
+
+test('확인함 검토는 배지로 나온다', () => {
+    const trail = makeTrail();
+    const a = trail.addRoot(makeSymbol({ name: 'A' }));
+
+    const md = trailToMarkdown(trail, {
+        reviews: [{
+            id: 'r1', target: { kind: 'node', trailId: 't1', nodeId: a.id },
+            baselineId: 'b1', state: 'reviewed', authorId: 'u1', evidenceIds: [], version: 1,
+        }],
+    });
+
+    assert.match(md, /^## A `function` _\(확인함\)_$/m);
+});
+
+test('Mermaid 화살표 수는 노드 수에서 루트 수를 뺀 값이다', () => {
+    const trail = makeTrail();
+    const a = trail.addRoot(makeSymbol({ name: 'A' }));
+    const b = trail.addChild(a.id, makeSymbol({ name: 'B' }), makeOrigin());
+    trail.addChild(b.id, makeSymbol({ name: 'C' }), makeOrigin());
+    trail.addRoot(makeSymbol({ name: 'D' }));
+
+    const md = trailToMarkdown(trail, { mermaid: true });
+    const arrows = (md.match(/ -[.-]?-> /g) ?? []).length;
+
+    assert.equal(md.includes('```mermaid\nflowchart TD'), true);
+    assert.equal(arrows, 4 - 2);
+});
+
+test('Mermaid 이름의 따옴표는 이스케이프한다', () => {
+    const trail = makeTrail();
+    trail.addRoot(makeSymbol({ name: 'operator"" _s' }));
+
+    const md = trailToMarkdown(trail, { mermaid: true });
+    assert.equal(md.includes('["operator#quot;#quot; _s"]'), true);
+});
+
+test('서브트리 Markdown 은 형제를 담지 않는다', () => {
+    const trail = makeTrail();
+    const a = trail.addRoot(makeSymbol({ name: 'A' }));
+    const b = trail.addChild(a.id, makeSymbol({ name: 'B' }), makeOrigin());
+    trail.addChild(b.id, makeSymbol({ name: 'C' }), makeOrigin());
+    trail.addChild(a.id, makeSymbol({ name: 'Sibling' }), makeOrigin());
+
+    const md = subtreeToMarkdown(b);
+
+    assert.equal(md.includes('B `function`'), true);
+    assert.equal(md.includes('C `function`'), true);
+    assert.equal(md.includes('Sibling'), false);
+    // 서브트리의 뿌리는 제목 두 단계에서 시작한다. 트레일 전체와 같은 형식이다.
+    assert.match(md, /^## B `function`$/m);
 });

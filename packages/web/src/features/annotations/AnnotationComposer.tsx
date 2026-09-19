@@ -27,6 +27,8 @@ export interface AnnotationComposerProps {
     onSubmit: (value: { body: string; kind: AnnotationKind; tags: string[] }) => void;
     /** 저장할 수 있는 상태인지. 대상이 없으면 누를 수 없다. */
     canSubmit: boolean;
+    /** 이 분석에 이미 쓰인 태그. 매번 손으로 치지 않게 한다(V15). */
+    tagSuggestions?: readonly string[];
 }
 
 export function AnnotationComposer(props: AnnotationComposerProps): JSX.Element {
@@ -93,10 +95,14 @@ export function AnnotationComposer(props: AnnotationComposerProps): JSX.Element 
             <input
                 value={tags}
                 aria-label="태그"
+                list="composer-tags"
                 onChange={(event) => setTags(event.target.value)}
                 placeholder="태그, 쉼표로 구분"
                 disabled={props.readOnly}
             />
+            <datalist id="composer-tags">
+                {(props.tagSuggestions ?? []).map((tag) => <option key={tag} value={tag} />)}
+            </datalist>
             <button type="submit" disabled={props.readOnly || !props.canSubmit || !props.body.trim()}>
                 기록 저장
             </button>

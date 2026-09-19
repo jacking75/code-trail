@@ -146,7 +146,8 @@ test('promoteToRoot 는 하위를 데려가고 진입 링크를 지운다', () =
 
     const promoted = trail.promoteToRoot(mid.id);
 
-    assert.equal(promoted?.id, mid.id);
+    assert.equal(promoted?.node.id, mid.id);
+    assert.equal(promoted?.previousParentId, root.id);
     assert.equal(mid.parentId, null);
     assert.equal(mid.origin, null);
     assert.deepEqual(root.children, []);
@@ -402,4 +403,55 @@ test('형제 정렬은 트레일에 남되 revision 을 올리지 않는다', ()
     assert.equal(trail.revision, before);
     // 같은 값은 아무 일도 하지 않는다.
     assert.equal(trail.setChildOrder('click'), false);
+});
+
+test('승격을 되돌리면 부모·인덱스·진입 링크·재귀 표시가 그대로다', () => {
+    // `⇱` 는 관계를 바꾸는 유일한 동작이다. 되돌릴 수 없으면 잘못 떼어낸
+    // 서브트리를 원래 자리로 되돌릴 길이 없다(V10).
+    const trail = makeTrail();
+    const shared1 = makeSymbol({ name: 'Shared', relPath: 'src/s.cpp', anchorLine: 3 });
+    const root = trail.addRoot(shared1);
+    trail.addChild(root.id, makeSymbol({ name: 'First' }), makeOrigin());
+    const mid = trail.addChild(root.id, makeSymbol({ name: 'Mid' }), makeOrigin({ text: 'Mid' }));
+    const leaf = trail.addChild(mid.id, shared1, makeOrigin());
+
+    assert.equal(leaf.recursive, true);
+    const record = trail.promoteToRoot(mid.id);
+    assert.equal(leaf.recursive, false);
+
+    assert.equal(trail.undoPromote(record), true);
+    assert.equal(mid.parentId, root.id);
+    assert.equal(root.children.indexOf(mid), 1);
+    assert.deepEqual(mid.origin, makeOrigin({ text: 'Mid' }));
+    assert.deepEqual(trail.roots.map((n) => n.id), [root.id]);
+    // 조상 사슬이 되돌아왔으니 재귀 표시도 되돌아와야 한다.
+    assert.equal(leaf.recursive, true);
+});
+
+test('승격 되돌리기는 부모가 사라졌으면 거절한다', () => {
+    const trail = makeTrail();
+    const root = trail.addRoot(makeSymbol({ name: 'Root' }));
+    const mid = trail.addChild(root.id, makeSymbol({ name: 'Mid' }), makeOrigin());
+    const record = trail.promoteToRoot(mid.id);
+    trail.remove(root.id);
+
+    assert.equal(trail.undoPromote(record), false);
+});
+
+test('보드 배치 초기화는 좌표만 지우고 revision 을 올리지 않는다', () => {
+    // 좌표는 화면 상태다. revision 을 올리면 배치를 정리한 것만으로 날아가던
+    // 구조 명령이 거절된다(V11).
+    const trail = makeTrail();
+    const node = trail.addRoot(makeSymbol({ name: 'A' }));
+    trail.setNodeUi(node.id, { boardX: 40, boardY: 60, bodyHeight: 200 });
+    const before = trail.revision;
+
+    assert.equal(trail.placedNodeCount(), 1);
+    assert.equal(trail.resetBoardLayout(), 1);
+
+    assert.equal(trail.revision, before);
+    assert.equal(trail.placedNodeCount(), 0);
+    // 본문 높이는 배치와 상관없는 값이라 남는다.
+    assert.equal(trail.getNodeUi(node.id)?.bodyHeight, 200);
+    assert.equal(trail.resetBoardLayout(), 0);
 });

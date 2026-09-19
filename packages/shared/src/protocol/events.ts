@@ -73,6 +73,10 @@ export const nodeToggledPayloadSchema = z.object({
 /** `⇱` 로 새 루트가 되었다. 구조가 바뀌었으므로 클라이언트는 통째로 다시 그린다. */
 export const nodePromotedPayloadSchema = z.object({
     nodeId: uuidSchema,
+    /** 승격된 노드의 이름. 알림에 무엇을 떼어냈는지 적는다. */
+    name: z.string().optional(),
+    /** 서버가 되돌리기 버퍼에 담아 뒀는지. 담겼을 때만 `되돌리기` 를 붙인다(V10). */
+    undoable: z.boolean().optional(),
 });
 
 /** 해석이 도는 동안 노드에 진행 표시를 켜고 끈다. */
