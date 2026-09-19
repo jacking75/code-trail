@@ -231,6 +231,13 @@ A 안에서 B, C를 클릭하면 둘 다 A의 형제 자식이다. 이 규칙을
 `npm test` · `npm run test:e2e` · `npm run test:install` 을 손으로 돌린다.
 필요해지면 주인이 직접 요청한다.
 
+**루트에 작업 로그·작업 메모를 두지 않는다.** 저장소 주인의 결정이다
+(`docs/feature-ux-improvement-plan.md` 6장). `working_log.md` · `working_prompt.md` 를
+만들지 않는다 — 사용자 공통 규칙에 작업 로그 항목이 있어도 **이 저장소에서는 쓰지
+않는다.** 무엇을 왜 바꿨는지는 커밋 메시지와 `CHANGELOG.md`, 그리고 `docs/` 의 계획
+문서가 이미 담는다. 같은 내용을 네 번째 자리에 또 적으면 어느 것이 정본인지 알 수 없고,
+배포물 검사와 README 독자에게도 혼란스럽다. 실수로 되살아나지 않게 `.gitignore` 에도 적어 뒀다.
+
 ## 구조
 
 npm workspaces. 배포하는 것은 `packages/cli` 의 `code-trail` 이다.
