@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" width="900" height="600" font-family="'Segoe UI','Malgun Gothic','Noto Sans KR',sans-serif">
+  <title>트리 구조 — A 안에서 B 와 C 를 클릭하면 둘 다 A 의 형제 자식이 된다</title>
+  <rect width="900" height="600" fill="#ffffff"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#57606a"/></marker>
+    <style>
+      .t{font-size:14px;fill:#1f2328}
+      .m{font-family:Consolas,'Cascadia Mono',monospace;font-size:14px;fill:#1f2328}
+      .s{font-size:12.5px;fill:#57606a}
+      .h{font-size:15px;font-weight:700;fill:#1f2328}
+      .box{fill:#fff;stroke:#8c959f;stroke-width:1.5}
+      .hd{fill:#f6f8fa;stroke:#8c959f;stroke-width:1.5}
+      .line{stroke:#57606a;stroke-width:2;fill:none}
+      .note{font-size:13.5px;font-weight:600}
+    </style>
+  </defs>
+
+  <!-- 제목 -->
+  <text x="450" y="30" text-anchor="middle" class="h" font-size="17">A 안에서 B 와 C 를 클릭하면, 둘은 A 의 형제 자식이다</text>
+
+  <!-- 노드 A -->
+  <rect class="box" x="230" y="52" width="440" height="148" rx="6"/>
+  <path class="hd" d="M230,58 a6,6 0 0 1 6,-6 h428 a6,6 0 0 1 6,6 v30 h-440 z"/>
+  <text x="246" y="76" class="h">▾ A</text>
+  <text x="285" y="76" class="s">Dispatch · registry.cpp:118</text>
+  <rect x="588" y="62" width="68" height="20" rx="10" fill="#ddf4ff" stroke="#54aeff"/>
+  <text x="622" y="76" text-anchor="middle" class="s" fill="#0550ae">↳ 2</text>
+  <text x="246" y="112" class="s">119</text>
+  <text x="280" y="112" class="m">auto h = reg.<tspan fill="#0550ae" font-weight="700">Find</tspan><tspan fill="#cf222e" font-weight="700">①</tspan>(op);</text>
+  <text x="246" y="140" class="s">120</text>
+  <text x="280" y="140" class="m">// …</text>
+  <text x="246" y="168" class="s">121</text>
+  <text x="280" y="168" class="m">h-&gt;<tspan fill="#0550ae" font-weight="700">Invoke</tspan><tspan fill="#cf222e" font-weight="700">②</tspan>(s, p);</text>
+  <rect x="274" y="96" width="262" height="22" rx="3" fill="none" stroke="#cf222e" stroke-dasharray="4 3"/>
+  <rect x="274" y="152" width="214" height="22" rx="3" fill="none" stroke="#cf222e" stroke-dasharray="4 3"/>
+
+  <!-- 호출부 → 자식 연결 -->
+  <path class="line" d="M450,200 V232 H220 V262" marker-end="url(#arr)"/>
+  <path class="line" d="M450,200 V232 H680 V262" marker-end="url(#arr)"/>
+
+  <!-- 노드 B -->
+  <rect class="box" x="60" y="262" width="320" height="120" rx="6"/>
+  <path class="hd" d="M60,268 a6,6 0 0 1 6,-6 h308 a6,6 0 0 1 6,6 v30 h-320 z"/>
+  <circle cx="82" cy="278" r="10" fill="#cf222e"/><text x="82" y="283" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1</text>
+  <text x="100" y="283" class="h">B</text>
+  <text x="120" y="283" class="s">Find ↳1</text>
+  <text x="76" y="320" class="s" fill="#0550ae">↑ A 의 119번째 줄 Find</text>
+  <text x="76" y="346" class="m">Handler* Find(…) {</text>
+  <text x="76" y="368" class="m">  return <tspan fill="#0550ae" font-weight="700">map_.find</tspan><tspan fill="#cf222e" font-weight="700">①</tspan>(k);</text>
+
+  <!-- 노드 C -->
+  <rect class="box" x="520" y="262" width="320" height="120" rx="6"/>
+  <path class="hd" d="M520,268 a6,6 0 0 1 6,-6 h308 a6,6 0 0 1 6,6 v30 h-320 z"/>
+  <circle cx="542" cy="278" r="10" fill="#cf222e"/><text x="542" y="283" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">2</text>
+  <text x="560" y="283" class="h">C</text>
+  <text x="580" y="283" class="s">Invoke</text>
+  <rect x="640" y="268" width="52" height="20" rx="10" fill="#fff8c5" stroke="#d4a72c"/>
+  <text x="666" y="282" text-anchor="middle" class="s" fill="#7d4e00">선언만</text>
+  <text x="536" y="320" class="s" fill="#0550ae">↑ A 의 121번째 줄 Invoke</text>
+  <text x="536" y="346" class="m">virtual void Invoke(…) = 0;</text>
+
+  <!-- B → D -->
+  <path class="line" d="M220,382 V418 " marker-end="url(#arr)"/>
+  <rect class="box" x="100" y="420" width="240" height="84" rx="6"/>
+  <path class="hd" d="M100,426 a6,6 0 0 1 6,-6 h228 a6,6 0 0 1 6,6 v28 h-240 z"/>
+  <circle cx="122" cy="436" r="10" fill="#cf222e"/><text x="122" y="441" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1</text>
+  <text x="140" y="441" class="h">D</text>
+  <text x="160" y="441" class="s">map_.find</text>
+  <text x="116" y="476" class="s" fill="#0550ae">↑ B 의 Find 호출부</text>
+  <text x="116" y="494" class="m">…</text>
+
+  <!-- 설명 -->
+  <g class="note">
+    <text x="690" y="104" fill="#cf222e" font-size="13">← 펼쳐본 호출부에 순번 ①②</text>
+    <text x="690" y="124" class="s">   (점선 칸)</text>
+    <text x="450" y="250" text-anchor="middle" fill="#1a7f37">같은 노드에서 클릭한 것은 모두 같은 행의 형제</text>
+    <text x="236" y="410" class="s" fill="#1a7f37">B 안에서 클릭한 것은 B 의 자식(한 단계 아래 행)</text>
+  </g>
+
+  <!-- 범례 -->
+  <rect x="40" y="530" width="820" height="52" rx="6" fill="#f6f8fa" stroke="#d0d7de"/>
+  <text x="56" y="552" class="t">• 부모는 <tspan font-weight="700">“클릭한 코드가 어느 노드의 본문에 있었나”</tspan> 로만 정해진다. C 는 B 밑으로 들어가지 않는다.</text>
+  <text x="56" y="572" class="t">• 부모 코드의 <tspan class="m" fill="#0550ae">Find①</tspan> 을 누르면 아래 ① 노드로, 자식의 <tspan fill="#0550ae">↑ A 의 …</tspan> 링크를 누르면 부모의 그 호출부로 돌아간다.</text>
+</svg>
