@@ -1,70 +1,88 @@
 # Code Trail
 
-코드를 읽어 내려간 **경로 그 자체**를 트리로 남기는 프로그램이다.
-프로젝트 폴더를 가리켜 실행하면 로컬 서버가 뜨고 기본 브라우저가 열린다.
+**Code Trail records the path you take through code as a tree.** Point it at a project folder and it starts a local server and opens your browser: expand a function inline, click an identifier, and its definition nests underneath. Symbols come from your own language server (clangd, gopls, rust-analyzer, Roslyn, typescript-language-server).
+Run `npx code-trail ./my-project` (Node.js 22.12 or later). It is a reader, not an editor. The UI and documentation are in Korean.
+
+코드를 읽어 내려간 **경로 그 자체**를 트리로 남기는 로컬 도구다. **편집기가 아니다.**
+코드는 읽기만 하고, 고칠 때는 `↗` 로 평소 쓰는 에디터를 연다.
+
+[![npm](https://img.shields.io/npm/v/code-trail)](https://www.npmjs.com/package/code-trail)
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![node](https://img.shields.io/node/v/code-trail)](https://nodejs.org)
+
+![트리 모드의 트레일 패널 — mutate 안에서 enqueue 와 afterMutation 을 클릭하고, afterMutation 안에서 다시 scheduleIndexSave 를 클릭한 3단계 트리](docs/images/trail-tree.png)
+
+*`mutate` 안에서 `enqueue` 와 `afterMutation` 을 클릭하면 둘 다 `mutate` 의 형제 자식이다. 다시 `afterMutation` 안에서 `scheduleIndexSave` 를 누르면 그 아래로 붙는다. 이 화면은 이 저장소 자체를 TypeScript 언어 서버로 연 것이다.*
+
+## 왜 만들었나
+
+함수를 따라 들어가면 에디터는 지금 위치만 보여 주고, 지나온 길은 머릿속에만 남는다.
+열 단계쯤 들어가면 어디서 왔는지 잃는다. 에디터의 Call Hierarchy 는 트리를 보여주지만 코드 본문을 보여주지 않고,
+Call Graph 계열 도구는 그래프만 그리고 코드는 에디터로 점프시킨다.
+Code Trail 은 그 길을 트리로 남기고 각 단계의 코드 본문을 그 자리에 보여준다.
+그래서 읽은 것을 설명하고, 남에게 넘겨주고, 나중에 다시 읽을 수 있다.
+
+## 목차
+
+- [30초 시작](#30초-시작)
+- [이런 때 쓴다](#이런-때-쓴다)
+- [지원 언어와 언어 서버](#지원-언어와-언어-서버)
+- [동작 방식](#동작-방식)
+- [트리 구조](#트리-구조)
+- [사용법](#사용법)
+- [설치와 실행](#설치와-실행)
+- [설정](#설정)
+- [데이터는 어디에 남나](#데이터는-어디에-남나)
+- [안전에 관해](#안전에-관해)
+- [문제 해결](#문제-해결)
+- [개발](#개발)
+- [구조](#구조)
+- [문서 지도](#문서-지도)
+- [지난 이야기](#지난-이야기)
+- [라이선스](#라이선스)
+
+## 30초 시작
 
 ```
 npx code-trail ./my-project
 ```
 
-함수 위에서 `Ctrl+Alt+T` 를 누르면 그 함수 본문이 트레일 패널에 펼쳐진다.
-본문 안의 식별자를 클릭하면 그 정의가 **자식 노드로 아래에 붙는다**. 또 클릭하면 또 붙는다.
-시작 지점에서 지금까지 어떤 순서로 타고 들어왔는지가 위에서 아래로 흐르는 트리로 그대로 남고,
-각 단계를 접었다 폈다 할 수 있다.
+1. 브라우저가 열리면 왼쪽 파일 탐색기에서 파일을 연다.
+2. 함수 위에 커서를 두고 `Ctrl+Alt+T` 를 누른다(또는 문서 줄의 `▶ 트레일 시작`).
+3. 본문의 식별자를 클릭한다. 그 정의가 자식 노드로 아래에 붙는다.
 
-에디터의 Call Hierarchy 는 트리를 보여주지만 코드 본문을 보여주지 않고,
-Call Graph 계열 도구들은 그래프만 그리고 코드는 에디터로 점프시킨다.
-Code Trail 은 그 사이의 빈칸을 메운다.
+**언어 서버가 설치되어 있어야 한다.** 없다면 [지원 언어와 언어 서버](#지원-언어와-언어-서버) 를 본다.
+언어 서버 없이 흐름만 보려면 저장소의 `examples/first-review.ctshare.json` 을 받아 `code-trail --read-share <파일>` 로 예제 공유 묶음을 읽는다.
 
-**편집기가 아니다.** 코드는 읽기만 하고, 고칠 때는 `↗` 로 평소 쓰는 에디터를 연다.
+## 이런 때 쓴다
 
-## 트리 구조
+**낯선 코드를 처음 읽을 때.** 진입점 함수에서 시작해 호출을 따라 내려간다. 가 본 길이 트리로 남고,
+접었다 펼치며 큰 그림과 세부를 오간다. 구현이 여럿인 인터페이스는 자동으로 고르지 않고 후보를 보여준다.
 
-`A` 안에서 `B` 를 클릭하고, 다시 `A` 안에서 `C` 를 클릭하면
-**B 와 C 는 A 의 형제 자식으로 나란히** 붙는다. C 가 B 밑으로 들어가지 않는다.
-클릭한 코드가 어느 노드에 속해 있느냐가 부모를 결정하기 때문이다.
+**PR·변경을 리뷰할 때.** 파일 탐색기 아래 읽기 시작점의 변경 목록에서 바뀐 줄 덩어리(hunk)부터 연다.
+변경 기준(작업 트리 · 커밋 · 브랜치)을 고르고, 본 덩어리에 `☐` 로 확인함을 남긴다. 코드가 바뀌면 `재검토` 로 내려간다.
 
-```
-                   A ↳2                    ← A에서 2군데를 펼쳐봤다
-       auto h = reg.Find①(op);             ← 펼쳐본 호출부에 순번이 붙는다
-       h->Invoke②(s, p);
-                    │
-           ┌────────┴────────┐
-      ① B (Find) ↳1      ② C (Invoke)      ← 같은 깊이의 형제는 같은 행
-            │
-       ① map_.find
-```
+![코드 화면 — 변경 목록의 hunk 에서 연 줄, 여백 표식, 확인함으로 표시한 변경 덩어리](docs/images/review-changes.png)
 
-부모 코드의 `Find①` 을 다시 누르면 아래 ① 노드로 이동하고,
-자식 헤더 밑의 `↑ A 의 127번째 줄 Find` 를 누르면 반대로 부모의 그 호출부로 돌아간다.
+**읽은 것을 남기고 넘겨줄 때.** 코드 범위·노드·트레일에 설명·질문·우려·결론을 남기고 안내 순서로 엮는다.
+공유 묶음·Markdown·정적 HTML 로 내보내면 받는 사람은 프로젝트나 언어 서버 없이도 읽을 수 있다.
+따라 하는 법은 [첫 분석과 공유 안내](docs/first-review-guide.md) 에 있다.
 
-형제 순서는 툴바의 `⇅` 버튼으로 **코드 순서(= 호출 순서, 기본값)** 와
-**클릭 순서** 사이를 오갈 수 있다.
+여러 함수를 나란히 놓고 비교하고 싶으면 툴바의 `⬚ 보드` 로 노드를 캔버스에 자유롭게 늘어놓는다.
 
-화면 각 부분을 뭐라고 부르는지는 [docs/terms.md](docs/terms.md) 에 그림으로 정리해 두었다.
+![보드 모드 — 노드를 끌어 옮겨도 부모-자식 관계는 그대로이고 연결선이 이어 준다](docs/images/board-mode.png)
 
-## 동작 방식
+## 지원 언어와 언어 서버
 
-심볼 해석은 전부 **언어 서버(LSP)** 에 위임한다. 자체 파서를 두지 않는다.
-쓰는 요청은 넷뿐이다.
-
-```
-textDocument/definition        식별자의 정의
-textDocument/documentSymbol    심볼 목록과 본문 범위
-textDocument/implementation    구현 찾기
-textDocument/typeDefinition    정의를 못 찾았을 때의 폴백
-```
-
-전부 표준 LSP 기능이라, 이 넷에 답하는 언어 서버라면 붙는다.
 지금 지원하는 언어와 서버는 다섯이다.
 
-| 언어 | 언어 서버 | 어디서 찾나 |
-| --- | --- | --- |
-| C / C++ | clangd | 설정 → `PATH` → LLVM 설치 위치 |
-| C# | roslyn-language-server | 설정 → `PATH` |
-| Go | gopls | 설정 → `PATH` → `GOBIN` → `GOPATH/bin` |
-| Rust | rust-analyzer | 설정 → `PATH` → rustup(`CARGO_HOME`) |
-| TypeScript / JavaScript | typescript-language-server | 설정 → `PATH` → 전역 npm 패키지 진입점 |
+| 언어 | 언어 서버 | 어디서 찾나 | 설치 안내 |
+| --- | --- | --- | --- |
+| C / C++ | clangd | 설정 → `PATH` → LLVM 설치 위치 | [clangd.llvm.org](https://clangd.llvm.org/installation) |
+| C# | roslyn-language-server | 설정 → `PATH` | [Roslyn](https://learn.microsoft.com/dotnet/core/tools/dotnet-tool-install) |
+| Go | gopls | 설정 → `PATH` → `GOBIN` → `GOPATH/bin` | [go.dev/gopls](https://go.dev/gopls) |
+| Rust | rust-analyzer | 설정 → `PATH` → rustup(`CARGO_HOME`) | [rust-analyzer](https://rust-analyzer.github.io/book/installation.html) |
+| TypeScript / JavaScript | typescript-language-server | 설정 → `PATH` → 전역 npm 패키지 진입점 | [typescript-language-server](https://github.com/typescript-language-server/typescript-language-server) |
 
 **언어 서버를 대신 내려받지 않는다.** 이미 설치된 것을 찾거나 설정에 적힌 경로를 쓴다.
 설치 명령은 `진단` 탭이 안내만 하고 우리가 실행하지 않는다 —
@@ -93,50 +111,50 @@ C# 독립 언어 서버는 배포 규약이 아직 안정되지 않았다. 직�
 `진단` 탭의 **솔루션** 칸에서 고르면 `languages.csharp.solutionPath` 에
 프로젝트 상대경로로 저장된다.
 
-## 설치와 실행
+## 동작 방식
 
-Node.js 20.11 이상이 필요하다.
+심볼 해석은 전부 **언어 서버(LSP)** 에 위임한다. 자체 파서를 두지 않는다.
+쓰는 요청은 넷뿐이다.
 
 ```
-# 설치 없이 한 번 써보기
-npx code-trail ./my-project
-
-# 전역 설치
-npm install -g code-trail
-code-trail ./my-project
-
-# 업데이트
-npm update -g code-trail
-
-# 제거
-npm uninstall -g code-trail
+textDocument/definition        식별자의 정의
+textDocument/documentSymbol    심볼 목록과 본문 범위
+textDocument/implementation    구현 찾기
+textDocument/typeDefinition    정의를 못 찾았을 때의 폴백
 ```
 
-`code-trail <경로>` 는 그 폴더를 프로젝트 루트로 잡아 로컬 서버를 띄우고 브라우저를 연다.
+전부 표준 LSP 기능이라, 이 넷에 답하는 언어 서버라면 붙는다.
 
-| 인자 | 뜻 |
-| --- | --- |
-| `<경로>` | 열 프로젝트 폴더. 생략하면 현재 폴더 |
-| `--port <번호>` | 쓸 포트. 생략하면 빈 포트를 고른다 |
-| `--no-open` | 브라우저를 자동으로 열지 않는다 |
-| `--trail <trail-id>` | 시작한 뒤 이 트레일을 고른다 |
-| `--read-share <파일>` | 프로젝트·언어 서버 없이 공유 묶음을 읽기 전용으로 연다 |
-| `--log-level <level>` | `error` \| `warn` \| `info` \| `debug` (기본 `info`) |
-| `-v`, `--version` | 버전 |
-| `-h`, `--help` | 도움말 |
+## 트리 구조
 
-서버는 **`127.0.0.1` 에만 바인딩한다.** 외부 인터페이스로 여는 옵션은 제공하지 않는다.
-접속에는 프로세스가 사는 동안만 쓰는 256비트 세션 토큰이 필요하고,
-그 토큰은 URL fragment 로만 전달된다 — fragment 는 서버로 전송되지 않고 로그에도 안 남는다.
+`A` 안에서 `B` 를 클릭하고, 다시 `A` 안에서 `C` 를 클릭하면
+**B 와 C 는 A 의 형제 자식으로 나란히** 붙는다. C 가 B 밑으로 들어가지 않는다.
+클릭한 코드가 어느 노드에 속해 있느냐가 부모를 결정하기 때문이다.
 
-같은 프로젝트에 서버가 이미 떠 있으면 새로 띄우지 않고 그 주소를 열어준다.
+```
+                   A ↳2                    ← A에서 2군데를 펼쳐봤다
+       auto h = reg.Find①(op);             ← 펼쳐본 호출부에 순번이 붙는다
+       h->Invoke②(s, p);
+                    │
+           ┌────────┴────────┐
+      ① B (Find) ↳1      ② C (Invoke)      ← 같은 깊이의 형제는 같은 행
+            │
+       ① map_.find
+```
 
-프로젝트 안 `.code-trail/` 에 설정·트레일·분석 기록이 저장된다.
-`.code-trail/local/`에는 기계별 실행 설정·작성자·초안이, `runtime/`에는 실행 부산물이
-들어가며 각각 자체 `.gitignore`로 감춘다 —
-**프로젝트 루트의 `.gitignore` 는 우리가 고치지 않는다.**
+부모 코드의 `Find①` 을 다시 누르면 아래 ① 노드로 이동하고,
+자식 헤더 밑의 `↑ A 의 127번째 줄 Find` 를 누르면 반대로 부모의 그 호출부로 돌아간다.
+
+형제 순서는 툴바의 `⇅` 버튼으로 **코드 순서(= 호출 순서, 기본값)** 와
+**클릭 순서** 사이를 오갈 수 있다.
+
+화면 각 부분을 뭐라고 부르는지는 [docs/terms.md](docs/terms.md) 에 그림으로 정리해 두었다.
 
 ## 사용법
+
+### 탐색 시작과 파고들기
+
+함수 위에서 `Ctrl+Alt+T` 로 시작해 식별자를 클릭하며 내려간다. 구현체 찾기, 외부 에디터 열기, 읽던 위치 앞뒤로 가기도 여기 있다.
 
 | 동작 | 방법 | 키 |
 | --- | --- | --- |
@@ -145,40 +163,68 @@ npm uninstall -g code-trail
 | 한 단계 파고들기 | 노드 본문의 **식별자 클릭** | `Tab` → `Enter` |
 | 구현체 찾기 | 호출부에서 **Alt + 클릭**, 또는 선언 노드 헤더의 **`⚑`** | `f` |
 | 외부 에디터에서 열기 | **Ctrl/Cmd + 클릭**, 또는 노드 헤더의 `↗` | `o` |
+| 경로 이동 | 상단 브레드크럼의 이름 클릭, 또는 자식 헤더 밑 `↑ …` 링크 | `p` |
+| 읽던 위치 앞뒤로 | 탭 줄의 `←` `→` | `Alt+←` `Alt+→` |
+| 노드에서 코드 화면으로 | 노드 헤더의 **`경로:줄`** | `g` |
+
+### 트리 조작과 보기
+
+트리를 접고 펼치고 지우고, 트리 모드와 보드 모드를 오가고, 노드 크기를 조절한다. 화면 배치는 서버에 남는다.
+
+| 동작 | 방법 | 키 |
+| --- | --- | --- |
 | 노드 사이 이동 | 헤더 클릭 | `↑` `↓` `←` `→` `Home` `End` |
 | 접기 / 펼치기 | 노드 헤더 클릭 | `Enter` · `Space` |
 | 노드 삭제 | 노드 헤더의 `✕` (하위 노드까지 함께). 8초 안에 알림의 `되돌리기` | `Delete` |
 | 트리 전체 지우기 | 툴바 `지우기` → 확인 팝오버 | |
 | 형제 정렬 바꾸기 | 툴바 `⇅ 코드 순서` ↔ `⇅ 클릭 순서` (트레일마다 남는다) | |
-| 경로 이동 | 상단 브레드크럼의 이름 클릭, 또는 자식 헤더 밑 `↑ …` 링크 | `p` |
-| 읽던 위치 앞뒤로 | 탭 줄의 `←` `→` | `Alt+←` `Alt+→` |
 | 탭 바꾸기 | 탭 줄 클릭 | `Ctrl+Alt+1`~`5` |
 | 파일 탐색기 · 기록 열 | `☰` · 기록 열의 `×` | `Ctrl+Alt+B` · `Ctrl+Alt+N` |
 | 코드와 트레일 나란히 | 탭 줄 오른쪽 `⫿ 분할` (1400px 이상) | `Ctrl+Alt+\` |
-| 노드에서 코드 화면으로 | 노드 헤더의 **`경로:줄`** | `g` |
-| 확인함으로 표시 | 노드 헤더의 **`☐`** (다시 누르면 되돌린다) | `v` |
-| 노드 메뉴 | 노드 헤더 **우클릭** 또는 **`⋯`** | `m` · `Shift+F10` |
 | 노드를 자유롭게 늘어놓기 | 툴바 `⬚ 보드` → 헤더를 끌어 이동. 다시 누르면 트리로 | |
 | 본문 높이 조절 | 코드 상자 **오른쪽 아래 모서리를 드래그** | |
 | 그 노드만 글자 크기 | 코드 위에서 **Ctrl + 휠** | |
 | 크기 되돌리기 | **줄 번호 칸 더블클릭** | |
 | 새 루트로 떼어내기 | 노드 헤더의 **`⇱`** (하위 노드도 함께 올라온다) | `r` |
 | 트레일 여러 개 | 앱 바의 `트레일 ▾` 목록에서 만들고 고르고 이름 바꾸고 지운다 | |
-| 분석 기록 남기기 | 코드를 드래그해 뜨는 **선택 칩**의 `＋ 기록`, 노드 헤더의 `＋`, 또는 `분석 기록` 탭 | `n` |
-| 기록을 코드 옆에서 | 노드 헤더의 `✎ N` 배지, 또는 코드 화면에서 드래그 → `＋ 기록` → 오른쪽 **기록 열** | |
+| 노드 메뉴 | 노드 헤더 **우클릭** 또는 **`⋯`** | `m` · `Shift+F10` |
+
+### 변경에서 시작하는 리뷰
+
+파일 탐색기 아래 읽기 시작점에서 기준(`HEAD` 등) 대비 바뀐 줄 덩어리부터 읽고 `☐` 로 확인함을 남긴다.
+
+| 동작 | 방법 | 키 |
+| --- | --- | --- |
 | 변경에서 시작하기 | 파일 탐색기 아래 `변경 목록`에서 파일을 펼쳐 **바뀐 줄 덩어리**를 고른다 | |
 | 무엇과 비교할지 | 변경 목록 머리의 **변경 기준** — `작업 트리` · `<커밋> 이후` · `<브랜치> ← 갈라진 지점부터` | |
 | hunk 를 봤다고 표시 | hunk 줄 오른쪽의 `☐`. 파일 줄에 `✓ n/m` 이 보인다 | |
 | 바뀐 곳만 보기 | 문서 줄의 `이전 변경` · `다음 변경` · `변경 보기`(기준 대비 좌우 비교) | `Alt+↑` `Alt+↓` |
+| 확인함으로 표시 | 노드 헤더의 **`☐`** (다시 누르면 되돌린다) | `v` |
 | 트레일 노드로 건너뛰기 | 코드 화면 왼쪽 여백의 **표식** 클릭 | |
-| 안내 순서 따라 읽기 | 분석 화면의 `따라 읽기` → 화면 아래 막대의 `다음` | `[` `]` |
 | 파일이 바뀐 노드 | 헤더의 `바뀜` 배지와 `↻` 로 현재 코드 다시 읽기 | |
-| 설정 바꾸기 | `설정` 탭 (테마·글자 크기·클릭 대상·언어 켜기·작성자) | |
+
+### 기록 · 안내 순서 · 공유
+
+읽은 것을 설명·질문·우려·결론으로 남기고, 안내 순서로 엮어 공유 묶음·Markdown·정적 HTML 로 넘긴다.
+
+| 동작 | 방법 | 키 |
+| --- | --- | --- |
+| 분석 기록 남기기 | 코드를 드래그해 뜨는 **선택 칩**의 `＋ 기록`, 노드 헤더의 `＋`, 또는 `분석 기록` 탭 | `n` |
+| 기록을 코드 옆에서 | 노드 헤더의 `✎ N` 배지, 또는 코드 화면에서 드래그 → `＋ 기록` → 오른쪽 **기록 열** | |
+| 안내 순서 따라 읽기 | 분석 화면의 `따라 읽기` → 화면 아래 막대의 `다음` | `[` `]` |
 | Markdown 으로 내보내기 | 툴바 `Markdown` → `기록 포함` · `Mermaid 포함` 을 고르고 내려받는다. 노드 하나만 필요하면 노드 메뉴의 `Markdown 복사` | |
 | 공유하기 | `공유 내용 확인` 뒤 공유 묶음·Markdown·정적 HTML 내려받기 | |
 | 프로젝트 없이 읽기 | `code-trail --read-share <공유 파일>` | |
 | 회신 합치기 | 회신 공유 묶음을 가져와 추가·수정·삭제와 충돌을 확인한 뒤 `검토한 변경 합치기` | |
 | AI 설명 초안 | 코드 범위를 선택하고 칩의 `AI 초안`. 검토 후 채택해야 기록이 된다 | |
+
+### 설정 · 진단 · 단축키
+
+대부분의 설정은 설정 탭에서 바꾼다. 언어 서버 상태는 앱 바의 서버 상태 표시와 진단 탭에서 본다.
+
+| 동작 | 방법 | 키 |
+| --- | --- | --- |
+| 설정 바꾸기 | `설정` 탭 (테마·글자 크기·클릭 대상·언어 켜기·작성자) | |
 | 언어 서버 상태 | 앱 바·문서 줄의 상태 표시, 자세히는 `진단` 탭 | |
 | 단축키 전부 보기 | 탭 줄 오른쪽의 `?` | `?` |
 
@@ -379,6 +425,50 @@ endpoint는 `localhost`, `127.0.0.1`, `[::1]`만 허용한다.
 그 노드에만 가로 스크롤이 생긴다. 자동 조절이 싫으면 `ui.fitToWidth` 를 끄거나,
 `ui.fontSize` 에 원하는 크기를 넣으면 그 값으로 고정된다.
 
+## 설치와 실행
+
+Node.js 22.12 이상이 필요하다(LTS 권장).
+
+```
+# 설치 없이 한 번 써보기
+npx code-trail ./my-project
+
+# 전역 설치
+npm install -g code-trail
+code-trail ./my-project
+
+# 업데이트
+npm update -g code-trail
+
+# 제거
+npm uninstall -g code-trail
+```
+
+`code-trail <경로>` 는 그 폴더를 프로젝트 루트로 잡아 로컬 서버를 띄우고 브라우저를 연다.
+
+| 인자 | 뜻 |
+| --- | --- |
+| `<경로>` | 열 프로젝트 폴더. 생략하면 현재 폴더 |
+| `--port <번호>` | 쓸 포트. 생략하면 빈 포트를 고른다 |
+| `--no-open` | 브라우저를 자동으로 열지 않는다 |
+| `--trail <trail-id>` | 시작한 뒤 이 트레일을 고른다 |
+| `--read-share <파일>` | 프로젝트·언어 서버 없이 공유 묶음을 읽기 전용으로 연다 |
+| `--log-level <level>` | `error` \| `warn` \| `info` \| `debug` (기본 `info`) |
+| `--config <경로>` | 설정 파일 위치를 덮어쓴다. 테스트·특수 환경 전용 |
+| `-v`, `--version` | 버전 |
+| `-h`, `--help` | 도움말 |
+
+서버는 **`127.0.0.1` 에만 바인딩한다.** 외부 인터페이스로 여는 옵션은 제공하지 않는다.
+접속에는 프로세스가 사는 동안만 쓰는 256비트 세션 토큰이 필요하고,
+그 토큰은 URL fragment 로만 전달된다 — fragment 는 서버로 전송되지 않고 로그에도 안 남는다.
+
+같은 프로젝트에 서버가 이미 떠 있으면 새로 띄우지 않고 그 주소를 열어준다.
+
+프로젝트 안 `.code-trail/` 에 설정·트레일·분석 기록이 저장된다.
+`.code-trail/local/`에는 기계별 실행 설정·작성자·초안이, `runtime/`에는 실행 부산물이
+들어가며 각각 자체 `.gitignore`로 감춘다 —
+**프로젝트 루트의 `.gitignore` 는 우리가 고치지 않는다.**
+
 ## 설정
 
 **대부분은 `설정` 탭에서 바꾼다.** 테마·코드 글자 크기·탭 폭·폭 맞춤·클릭 대상·형제 정렬
@@ -432,6 +522,26 @@ TypeScript·TSX·JavaScript·JSX를 함께 맡는다. Windows에서는 npm의 `.
 파일 이름에 `;` 나 `&&` 가 있어도 인자 하나로 간다. 경로는 브라우저가 보낸 값이 아니라
 서버가 문서 권한 목록에서 역조회한 것이다.
 
+## 데이터는 어디에 남나
+
+프로젝트 안 `.code-trail/` 에 모두 남는다. 자세한 것은 [`docs/data-and-recovery.md`](docs/data-and-recovery.md) 에 있다.
+
+```text
+.code-trail/
+  settings.json                 공유 가능한 UI·언어 사용·상대 솔루션 설정
+  index.json                    트레일 목록 캐시
+  trails/<trail-id>.json        트레일 정본
+  analysis/<analysis-id>.json   분석 기록 정본
+  snapshots/                    불변 코드 기준 자료
+  local/settings.json           에디터·언어 서버 실행 값·작성자·로컬 AI 제공자
+  local/ui-state.json           개인 화면 상태 — 사이드바·기록 열·탭·마지막 문서·이동 이력·변경 기준
+  local/drafts/                 저장 전 개인 초안
+  runtime/                      잠금·언어 서버 로그
+```
+
+`local/` 과 `runtime/` 은 자체 `.gitignore` 를 가진다. **프로젝트 루트의 `.gitignore` 는 우리가 고치지 않는다.**
+`settings.json`·`trails/`·`analysis/` 를 저장소에 올릴지는 프로젝트가 정한다.
+
 ## 안전에 관해
 
 로컬 도구지만 **브라우저는 신뢰 경계 밖**이라고 보고 만들었다.
@@ -446,6 +556,33 @@ TypeScript·TSX·JavaScript·JSX를 함께 맡는다. Windows에서는 npm의 `.
 - 자식 프로세스(언어 서버, 외부 에디터)를 셸 없이 띄운다.
 - AI endpoint는 loopback으로 제한하고 선택 코드만 전송하며, 코드 속 지시문을 명령으로 실행하지 않는다.
 - 오류 응답에 절대경로·코드 본문·환경 변수·토큰을 담지 않는다.
+
+취약점 보고 방법은 [`SECURITY.md`](SECURITY.md) 에 있다.
+
+## 문제 해결
+
+**언어 서버를 못 찾는다고 나온다.** `진단` 탭의 그 언어 카드가 어디를 찾았는지 보여준다. 설치한 뒤에도 못 찾으면
+`.code-trail/local/settings.json` 의 `languages.<언어>.executable` 에 실행 파일 경로를 적는다.
+
+**`지원됨` 이 안 붙는다.** `지원됨` 은 프로세스가 떴다는 뜻이 아니라 `✓ 확인` 이 실제 파일로 `documentSymbol` 과
+`definition` 요청을 보내 응답을 받았다는 뜻이다. 눌러야 돈다. 프로젝트를 못 알아보는 경우도 있다 —
+clangd 는 `compile_commands.json`, gopls 는 `go.mod`, rust-analyzer 는 `Cargo.toml`, C# 은 `.sln`·`.csproj` 가 필요하다.
+카드의 `다음 행동` 에 무엇이 없는지 적힌다.
+
+**클릭했는데 정의를 못 찾는다.** 알림에 이유와 `다시 시도` · `진단 화면` · `솔루션 고르기` 같은 다음 행동 버튼이 붙는다.
+서버가 뜨는 중이거나 멎었을 수 있다.
+
+**Windows 에서 설정에 `.cmd` 를 적었더니 안 뜬다.** `.cmd`·`.bat` 은 셸 없이 실행할 수 없다.
+셸을 거치면 인자가 셸 문법으로 해석되므로 우회하지 않는다. 실제 실행 파일(`.exe`) 경로를 적는다.
+
+**C# 솔루션이 여럿이다.** 우리가 고르지 않는다. `진단` 탭의 **솔루션** 칸에서 고른다.
+
+**브라우저가 안 열린다.** 터미널에 찍힌 주소를 복사해 직접 연다. `--no-open` 을 줬다면 의도한 동작이다.
+
+**포트를 고정하고 싶다.** `--port <번호>` 를 쓴다. 두 프로젝트를 같은 포트로 띄우면 두 번째가 충돌한다.
+
+**프로젝트 밖 파일이 코드 화면에서 안 열린다.** 의도다. 프로젝트 밖 파일(표준 라이브러리 헤더 등)은 언어 서버가
+정의로 돌려줬을 때만 노드로 볼 수 있고, 코드 화면에서는 열지 않는다.
 
 ## 개발
 
@@ -463,7 +600,9 @@ npm run typecheck
 npm test                      # 브라우저가 필요 없는 것 전부
 npm run test:e2e              # 진짜 서버 + 진짜 브라우저 (playwright 필요)
 npm run test:lsp              # 실제 언어 서버 스모크. 설치된 언어만 돌고 나머지는 건너뛴다
-npm run test:pack             # 배포물에 들어갈 파일 목록 검사
+npm run test:pack             # 배포물 파일 목록과 외부 의존성 고지 검사
+npm run test:install          # tarball 을 깨끗한 폴더에 설치하고 띄워 본다
+npm run release:check         # 브라우저 없이 되는 전부(build · typecheck · test · pack · install)
 npm run test:perf             # 1,000개 노드 성능 측정 (playwright 있으면 화면까지)
 ```
 
@@ -493,7 +632,13 @@ node --test "test/integration/*.test.mjs"   # 진짜 로컬 서버 + 가짜 언�
 먼저 `npm run build` 를 돌린다.
 
 브라우저를 쓰는 것(`test:e2e`, `test:perf`)은 `playwright` 를 쓴다 (`npm install` 이 함께 받는다).
-컨테이너의 프리설치 크로미움을 기본으로 찾고, 경로가 다르면 `CT_CHROME` 으로 넘긴다.
+Chrome 실행 파일 경로를 `CT_CHROME` 으로 넘긴다. Windows 예:
+
+```powershell
+$env:CT_CHROME = "C:\Program Files\Google\Chrome\Application\chrome.exe"; npm run test:e2e
+```
+
+게시 절차와 기여 규칙은 [`CONTRIBUTING.md`](CONTRIBUTING.md) 에 있다.
 
 ## 구조
 
@@ -533,11 +678,27 @@ packages/cli/src/               인자 해석, 서버 재사용 감지, 브라�
 그 좌표를 그대로 `textDocument/definition` 에 넘긴다. 즉 정확도는 토크나이저가 아니라
 언어 서버가 책임진다. 토크나이저는 "클릭 후보를 고르고 주석·문자열을 제외하는" 일만 한다.
 
+## 문서 지도
+
+| 문서 | 내용 |
+| --- | --- |
+| [`docs/terms.md`](docs/terms.md) | 화면 각 부분의 이름. 그림 포함 |
+| [`docs/first-review-guide.md`](docs/first-review-guide.md) | 첫 분석과 공유를 따라 해 보는 안내 |
+| [`docs/data-and-recovery.md`](docs/data-and-recovery.md) | `.code-trail/` 데이터 배치와 복구 |
+| [`docs/share-format.md`](docs/share-format.md) | 공유 묶음 형식과 포함 정책 |
+| [`docs/compatibility.md`](docs/compatibility.md) | 지원 조합, 검증 기록, 남은 실환경 검증 |
+| [`docs/perf-1000-nodes.md`](docs/perf-1000-nodes.md) | 노드 1,000개 성능 측정 |
+| [`docs/usability-evaluation.md`](docs/usability-evaluation.md) | 사용성 평가 계획과 측정표 |
+| [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md) 외 세 계획서 | 설계 결정의 근거. 역사 기록이다 |
+| [`docs/baseline.md`](docs/baseline.md), [`docs/e2e-port-checklist.md`](docs/e2e-port-checklist.md) | 확장 시절에서 무엇이 어떻게 옮겨졌나 |
+| [`AGENTS.md`](AGENTS.md) | 기여자·에이전트가 지킬 규칙 |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`SECURITY.md`](SECURITY.md) · [`CHANGELOG.md`](CHANGELOG.md) | 기여 안내, 보안 정책, 변경 내역 |
+
 ## 지난 이야기
 
 Code Trail 은 VS Code 확장으로 시작했다. 1.0.0 에서 확장을 걷어내고
 브라우저에서 도는 독립 프로그램이 되었고, 1.1.0 에서 분석 기록과 공유가,
-1.2.0~1.4.0 에서 리뷰 도구로서의 동선이 들어왔다. 계획과 그 근거는
+1.2.0~1.4.0 에서 리뷰 도구로서의 동선이, 1.7.0 에서 변경 기준·검토 표시·안내 순서가 들어왔다. 계획과 그 근거는
 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md),
 [`docs/code-understanding-and-sharing-plan.md`](docs/code-understanding-and-sharing-plan.md),
 [`docs/review-ux-improvement-plan.md`](docs/review-ux-improvement-plan.md) 에 있다.
