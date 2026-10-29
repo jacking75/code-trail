@@ -3,7 +3,7 @@
  *
  * 확장의 `codeTrail.*` 설정 중 옮길 것을 `ui` 아래로 모으고, 호스트가 대신 해주던
  * 일(에디터 열기, 언어 서버 기동)을 `editor` 와 `languages` 로 드러냈다.
- * 대응 관계는 `docs/e2e-port-checklist.md` 9절에 있다.
+ * 대응 관계는 `docs/design-history.md` 9절에 있다.
  */
 
 export interface LanguageServerSettings {

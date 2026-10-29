@@ -37,7 +37,7 @@ yarn-error.log*
 .idea/
 
 # 루트의 작업 로그·작업 메모. 주인의 결정으로 두지 않는다
-# (docs/feature-ux-improvement-plan.md 6장).
+# (docs/design-history.md 6장).
 working_log.md
 working_prompt.md
 

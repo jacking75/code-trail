@@ -6,7 +6,7 @@ import { fixture, shared } from './helpers.mjs';
 /**
  * 확장 `codeTrail.*` → 새 `ui.*`.
  *
- * 대응표는 `docs/e2e-port-checklist.md` 9절과 같아야 한다. 여기서 검사하는 것은
+ * 대응표는 `docs/design-history.md` 9절과 같아야 한다. 여기서 검사하는 것은
  * "이름이 바뀌었어도 기본값이 그대로인가" 다 — 기본값이 조용히 달라지면 같은
  * 프로젝트를 열었을 때 화면이 다르게 보인다.
  */

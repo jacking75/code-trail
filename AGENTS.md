@@ -79,19 +79,16 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 (C/C++·C#·Go·Rust, TypeScript 는 일부 확인), macOS·Linux 확인, 서로 다른 기계 간 공유·회신,
 실제 참여자 사용성 평가, npm 배포(CONTRIBUTING.md 의 릴리스 절차).
 
-네 계획서([`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md),
-[`docs/code-understanding-and-sharing-plan.md`](docs/code-understanding-and-sharing-plan.md),
-[`docs/review-ux-improvement-plan.md`](docs/review-ux-improvement-plan.md),
-[`docs/feature-ux-improvement-plan.md`](docs/feature-ux-improvement-plan.md))는 설계 결정의 근거이고 역사다.
+네 계획서([`docs/design-history.md`](docs/design-history.md) 한 파일에 합쳤다)는 설계 결정의 근거이고 역사다.
 
 - `packages/` 가 전부다. VS Code 확장 소스(`src/`, `media/`)와 `.vsix` 흐름은 1.0.0 에서 지웠다.
-  확장 마지막 상태는 태그 `v0.6.0-vscode-extension` 이고 기준선 기록은 [`docs/baseline.md`](docs/baseline.md) 다.
+  확장 마지막 상태는 태그 `v0.6.0-vscode-extension` 이고 기준선 기록은 [`docs/design-history.md`](docs/design-history.md) 다.
 - 언어 서버는 어댑터가 찾는다(설정 → PATH → 플랫폼별·GOBIN·rustup). **자동으로 내려받지 않는다.**
 - **실제 언어 서버로 검증하지 못한 것이 있다.** 이 기계에 clangd·gopls·roslyn 이 없고
   rust-analyzer 는 rustup proxy 만 있다(typescript-language-server 는 1.8.0 준비 때 설치해 Windows 에서 확인했다).
   `npm run test:pack` · `npm run test:install` 은 Windows 에서만 실제로 돌렸다.
   어느 줄이 그런지는 구현서 0.7 · 0.13 · 0.14 와 `docs/compatibility.md` 에 표시해 뒀다.
-- 확장에서 되던 동작이 새 프로그램의 무엇으로 옮겨졌는지는 [`docs/e2e-port-checklist.md`](docs/e2e-port-checklist.md) 에 있다.
+- 확장에서 되던 동작이 새 프로그램의 무엇으로 옮겨졌는지는 [`docs/design-history.md`](docs/design-history.md) 에 있다.
 
 지금 되는 것을 눈으로 보려면:
 
@@ -238,7 +235,7 @@ A 안에서 B, C를 클릭하면 둘 다 A의 형제 자식이다. 이 규칙을
 필요해지면 주인이 직접 요청한다.
 
 **루트에 작업 로그·작업 메모를 두지 않는다.** 저장소 주인의 결정이다
-(`docs/feature-ux-improvement-plan.md` 6장). `working_log.md` · `working_prompt.md` 를
+(`docs/design-history.md` 6장). `working_log.md` · `working_prompt.md` 를
 만들지 않는다 — 사용자 공통 규칙에 작업 로그 항목이 있어도 **이 저장소에서는 쓰지
 않는다.** 무엇을 왜 바꿨는지는 커밋 메시지와 `CHANGELOG.md`, 그리고 `docs/` 의 계획
 문서가 이미 담는다. 같은 내용을 네 번째 자리에 또 적으면 어느 것이 정본인지 알 수 없고,
@@ -335,15 +332,15 @@ test/fixtures/                  확장 시절 데이터를 굳혀 둔 것. **고
 | 외부 에디터 실행 경로 (`server/src/editor/`) | `test/integration/editor.test.mjs` 에 셸 특수문자 한 줄. 자리표시자를 늘리면 README `## 설정` 과 구현서 17.1 |
 | 진단 화면에 항목 추가 | `LspSessionInfo` → `/api/diagnostics` → `LanguageDiagnostics` → `DiagnosticsView` 넷을 한 벌로, 그리고 구현서 18 |
 | `.code-trail/settings.json` 항목 추가 | `shared/domain/settings.ts`, `protocol/schemas.ts`, `features/settings/SettingsView.tsx`, README `## 설정` |
-| 분석 기록 도메인·스키마 (`domain/analysis.ts`, `analysisSchemas.ts`) | `docs/share-format.md`, `docs/data-and-recovery.md`, `test/unit/analysis-sharing.test.mjs` |
-| 공유 묶음에 들어가는 필드 | `docs/share-format.md` 의 포함 정책, `examples/first-review.ctshare.json` 무결성 재계산 |
+| 분석 기록 도메인·스키마 (`domain/analysis.ts`, `analysisSchemas.ts`) | `docs/data-formats.md`, `test/unit/analysis-sharing.test.mjs` |
+| 공유 묶음에 들어가는 필드 | `docs/data-formats.md` 의 포함 정책, `examples/first-review.ctshare.json` 무결성 재계산 |
 | 기록이 노드·줄에 붙는 규칙 (`features/trail/annotationIndex.ts`) | `test/unit/annotation-index.test.mjs`, `test/e2e/analysis.e2e.mjs` |
 | 키보드 이동 규칙 (`features/trail/keyboard.ts`) | `test/unit/keyboard.test.mjs`, `features/help/ShortcutsHelp.tsx`, README `## 사용법` 의 키 표 |
 | 트레일 필터 규칙 (`features/trail/filter.ts`) | `test/unit/trail-filter.test.mjs`, README `## 사용법` 필터 줄 |
 | 여백 표식 규칙 (`features/source/gutterIndex.ts`) | `test/unit/gutter-index.test.mjs`, `test/e2e/trail.e2e.mjs` |
 | 기록 목록 거르기·정렬 (`features/annotations/annotationList.ts`) | `test/unit/annotation-list.test.mjs` |
-| 개인 화면 상태에 항목 추가 (`protocol/schemas.ts` 의 `localUiStateSchema`) | `persistence/localUiStateStore.ts`, `App.tsx` 의 저장·복원, `test/integration/persistence.test.mjs`, `docs/data-and-recovery.md` |
-| Markdown 형식 (`shared/domain/markdown.ts`) | `test/unit/markdown.test.mjs`, `server/src/sharing/service.ts` 의 `staticHtml`, `docs/share-format.md` |
+| 개인 화면 상태에 항목 추가 (`protocol/schemas.ts` 의 `localUiStateSchema`) | `persistence/localUiStateStore.ts`, `App.tsx` 의 저장·복원, `test/integration/persistence.test.mjs`, `docs/data-formats.md` |
+| Markdown 형식 (`shared/domain/markdown.ts`) | `test/unit/markdown.test.mjs`, `server/src/sharing/service.ts` 의 `staticHtml`, `docs/data-formats.md` |
 | 알림을 새로 띄우는 자리 | `features/notices/useNotices.ts` 를 지난다. 새 표시 요소를 만들지 않는다 |
 | `package.json` 의 `files`·`bin`·의존성 | `npm run test:pack` 과 `npm run test:install` 을 돌린다. 새 런타임 의존성은 `THIRD-PARTY-NOTICES.md` 에도 |
 | CLI 인자 추가 | `packages/cli/src/args.ts` 의 `USAGE`, README `## 설치와 실행` 표, `test/unit/cli-args.test.mjs` |

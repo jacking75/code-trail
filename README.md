@@ -524,7 +524,7 @@ TypeScript·TSX·JavaScript·JSX를 함께 맡는다. Windows에서는 npm의 `.
 
 ## 데이터는 어디에 남나
 
-프로젝트 안 `.code-trail/` 에 모두 남는다. 자세한 것은 [`docs/data-and-recovery.md`](docs/data-and-recovery.md) 에 있다.
+프로젝트 안 `.code-trail/` 에 모두 남는다. 자세한 것은 [`docs/data-formats.md`](docs/data-formats.md) 에 있다.
 
 ```text
 .code-trail/
@@ -684,13 +684,10 @@ packages/cli/src/               인자 해석, 서버 재사용 감지, 브라�
 | --- | --- |
 | [`docs/terms.md`](docs/terms.md) | 화면 각 부분의 이름. 그림 포함 |
 | [`docs/first-review-guide.md`](docs/first-review-guide.md) | 첫 분석과 공유를 따라 해 보는 안내 |
-| [`docs/data-and-recovery.md`](docs/data-and-recovery.md) | `.code-trail/` 데이터 배치와 복구 |
-| [`docs/share-format.md`](docs/share-format.md) | 공유 묶음 형식과 포함 정책 |
-| [`docs/compatibility.md`](docs/compatibility.md) | 지원 조합, 검증 기록, 남은 실환경 검증 |
+| [`docs/data-formats.md`](docs/data-formats.md) | `.code-trail/` 데이터 배치와 복구, 공유 묶음 형식과 포함 정책 |
+| [`docs/compatibility.md`](docs/compatibility.md) | 지원 조합, 검증 기록, 남은 실환경 검증, 사용성 평가 절차 |
 | [`docs/perf-1000-nodes.md`](docs/perf-1000-nodes.md) | 노드 1,000개 성능 측정 |
-| [`docs/usability-evaluation.md`](docs/usability-evaluation.md) | 사용성 평가 계획과 측정표 |
-| [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md) 외 세 계획서 | 설계 결정의 근거. 역사 기록이다 |
-| [`docs/baseline.md`](docs/baseline.md), [`docs/e2e-port-checklist.md`](docs/e2e-port-checklist.md) | 확장 시절에서 무엇이 어떻게 옮겨졌나 |
+| [`docs/design-history.md`](docs/design-history.md) | 네 계획서와 확장 이식 체크리스트·기준선. 설계 결정의 근거이고 역사 기록이다 |
 | [`AGENTS.md`](AGENTS.md) | 기여자·에이전트가 지킬 규칙 |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`SECURITY.md`](SECURITY.md) · [`CHANGELOG.md`](CHANGELOG.md) | 기여 안내, 보안 정책, 변경 내역 |
 
@@ -699,10 +696,8 @@ packages/cli/src/               인자 해석, 서버 재사용 감지, 브라�
 Code Trail 은 VS Code 확장으로 시작했다. 1.0.0 에서 확장을 걷어내고
 브라우저에서 도는 독립 프로그램이 되었고, 1.1.0 에서 분석 기록과 공유가,
 1.2.0~1.4.0 에서 리뷰 도구로서의 동선이, 1.7.0 에서 변경 기준·검토 표시·안내 순서가 들어왔다. 계획과 그 근거는
-[`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md),
-[`docs/code-understanding-and-sharing-plan.md`](docs/code-understanding-and-sharing-plan.md),
-[`docs/review-ux-improvement-plan.md`](docs/review-ux-improvement-plan.md) 에 있다.
-확장 마지막 상태의 기준선 기록은 [`docs/baseline.md`](docs/baseline.md) 이고
+[`docs/design-history.md`](docs/design-history.md) 에 있다.
+확장 마지막 상태의 기준선 기록도 거기 있고
 확장 시절 코드는 태그 `v0.6.0-vscode-extension` 에 남아 있다.
 
 **확장이 만들던 JSON 을 읽거나 가져오는 기능은 없다.** 저장 형식이 다르고,

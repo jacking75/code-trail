@@ -48,8 +48,8 @@ OS · Node · 브라우저 · 언어 서버 버전과 건너뛴 항목을 변경
 
 전체 규칙과 새 명령·이벤트·HTTP 경로·UI 용어·설정·배포 파일을 바꿀 때 함께 고칠 목록은
 [`AGENTS.md`](AGENTS.md) 의 `지켜야 할 것` 과 `바꾸면 같이 고칠 것` 을 따른다.
-공유 형식은 [`docs/share-format.md`](docs/share-format.md), 저장 복구는
-[`docs/data-and-recovery.md`](docs/data-and-recovery.md) 를 먼저 읽는다.
+공유 형식과 저장 복구는
+[`docs/data-formats.md`](docs/data-formats.md) 를 먼저 읽는다.
 
 ## 릴리스 절차
 

@@ -2,7 +2,7 @@
 
 `v0.6.0-vscode-extension` 시점, 즉 **VS Code 확장이 마지막으로 만들던 데이터의 모양**을 굳혀 둔 것이다.
 독립 프로그램으로 옮긴 값이 같은 정보를 담는지 대조하는 데 쓴다.
-자세한 설명은 [`docs/baseline.md`](../../docs/baseline.md) 에 있다.
+자세한 설명은 [`docs/design-history.md`](../../docs/design-history.md) 에 있다.
 
 | 파일 | 내용 | 쓰는 곳 |
 | --- | --- | --- |
