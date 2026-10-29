@@ -226,9 +226,10 @@ try {
     check('호출부 순번이 자식과 짝', (await visited.locator('.idx-mark').textContent()) === '①');
 
     // 부모 위·자식 아래 트리 배치를 남긴다. 승격·삭제 전 모습이다.
-    const outDir = fileURLToPath(new URL('../../docs/baseline/', import.meta.url));
+    const outDir = fileURLToPath(new URL('../../test-results/', import.meta.url));
+    await mkdir(outDir, { recursive: true });
     await page.screenshot({ path: path.join(outDir, 'standalone-trail.png') });
-    console.log('  wrote docs/baseline/standalone-trail.png');
+    console.log('  wrote test-results/standalone-trail.png');
 
     console.log('\n[활성 노드로 이동]');
     // 이미 펼친 식별자를 다시 누르면 활성만 바뀌고 화면은 그대로였다(U06).

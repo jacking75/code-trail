@@ -45,35 +45,7 @@ CT_CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe" node test/ui.t
 
 ## 기준 스크린샷
 
-| 파일 | 내용 | 다시 만드는 법 |
-| --- | --- | --- |
-| [`baseline/tree-mode.png`](baseline/tree-mode.png) | **확장** 트리 모드. 부모 위·자식 아래 배치, 진입 링크, 순번, 재귀·근사 배지 | `npm run screenshot` |
-| [`baseline/board-mode.png`](baseline/board-mode.png) | **확장** 보드 모드. 노드가 캔버스 직속으로 평평하게 놓이고 연결선이 부모→자식을 잇는다 | `npm run screenshot` |
-| [`baseline/standalone-shell.png`](baseline/standalone-shell.png) | **독립 프로그램** 파일 탐색기와 읽기 전용 코드 화면 | `npm run test:e2e` |
-| [`baseline/standalone-trail.png`](baseline/standalone-trail.png) | **독립 프로그램** 트레일 화면. 부모 위·자식 아래 배치, 헤더·배지·진입 링크·순번 | `npm run test:e2e` |
-
-앞의 두 장은 입력이 `test/fixtures/preview-state.json` 하나뿐이라 결과가 재현된다
-(두 번 돌려 바이트가 같은 것을 확인했다). 뒤의 두 장은 임시 프로젝트를 만들어 찍으므로 프로젝트 이름 부분만 실행마다 달라진다.
-
-브라우저 경로가 다르면 `CT_CHROME` 으로 넘긴다.
-
-```bash
-CT_CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe" npm run screenshot
-CT_CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe" npm run test:e2e
-```
-
-## Fixture
-
-`test/fixtures/` 에 전환 전 데이터 모양을 굳혀 뒀다. 새 구현이 같은 정보를 담는지 대조하는 데 쓴다.
-
-| 파일 | 내용 |
-| --- | --- |
-| `resolved-symbols.json` | 전환 전 `ResolvedSymbol` 6종. 정상 함수, 한 줄 range 근사, 탭 들여쓰기, Roslyn 시그니처 이름과 선언만, 비ASCII, 워크스페이스 밖 파일 |
-| `trail-legacy.json` | 전환 전 `Trail.toJSON()` 이 만들던 `version: 1` 저장 형식. 재귀 노드와 접힌 노드를 포함한다. **새 프로그램은 이 형식을 읽지 않는다**(문서 3.2). 형식이 어떻게 달라졌는지 비교용이다 |
-| `webview-messages.json` | 확장↔웹뷰 메시지 전체와, 각각이 어떤 WebSocket 명령·HTTP 경로로 대체되는지 |
-| `preview-state.json` | `test/preview.html` 에 넣는 `setState` 메시지. 스크린샷과 UI 테스트의 입력 |
-
-## 함께 볼 것
-
-- [`e2e-port-checklist.md`](e2e-port-checklist.md) — 지금 되는 동작을 새 프로그램에서 무엇으로 확인할지
-- [`terms.md`](terms.md) · [`terms.svg`](terms.svg) — 화면 각 부위의 이름. 전환 후에도 같은 이름을 쓴다
+확장 시절 두 장(트리 모드·보드 모드)은 저장소에 두지 않는다. `git checkout v0.6.0-vscode-extension` 뒤
+`npm run screenshot` 으로 다시 만든다. 입력이 `test/fixtures/preview-state.json` 하나뿐이라 결과가 재현된다.
+독립 프로그램 두 장(파일 탐색기와 코드 화면, 트레일 화면)은 `npm run test:e2e` 가 `test-results/` 에 만든다.
+임시 프로젝트를 만들어 찍으므로 프로젝트 이름 부분만 실행마다 달라진다.

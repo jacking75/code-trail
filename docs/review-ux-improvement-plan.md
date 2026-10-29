@@ -75,12 +75,12 @@
 | 코드 화면에서 트레일을 시작하는 수단이 단축키 하나다 | `CodeView.tsx` 는 커서 위치만 기록. 우클릭 메뉴·버튼 없음 | 단축키를 모르면 시작을 못 한다 | U07 |
 | 파일이 바뀌어도 트레일 노드는 옛 코드를 조용히 보여준다 | `App.tsx` 는 열린 문서만 `staleDocument`. `TrailNode.tsx` 에 `contentHash` 비교 없음 | 옛 좌표로 정의를 물어 엉뚱한 곳으로 간다 | U08 |
 | 정의 후보 대화상자가 트리 맨 위에 뜨고 무엇을 클릭했는지 안 보인다. 구현이 여럿이면 토스트로 `⚑` 를 누르라고만 한다 | `TrailView.tsx` `.choice` 위치, `useTrail.ts` `trail.implementationChoice` | 저장소 주인의 세 번째 질문 — "왜 깃발을 또 눌러야 하나" | U09 |
-| 트레일 패널에 기록 존재 표시가 전혀 없다 | `TrailNode.tsx` 헤더 배지는 `재귀·선언만·근사` 뿐. 목업(`code-understanding-and-sharing-mockup.png`)의 `+ 기록`·개수·검토 상태가 구현에 없다 | 어느 함수에 우려가 달려 있는지 트리에서 알 수 없다 | U10 |
+| 트레일 패널에 기록 존재 표시가 전혀 없다 | `TrailNode.tsx` 헤더 배지는 `재귀·선언만·근사` 뿐. 당시 목업의 `+ 기록`·개수·검토 상태가 구현에 없다 | 어느 함수에 우려가 달려 있는지 트리에서 알 수 없다 | U10 |
 | 분석을 먼저 만들어야 기록할 수 있다 | `AnalysisPanel.tsx` `analysis === null` 이면 작성 폼만 보인다 | 트레일 만들기 → 분석 만들기 → 대상 고르기 → 쓰기, 네 단계다 | U11 |
 | 기록이 별도 탭이라 코드와 기록 사이를 계속 오간다 | `App.tsx` 탭 넷 중 `analysis` 만 기록을 그린다 | 노드 하나에 기록을 달 때마다 왕복한다 | U12 |
 | 기록·목표 수정에 `window.prompt` 를 쓴다. 기록에서 코드로 가는 링크가 없다 | `AnalysisPanel.tsx:271, 308, 395`, 기록 헤더는 "코드 범위" 라는 글자만 | 여러 줄 기록이 한 줄 입력창에서 깨진다 | U13 |
 | 변경 목록이 파일 단위다. 코드 화면에 변경 표시·diff 가 없다 | `git/service.ts` 는 `--name-status`·`--numstat` 만, `ReadingStarts.tsx` 는 파일 첫 줄로 연다 | "바뀐 곳만 보기" 가 안 된다. 리뷰 도구의 핵심 동선이다 | U14 |
-| 설정을 바꾸려면 JSON 파일을 열어야 한다. 밝은 테마에서도 코드 화면은 어둡다 | `ui.*` 10개 중 UI 편집 가능 0개, `CodeView.tsx` `theme: 'vs-dark'` 고정 (`docs/baseline/standalone-shell.png` 참고) | 테마·글자 크기 하나 바꾸려고 파일을 연다 | U15 |
+| 설정을 바꾸려면 JSON 파일을 열어야 한다. 밝은 테마에서도 코드 화면은 어둡다 | `ui.*` 10개 중 UI 편집 가능 0개, `CodeView.tsx` `theme: 'vs-dark'` 고정 (당시 화면 기준) | 테마·글자 크기 하나 바꾸려고 파일을 연다 | U15 |
 | 키보드로 트리를 다닐 수 없다 | `TrailNode.tsx` `.hd` 는 `div` + `onClick`, `tabIndex` 없음. `aria-label` 은 웹 전체 13곳 | 마우스 없이는 한 노드도 못 연다 | U16 |
 | `ui.childOrder` 설정이 무시된다 | `TrailView.tsx` `useState<'source' \| 'click'>('source')` | README 가 약속한 설정이 안 먹는다 | U17 |
 | 사이드바가 280px 고정이고 접을 수 없다 | `app.css` `.sidebar { width: 280px }` | 좁은 화면에서 트리 자리가 모자란다 | U18 |

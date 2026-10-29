@@ -1,7 +1,7 @@
 # 이식 체크리스트 — 확장에서 되던 것을 새 프로그램에서 확인하기
 
 독립 프로그램 전환([`standalone-implementation-plan.md`](standalone-implementation-plan.md)) 의 **단계 0** 산출물이다.
-기준선은 [`baseline.md`](baseline.md), 기준 화면은 [`baseline/`](baseline/) 에 있다.
+기준선과 기준 화면은 [`baseline.md`](baseline.md) 에 있다.
 
 왼쪽은 `v0.6.0-vscode-extension` 에서 실제로 되던 동작이고, 오른쪽은 새 프로그램에서 그 동작을
 어떤 테스트가 지키는지다. **각 줄은 해당 테스트가 실제로 통과했을 때만 체크한다.**

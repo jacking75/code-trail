@@ -222,9 +222,10 @@ try {
     );
 
     // 코드가 열린 상태를 남긴다. 트레일 화면이 붙기 전 기준 화면이다.
-    const outDir = fileURLToPath(new URL('../../docs/baseline/', import.meta.url));
+    const outDir = fileURLToPath(new URL('../../test-results/', import.meta.url));
+    await mkdir(outDir, { recursive: true });
     await page.screenshot({ path: path.join(outDir, 'standalone-shell.png') });
-    console.log('  wrote docs/baseline/standalone-shell.png');
+    console.log('  wrote test-results/standalone-shell.png');
 
     // 읽기 전용인지 — 코드 위를 눌러 커서를 둔 뒤 타자를 쳐도 내용이 안 바뀐다.
     await page.locator('.view-line').first().click();
