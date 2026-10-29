@@ -1,6 +1,6 @@
 {
   "name": "@code-trail/server",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Code Trail local server: HTTP/WebSocket API, trail store, LSP client. (Code Trail 로컬 서버)",
   "author": "최흥배 (Choi HeungBae)",
   "license": "MIT",
@@ -28,8 +28,8 @@
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "dependencies": {
-    "@code-trail/shared": "1.7.0",
-    "@code-trail/web": "1.7.0",
+    "@code-trail/shared": "1.8.0",
+    "@code-trail/web": "1.8.0",
     "@fastify/static": "^10.1.8",
     "@fastify/websocket": "^11.3.4",
     "fastify": "^5.12.7",

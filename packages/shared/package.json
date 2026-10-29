@@ -1,6 +1,6 @@
 {
   "name": "@code-trail/shared",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Code Trail shared domain types and protocol schemas. (Code Trail 공용 도메인 타입과 프로토콜 스키마)",
   "author": "최흥배 (Choi HeungBae)",
   "license": "MIT",

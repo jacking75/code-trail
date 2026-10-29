@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.8.0 — 공개 준비
+
+앱 동작은 1.7.0 과 같다. 트레일 저장 형식·공유 형식·설정 스키마도 바뀌지 않았다.
+
+- 배포 의존성의 알려진 취약점을 고쳤다(fastify 5.12.7, zod 4.6.7, fast-uri 4.2.3 등). 개발 의존성(vite 8.3, dompurify)도 올렸다. `npm audit` 0건이다.
+- **Node 최소 버전이 `>=22.12.0` 이 되었다.** 빌드 도구(Vite 8)가 요구하는 `^20.19.0 || >=22.12.0` 와 맞췄고 Node 20 은 이미 지원이 끝났다.
+- npm 패키지 넷에 `README.md`·`LICENSE` 가 들어가고 `author`·`description`·`keywords` 를 채웠다.
+- README 를 공개용으로 다시 썼다(영어 소개, 스크린샷, 문제 해결, 문서 지도). 스크린샷은 `docs/images/` 에 있다. E2E 가 찍는 화면은 `test-results/` 로 간다.
+- 계획 시절 목업과 확장 시절 스크린샷을 지웠다.
+- `SECURITY.md` 를 만들고 `CONTRIBUTING.md` 에 개발 환경·테스트·릴리스 절차를 적었다. `npm run release:check` 를 더했고, `npm run test:pack` 이 외부 의존성 고지가 설치된 버전과 같은지도 검사한다.
+- `CLAUDE.md` 는 `AGENTS.md` 를 가져오는 한 줄로 줄였다. `docs/compatibility.md` 를 지원 조합과 검증 기록으로 다시 짰다.
+
 ## 1.7.0 — 변경 기준·검토 표시·안내 순서
 
 [`docs/feature-ux-improvement-plan.md`](docs/feature-ux-improvement-plan.md) 의 V01~V23 을 구현했다.

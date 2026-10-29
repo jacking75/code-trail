@@ -1,6 +1,6 @@
 {
   "name": "code-trail-workspace",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "private": true,
   "description": "Code Trail 작업 공간. 배포하는 것은 packages/cli 의 code-trail 이다.",
   "license": "MIT",

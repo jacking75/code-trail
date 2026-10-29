@@ -1,6 +1,6 @@
 {
   "name": "code-trail",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Code reading trails — expand a function inline, click an identifier, and its definition nests underneath. Reads code via LSP; never edits. (코드를 읽어 내려간 경로를 트리로 남기는 로컬 도구)",
   "author": "최흥배 (Choi HeungBae)",
   "license": "MIT",
@@ -53,7 +53,7 @@
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "dependencies": {
-    "@code-trail/server": "1.7.0",
-    "@code-trail/shared": "1.7.0"
+    "@code-trail/server": "1.8.0",
+    "@code-trail/shared": "1.8.0"
   }
 }
