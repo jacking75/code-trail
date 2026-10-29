@@ -80,22 +80,22 @@ const PACKAGES = [
     {
         workspace: 'code-trail',
         expectedName: 'code-trail',
-        required: ['package.json', 'dist/main.js', 'dist/args.js', 'dist/reuse.js', 'dist/openBrowser.js'],
+        required: ['package.json', 'README.md', 'LICENSE', 'dist/main.js', 'dist/args.js', 'dist/reuse.js', 'dist/openBrowser.js'],
     },
     {
         workspace: '@code-trail/server',
         expectedName: '@code-trail/server',
-        required: ['package.json', 'dist/index.js', 'dist/index.d.ts', 'dist/bootstrap.js'],
+        required: ['package.json', 'README.md', 'LICENSE', 'dist/index.js', 'dist/index.d.ts', 'dist/bootstrap.js'],
     },
     {
         workspace: '@code-trail/shared',
         expectedName: '@code-trail/shared',
-        required: ['package.json', 'dist/index.js', 'dist/index.d.ts'],
+        required: ['package.json', 'README.md', 'LICENSE', 'dist/index.js', 'dist/index.d.ts'],
     },
     {
         workspace: '@code-trail/web',
         expectedName: '@code-trail/web',
-        required: ['package.json', 'dist/index.html'],
+        required: ['package.json', 'README.md', 'LICENSE', 'dist/index.html'],
     },
 ];
 

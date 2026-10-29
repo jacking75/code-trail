@@ -1,7 +1,8 @@
 {
   "name": "@code-trail/shared",
   "version": "1.7.0",
-  "description": "Code Trail 의 공유 도메인 모델과 서버-웹 프로토콜. 호스트(VS Code, Node, 브라우저)에 의존하지 않는다.",
+  "description": "Code Trail shared domain types and protocol schemas. (Code Trail 공용 도메인 타입과 프로토콜 스키마)",
+  "author": "최흥배 (Choi HeungBae)",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -22,10 +23,10 @@
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "dependencies": {
-    "zod": "^4.1.0"
+    "zod": "^4.6.7"
   },
   "engines": {
-    "node": ">=20.11.0"
+    "node": ">=22.12.0"
   },
   "repository": {
     "type": "git",

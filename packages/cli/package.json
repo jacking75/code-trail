@@ -1,14 +1,15 @@
 {
   "name": "code-trail",
   "version": "1.7.0",
-  "description": "함수를 클릭하면 코드를 인라인으로 펼쳐 보여주고, 그 안에서 또 클릭하면 계속 이어붙는 코드 탐색 트리. 로컬 서버를 띄우고 브라우저에서 연다.",
+  "description": "Code reading trails — expand a function inline, click an identifier, and its definition nests underneath. Reads code via LSP; never edits. (코드를 읽어 내려간 경로를 트리로 남기는 로컬 도구)",
+  "author": "최흥배 (Choi HeungBae)",
   "license": "MIT",
   "type": "module",
   "bin": {
     "code-trail": "dist/main.js"
   },
   "engines": {
-    "node": ">=20.11.0"
+    "node": ">=22.12.0"
   },
   "keywords": [
     "call hierarchy",
@@ -16,7 +17,19 @@
     "code navigation",
     "code reading",
     "lsp",
-    "trail"
+    "trail",
+    "code review",
+    "code understanding",
+    "language server",
+    "clangd",
+    "gopls",
+    "rust-analyzer",
+    "roslyn",
+    "typescript",
+    "cpp",
+    "csharp",
+    "go",
+    "rust"
   ],
   "repository": {
     "type": "git",

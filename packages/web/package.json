@@ -1,11 +1,12 @@
 {
   "name": "@code-trail/web",
   "version": "1.7.0",
-  "description": "Code Trail 브라우저 프론트엔드. 파일 탐색기, 읽기 전용 코드 화면, 트레일·보드·진단 화면.",
+  "description": "Code Trail browser UI (React + Monaco), built as static assets. (Code Trail 브라우저 화면)",
+  "author": "최흥배 (Choi HeungBae)",
   "license": "MIT",
   "type": "module",
   "engines": {
-    "node": ">=20.11.0"
+    "node": ">=22.12.0"
   },
   "repository": {
     "type": "git",
@@ -30,12 +31,12 @@
   },
   "devDependencies": {
     "@code-trail/shared": "1.7.0",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.5",
-    "@vitejs/plugin-react": "^6.1.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
     "monaco-editor": "^0.56.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "vite": "^8.2.2"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "vite": "^8.3.5"
   }
 }

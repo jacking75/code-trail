@@ -12,7 +12,7 @@
     "packages/*"
   ],
   "engines": {
-    "node": ">=20.11.0"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "build": "npm run build -w @code-trail/shared && npm run build -w @code-trail/server && npm run build:lib -w @code-trail/web && npm run build -w @code-trail/web && npm run build -w code-trail",
@@ -25,19 +25,21 @@
     "test:e2e": "node test/e2e/shell.e2e.mjs && node test/e2e/trail.e2e.mjs && node test/e2e/analysis.e2e.mjs && node test/e2e/share-html.e2e.mjs",
     "test:lsp": "node test/smoke/real-lsp.mjs",
     "test:perf": "node test/perf/board-1000.mjs && node test/perf/analysis-scale.mjs",
-    "test:pack": "node test/pack/files.test.mjs",
+    "test:pack": "node test/pack/files.test.mjs && node test/pack/third-party-notices.mjs",
     "clean": "npm run clean --workspaces --if-present",
-    "test:install": "node test/pack/install-smoke.mjs"
+    "test:install": "node test/pack/install-smoke.mjs",
+    "release:check": "npm run build && npm run typecheck && npm test && npm run test:pack && npm run test:install"
   },
   "devDependencies": {
-    "@types/node": "20.x",
-    "playwright": "^1.62.1",
+    "@types/node": "22.x",
+    "playwright": "^1.64.1",
     "typescript": "^5.4.0",
-    "ws": "^8.21.3"
+    "vite": "^8.3.5",
+    "ws": "^8.22.0"
   },
   "overrides": {
     "monaco-editor": {
-      "dompurify": "^3.4.14"
+      "dompurify": "^3.4.17"
     }
   }
 }
