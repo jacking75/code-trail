@@ -3,6 +3,7 @@
 ## 1.7.0 — 변경 기준·검토 표시·안내 순서
 
 [`docs/feature-ux-improvement-plan.md`](docs/feature-ux-improvement-plan.md) 의 V01~V23 을 구현했다.
+계획서가 1.5.0·1.6.0 으로 나눴던 묶음을 1.7.0 하나로 냈다. 1.5.0·1.6.0 은 존재하지 않는다.
 
 ### 변경에서 시작하는 리뷰 동선
 

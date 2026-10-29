@@ -315,7 +315,7 @@
 - [x] 설치·업데이트·제거 문서를 작성한다. (README `## 설치와 실행`)
 - [x] 첫 독립 프로그램 릴리스 후보를 만든다. `npm pack -w <각 패키지>` 가 네 tarball 을 만들고, `npm run test:install` 이 그것을 설치해 띄운다.
 - [ ] 릴리스 후보로 네 언어 실제 프로젝트 스모크 테스트를 수행한다. **못 했다** — 이 기계에 clangd·gopls·roslyn 이 없고 rust-analyzer 는 rustup proxy 뿐이다. `npm run test:lsp` 이 fixture 를 들고 있으니 서버가 설치된 기계에서 돌리면 확인된다.
-- [ ] npm 배포 또는 배포 아카이브 게시를 완료한다. **하지 않았다** — 배포는 되돌릴 수 없고 npm 자격 증명도 없다. 패키지 쪽 준비(이름, `bin`, `files`, `publishConfig`, 버전)는 끝났으므로 `npm publish --workspaces` 한 번이면 된다. 저장소 주인이 정할 일이다.
+- [ ] npm 배포 또는 배포 아카이브 게시를 완료한다. **하지 않았다** — 배포는 되돌릴 수 없고 npm 자격 증명도 없다. 패키지 쪽 준비(이름, `bin`, `files`, `publishConfig`, 버전)는 끝났으므로 `CONTRIBUTING.md` 의 릴리스 절차대로 패키지별 순서로 올린다. 저장소 주인이 정할 일이다.
 - [ ] **단계 12 완료** — 위 세 줄(macOS·Linux 설치, 실제 언어 서버 스모크, npm 배포)이 이 기계에서 못 하는 것이라 열어 둔다. CI 세 줄은 두지 않기로 정해 `[~]` 로 닫았다.
 
 ### 0.14 최종 인수 체크
@@ -336,7 +336,7 @@
 - [x] 서버가 loopback 외 주소에서 접근되지 않는다. (`test/integration/security.test.mjs` 의 바인딩 검사)
 - [x] 인증·Origin·경로 탈출·명령 주입 테스트가 통과한다. (`security` · `resilience` · `editor` 세 묶음)
 - [x] 단위·통합·E2E·실제 LSP 스모크 테스트가 통과한다. 스모크는 네 언어 모두 "서버 없음" 을 이유로 적고 건너뛴다.
-- [x] README·CHANGELOG·용어 문서·AGENTS.md·작업 로그가 일치한다.
+- [x] README·CHANGELOG·용어 문서·AGENTS.md 가 일치한다.
 - [ ] **독립 프로그램 전환 완료** — 코드와 문서는 끝났다. 남은 것은 이 기계에서 할 수 없는 셋이다: 다른 운영체제에서의 설치 확인, 실제 언어 서버 네 개로 하는 스모크, npm 배포.
 
 ## 1. 문서 상태
@@ -1661,7 +1661,7 @@ code-trail /path/to/project
 12. loopback 외 주소에서 서버에 접속할 수 없다.
 13. 토큰·Origin·경로 탈출·명령 주입 보안 테스트가 통과한다.
 14. 단위, 통합, E2E, 실제 LSP 스모크 테스트가 통과한다.
-15. README, CHANGELOG, 용어 문서, 작업 로그가 독립 프로그램 기준으로 일치한다.
+15. README, CHANGELOG, 용어 문서가 독립 프로그램 기준으로 일치한다.
 
 ## 24. 구현 시작 시 첫 작업 묶음
 

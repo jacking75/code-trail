@@ -147,7 +147,7 @@ export const projectSettingsSchema = z.object({
         fitToWidth: z.boolean(),
         minFontSize: z.number().min(1),
         fontSize: z.number().min(0),
-        // 1.5.0 에서 늘어난 항목이다. 옛 설정 파일에는 없으므로 기본값을 둔다.
+        // 1.7.0 에서 늘어난 항목이다. 옛 설정 파일에는 없으므로 기본값을 둔다.
         tabSize: z.int().min(1).max(16).default(4),
         autoFollowSingleImplementation: z.boolean(),
         revealInExternalEditorOnAdd: z.boolean(),
