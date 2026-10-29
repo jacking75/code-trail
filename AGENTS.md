@@ -69,23 +69,28 @@ UI 문구·문서·커밋 메시지·코드 주석에서 아래 이름만 쓴다
 
 ## 지금 무엇을 하고 있나
 
-**네 가지가 끝났다.** 독립 프로그램 전환(1.0.0), 코드 이해·공유(1.1.0),
-리뷰 도구로서의 사용성 개선(1.2.0~1.4.0), 그리고 변경 기준·검토 표시·안내 순서(1.7.0)다.
-지금 진행의 정본은 [`docs/feature-ux-improvement-plan.md`](docs/feature-ux-improvement-plan.md)
-이고, 그 문서 0장의 V01~V23 체크리스트가 무엇이 끝났는지를 말한다.
+**기능은 네 묶음이 끝났다.** 독립 프로그램 전환(1.0.0), 코드 이해·공유(1.1.0),
+리뷰 도구로서의 사용성 개선(1.2.0~1.4.0), 변경 기준·검토 표시·안내 순서(1.7.0)다.
+**1.8.0 은 공개 준비다** — 의존성 보안 업데이트, Node 22.12 요구, npm 패키지 README·LICENSE,
+스크린샷과 README 개편, 문서 정리. 앱 동작과 저장·공유 형식은 1.7.0 과 같다.
 
-앞의 셋은 [`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md),
+남은 것은 **이 기계에서 할 수 없는 확인**뿐이고, 그 정본은
+[`docs/compatibility.md`](docs/compatibility.md) 의 `남은 실환경 검증` 이다 — 실제 언어 서버 넷
+(C/C++·C#·Go·Rust, TypeScript 는 일부 확인), macOS·Linux 확인, 서로 다른 기계 간 공유·회신,
+실제 참여자 사용성 평가, npm 배포(CONTRIBUTING.md 의 릴리스 절차).
+
+네 계획서([`docs/standalone-implementation-plan.md`](docs/standalone-implementation-plan.md),
 [`docs/code-understanding-and-sharing-plan.md`](docs/code-understanding-and-sharing-plan.md),
-[`docs/review-ux-improvement-plan.md`](docs/review-ux-improvement-plan.md) 에 있다.
-남은 것은 **이 기계에서 할 수 없는 확인**뿐이다 — 실제 언어 서버 다섯(T02·T23·T37),
-macOS·Linux 확인(구현서 0.13·0.14), 실제 참여자 사용성 평가(T33·T40), npm 배포.
+[`docs/review-ux-improvement-plan.md`](docs/review-ux-improvement-plan.md),
+[`docs/feature-ux-improvement-plan.md`](docs/feature-ux-improvement-plan.md))는 설계 결정의 근거이고 역사다.
 
 - `packages/` 가 전부다. VS Code 확장 소스(`src/`, `media/`)와 `.vsix` 흐름은 1.0.0 에서 지웠다.
   확장 마지막 상태는 태그 `v0.6.0-vscode-extension` 이고 기준선 기록은 [`docs/baseline.md`](docs/baseline.md) 다.
 - 언어 서버는 어댑터가 찾는다(설정 → PATH → 플랫폼별·GOBIN·rustup). **자동으로 내려받지 않는다.**
-- **실제 언어 서버로 검증하지 못한 것이 있다.** 이 기계에 clangd·gopls·roslyn·typescript-language-server가 없고
-  rust-analyzer 는 rustup proxy 만 있다. `npm run test:pack` · `npm run test:install` 은
-  Windows 에서만 실제로 돌렸다. 어느 줄이 그런지는 구현서 0.7 · 0.13 · 0.14 에 표시해 뒀다.
+- **실제 언어 서버로 검증하지 못한 것이 있다.** 이 기계에 clangd·gopls·roslyn 이 없고
+  rust-analyzer 는 rustup proxy 만 있다(typescript-language-server 는 1.8.0 준비 때 설치해 Windows 에서 확인했다).
+  `npm run test:pack` · `npm run test:install` 은 Windows 에서만 실제로 돌렸다.
+  어느 줄이 그런지는 구현서 0.7 · 0.13 · 0.14 와 `docs/compatibility.md` 에 표시해 뒀다.
 - 확장에서 되던 동작이 새 프로그램의 무엇으로 옮겨졌는지는 [`docs/e2e-port-checklist.md`](docs/e2e-port-checklist.md) 에 있다.
 
 지금 되는 것을 눈으로 보려면:
@@ -109,8 +114,9 @@ npm run test:unit                # 단위만
 npm run test:integration         # 통합만
 npm run test:e2e                # 진짜 서버 + 진짜 브라우저 (playwright 필요)
 npm run test:lsp                # 실제 언어 서버 스모크. 설치된 언어만 돈다
-npm run test:pack               # 배포물 파일 목록 검사 (npm pack --dry-run)
+npm run test:pack               # 배포물 파일 목록 + 외부 의존성 고지 검사 (npm pack --dry-run)
 npm run test:install            # tarball 을 깨끗한 폴더에 설치하고 띄워 본다
+npm run release:check            # 브라우저 없이 되는 전부 (build · typecheck · test · pack · install)
 npm run test:perf               # 1,000개 노드 성능 측정 → docs/perf-1000-nodes.md
 ```
 
@@ -341,6 +347,9 @@ test/fixtures/                  확장 시절 데이터를 굳혀 둔 것. **고
 | 알림을 새로 띄우는 자리 | `features/notices/useNotices.ts` 를 지난다. 새 표시 요소를 만들지 않는다 |
 | `package.json` 의 `files`·`bin`·의존성 | `npm run test:pack` 과 `npm run test:install` 을 돌린다. 새 런타임 의존성은 `THIRD-PARTY-NOTICES.md` 에도 |
 | CLI 인자 추가 | `packages/cli/src/args.ts` 의 `USAGE`, README `## 설치와 실행` 표, `test/unit/cli-args.test.mjs` |
+| `LICENSE` | `packages/*/LICENSE` 넷에 같은 내용을 복사한다 (심볼릭 링크는 Windows·npm pack 에서 깨진다) |
+| 배포 의존성(`dependencies`) | `node test/pack/third-party-notices.mjs --write` 로 `THIRD-PARTY-NOTICES.md` 를 다시 만든다. `npm run test:pack` 이 어긋남을 잡는다 |
+| README 그림 (`docs/images/`) | 스크린샷은 이 저장소 자체를 TypeScript 언어 서버로 열어 Playwright 로 찍은 것이다. 1600px 안팎·한 장 400KB 아래로, 주소창(토큰)과 로컬 경로가 안 찍히게 앱 영역만 자른다 |
 | 언어 서버 예외 처리 추가 | 아래 `## 언어 서버별 함정` |
 
 이 중 기계가 잡아주는 것은 프로토콜 스키마(컴파일), 명령 목록(`test/unit/protocol.test.mjs`),
